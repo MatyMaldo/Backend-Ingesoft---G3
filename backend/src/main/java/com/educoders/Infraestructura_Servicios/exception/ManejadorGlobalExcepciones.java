@@ -38,4 +38,18 @@ public class ManejadorGlobalExcepciones {
                 .status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(RespuestaApiResponse.crearError("Ocurrió un error inesperado"));
     }
+
+    @ExceptionHandler(ReglaNegocioException.class)
+    public ResponseEntity<RespuestaApiResponse<Void>> manejarRegla(ReglaNegocioException ex) {
+        REGISTRO.warn("Regla de negocio: {}", ex.getMessage());
+        return ResponseEntity.badRequest()
+                .body(RespuestaApiResponse.crearError(ex.getMessage()));
+    }
+
+    @ExceptionHandler(ConflictoException.class)
+    public ResponseEntity<RespuestaApiResponse<Void>> manejarConflicto(ConflictoException ex) {
+        REGISTRO.warn("Conflicto: {}", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(RespuestaApiResponse.crearError(ex.getMessage()));
+    }
 }
