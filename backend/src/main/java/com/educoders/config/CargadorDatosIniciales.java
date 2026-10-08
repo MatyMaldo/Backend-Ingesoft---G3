@@ -1,8 +1,8 @@
 package com.educoders.config;
 
-import com.educoders.asistencia.entity.AsistenciaEstudiante;
-import com.educoders.asistencia.repository.AsistenciaRepository;
-import com.educoders.shared.enums.EstadoAsistencia;
+import com.educoders.Control_Asistencia.entity.AsistenciaEstudiante;
+import com.educoders.Control_Asistencia.repository.AsistenciaRepository;
+import com.educoders.Infraestructura_Servicios.enums.EstadoAsistencia;
 import jakarta.annotation.PostConstruct;
 import org.springframework.stereotype.Component;
 
