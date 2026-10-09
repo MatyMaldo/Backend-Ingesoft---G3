@@ -52,4 +52,10 @@ public class ManejadorGlobalExcepciones {
         return ResponseEntity.status(HttpStatus.CONFLICT)
                 .body(RespuestaApiResponse.crearError(ex.getMessage()));
     }
+
+    @ExceptionHandler(RecursoNoEncontradoException.class)
+    public ResponseEntity<RespuestaApiResponse<Void>> manejarNoEncontrado(RecursoNoEncontradoException ex) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(RespuestaApiResponse.crearError(ex.getMessage()));
+    }
 }
