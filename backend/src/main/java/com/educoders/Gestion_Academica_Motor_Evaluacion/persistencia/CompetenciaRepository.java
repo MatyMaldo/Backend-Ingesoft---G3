@@ -15,5 +15,8 @@ public interface CompetenciaRepository extends JpaRepository<Competencia, Long> 
     // Para actualizar, excluyendo la competencia actual
     boolean existsByCursoIdAndNombreAndIdNot(Long cursoId, String nombre, Long idCompetencia);
 
+
+    boolean existsByCursoId(Long cursoId);
+
     Optional<Competencia> findByIdAndCursoId(Long id, Long cursoId);
 }

@@ -1,9 +1,7 @@
 package com.educoders.Gestion_Academica_Motor_Evaluacion.servicio;
 
-import com.educoders.Gestion_Academica_Motor_Evaluacion.dominio.Bimestre;
 import com.educoders.Gestion_Academica_Motor_Evaluacion.dominio.Competencia;
 import com.educoders.Gestion_Academica_Motor_Evaluacion.dominio.Curso;
-import com.educoders.Gestion_Academica_Motor_Evaluacion.persistencia.BimestreRepository;
 import com.educoders.Gestion_Academica_Motor_Evaluacion.persistencia.CompetenciaRepository;
 import com.educoders.Gestion_Academica_Motor_Evaluacion.persistencia.CursoRepository;
 import com.educoders.Gestion_Academica_Motor_Evaluacion.persistencia.NotaCompetenciaRepository;
@@ -16,7 +14,6 @@ import com.educoders.Infraestructura_Servicios.exception.ReglaNegocioException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDate;
 import java.util.List;
 
 @Service
@@ -25,16 +22,16 @@ public class CompetenciaServiceImpl implements CompetenciaService {
     private final CompetenciaRepository competenciaRepository;
     private final CursoRepository cursoRepository;
     private final NotaCompetenciaRepository notaCompetenciaRepository;
-    private final BimestreRepository bimestreRepository;
+    private final ValidadorVentanaAcademica validadorVentana; // <-- NUEVO
 
     public CompetenciaServiceImpl(CompetenciaRepository competenciaRepository,
                                   CursoRepository cursoRepository,
                                   NotaCompetenciaRepository notaCompetenciaRepository,
-                                  BimestreRepository bimestreRepository) {
+                                  ValidadorVentanaAcademica validadorVentana) { // <-- Quitamos BimestreRepository
         this.competenciaRepository = competenciaRepository;
         this.cursoRepository = cursoRepository;
         this.notaCompetenciaRepository = notaCompetenciaRepository;
-        this.bimestreRepository = bimestreRepository;
+        this.validadorVentana = validadorVentana;
     }
 
     @Override
@@ -51,7 +48,8 @@ public class CompetenciaServiceImpl implements CompetenciaService {
     @Override
     @Transactional
     public CompetenciaResponse crear(Long idCurso, CrearCompetenciaRequest request) {
-        validarVentanaDeTiempo();
+        // Uso del validador compartido
+        validadorVentana.verificarVentanaAbierta("La gestión de competencias está cerrada. El año académico ya ha iniciado.");
 
         Curso curso = cursoRepository.findById(idCurso)
                 .orElseThrow(() -> RecursoNoEncontradoException.de("curso", idCurso));
@@ -71,7 +69,7 @@ public class CompetenciaServiceImpl implements CompetenciaService {
     @Override
     @Transactional
     public CompetenciaResponse actualizar(Long idCurso, Long idCompetencia, ActualizarCompetenciaRequest request) {
-        validarVentanaDeTiempo();
+        validadorVentana.verificarVentanaAbierta("La gestión de competencias está cerrada. El año académico ya ha iniciado.");
 
         Competencia competencia = competenciaRepository.findByIdAndCursoId(idCompetencia, idCurso)
                 .orElseThrow(() -> RecursoNoEncontradoException.de("competencia en el curso indicado", idCompetencia));
@@ -89,30 +87,16 @@ public class CompetenciaServiceImpl implements CompetenciaService {
     @Override
     @Transactional
     public void eliminar(Long idCurso, Long idCompetencia) {
-        validarVentanaDeTiempo();
+        validadorVentana.verificarVentanaAbierta("La gestión de competencias está cerrada. El año académico ya ha iniciado.");
 
         Competencia competencia = competenciaRepository.findByIdAndCursoId(idCompetencia, idCurso)
                 .orElseThrow(() -> RecursoNoEncontradoException.de("competencia en el curso indicado", idCompetencia));
 
-        // Escenario 5: Validar que no esté en uso
         if (notaCompetenciaRepository.existsByCompetenciaId(idCompetencia)) {
             throw new ReglaNegocioException("No se puede eliminar la competencia porque ya tiene notas registradas (está en uso).");
         }
 
         competenciaRepository.delete(competencia);
-    }
-
-    /**
-     * Regla HU-EVAL-08 (Escenario 2): La gestión solo está permitida si el año académico
-     * activo no ha iniciado (es decir, la fecha actual es menor a la fecha de inicio del BIM_1).
-     */
-    private void validarVentanaDeTiempo() {
-        Bimestre primerBimestre = bimestreRepository.findPrimerBimestreDelAnioMasReciente()
-                .orElseThrow(() -> new ReglaNegocioException("No hay un calendario académico configurado para gestionar competencias."));
-
-        if (!LocalDate.now().isBefore(primerBimestre.getFechaInicio())) {
-            throw new ReglaNegocioException("La gestión de competencias está cerrada. El año académico ya ha iniciado.");
-        }
     }
 
     private CompetenciaResponse convertirARespuesta(Competencia competencia) {

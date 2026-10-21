@@ -7,7 +7,9 @@ import java.util.Optional;
 
 public interface BimestreRepository extends JpaRepository<Bimestre, Long> {
 
-    // Obtiene el primer bimestre del año académico más reciente
-    @Query("SELECT b FROM Bimestre b WHERE b.nombre = 'BIM_1' ORDER BY b.anioAcademico.anio DESC LIMIT 1")
-    Optional<Bimestre> findPrimerBimestreDelAnioMasReciente();
+
+    // Spring Data JPA lee el nombre del método y genera el SQL automáticamente.
+    // Busca el primer BIM_1 ordenado por el año del AnioAcademico de forma descendente.
+    Optional<Bimestre> findFirstByNombreOrderByAnioAcademicoAnioDesc(String nombre);
+
 }
