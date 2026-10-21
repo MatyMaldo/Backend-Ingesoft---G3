@@ -1,6 +1,6 @@
-package com.educoders.Gestión_Academica_Motor_Evaluacion.persistencia;
+package com.educoders.Gestion_Academica_Motor_Evaluacion.persistencia;
 
-import com.educoders.Gestión_Academica_Motor_Evaluacion.dominio.Competencia;
+import com.educoders.Gestion_Academica_Motor_Evaluacion.dominio.Competencia;
 import org.springframework.data.jpa.repository.JpaRepository;
 import java.util.List;
 import java.util.Optional;

@@ -1,4 +1,4 @@
-package com.educoders.Gestión_Academica_Motor_Evaluacion.presentacion.dto;
+package com.educoders.Gestion_Academica_Motor_Evaluacion.presentacion.dto;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;

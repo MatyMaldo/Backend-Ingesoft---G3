@@ -1,6 +1,6 @@
-package com.educoders.Gestión_Academica_Motor_Evaluacion.persistencia;
+package com.educoders.Gestion_Academica_Motor_Evaluacion.persistencia;
 
-import com.educoders.Gestión_Academica_Motor_Evaluacion.dominio.NotaCompetencia;
+import com.educoders.Gestion_Academica_Motor_Evaluacion.dominio.NotaCompetencia;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface NotaCompetenciaRepository extends JpaRepository<NotaCompetencia, Long> {

@@ -1,6 +1,6 @@
-package com.educoders.Gestión_Academica_Motor_Evaluacion.persistencia;
+package com.educoders.Gestion_Academica_Motor_Evaluacion.persistencia;
 
-import com.educoders.Gestión_Academica_Motor_Evaluacion.dominio.Bimestre;
+import com.educoders.Gestion_Academica_Motor_Evaluacion.dominio.Bimestre;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import java.util.Optional;

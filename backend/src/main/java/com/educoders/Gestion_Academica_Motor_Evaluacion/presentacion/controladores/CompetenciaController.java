@@ -1,9 +1,9 @@
-package com.educoders.Gestión_Academica_Motor_Evaluacion.presentacion.controladores;
+package com.educoders.Gestion_Academica_Motor_Evaluacion.presentacion.controladores;
 
-import com.educoders.Gestión_Academica_Motor_Evaluacion.presentacion.dto.ActualizarCompetenciaRequest;
-import com.educoders.Gestión_Academica_Motor_Evaluacion.presentacion.dto.CompetenciaResponse;
-import com.educoders.Gestión_Academica_Motor_Evaluacion.presentacion.dto.CrearCompetenciaRequest;
-import com.educoders.Gestión_Academica_Motor_Evaluacion.servicio.CompetenciaService;
+import com.educoders.Gestion_Academica_Motor_Evaluacion.presentacion.dto.ActualizarCompetenciaRequest;
+import com.educoders.Gestion_Academica_Motor_Evaluacion.presentacion.dto.CompetenciaResponse;
+import com.educoders.Gestion_Academica_Motor_Evaluacion.presentacion.dto.CrearCompetenciaRequest;
+import com.educoders.Gestion_Academica_Motor_Evaluacion.servicio.CompetenciaService;
 import com.educoders.Infraestructura_Servicios.dto.RespuestaApiResponse;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;

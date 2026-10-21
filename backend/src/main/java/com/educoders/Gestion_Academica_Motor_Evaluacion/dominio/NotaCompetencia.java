@@ -1,4 +1,4 @@
-package com.educoders.Gestión_Academica_Motor_Evaluacion.dominio;
+package com.educoders.Gestion_Academica_Motor_Evaluacion.dominio;
 
 import jakarta.persistence.*;
 
