@@ -2,6 +2,7 @@ package com.educoders.Gestion_Academica_Motor_Evaluacion.servicio;
 
 import com.educoders.Gestion_Academica_Motor_Evaluacion.dominio.Bimestre;
 import com.educoders.Gestion_Academica_Motor_Evaluacion.persistencia.BimestreRepository;
+import com.educoders.Infraestructura_Servicios.enums.NombreBimestre;
 import com.educoders.Infraestructura_Servicios.exception.ReglaNegocioException;
 import org.springframework.stereotype.Component;
 
@@ -22,7 +23,7 @@ public class ValidadorVentanaAcademica {
      * Con tal de respetar DRY (Don't Repeat Yourself)
      */
     public void verificarVentanaAbierta(String mensajeError) {
-        Bimestre primerBimestre = bimestreRepository.findFirstByNombreOrderByAnioAcademicoAnioDesc("BIM_1")
+        Bimestre primerBimestre = bimestreRepository.findFirstByNombreOrderByAnioAcademicoAnioDesc(NombreBimestre.BIM_1)
                 .orElseThrow(() -> new ReglaNegocioException("No hay un calendario académico configurado."));
 
         if (!LocalDate.now().isBefore(primerBimestre.getFechaInicio())) {

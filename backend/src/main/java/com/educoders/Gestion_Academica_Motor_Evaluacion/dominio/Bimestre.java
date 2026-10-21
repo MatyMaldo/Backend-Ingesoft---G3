@@ -1,5 +1,6 @@
 package com.educoders.Gestion_Academica_Motor_Evaluacion.dominio;
 
+import com.educoders.Infraestructura_Servicios.enums.NombreBimestre;
 import jakarta.persistence.*;
 import java.time.LocalDate;
 
@@ -11,8 +12,9 @@ public class Bimestre {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 10)
-    private String nombre; // BIM_1, BIM_2, etc.
+    private NombreBimestre nombre; // BIM_1, BIM_2, etc.
 
     @Column(name = "fecha_inicio", nullable = false)
     private LocalDate fechaInicio;
@@ -27,8 +29,8 @@ public class Bimestre {
     // Getters y Setters
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
-    public String getNombre() { return nombre; }
-    public void setNombre(String nombre) { this.nombre = nombre; }
+    public NombreBimestre getNombre() { return nombre; }
+    public void setNombre(NombreBimestre nombre) { this.nombre = nombre; }
     public LocalDate getFechaInicio() { return fechaInicio; }
     public void setFechaInicio(LocalDate fechaInicio) { this.fechaInicio = fechaInicio; }
     public LocalDate getFechaFin() { return fechaFin; }
