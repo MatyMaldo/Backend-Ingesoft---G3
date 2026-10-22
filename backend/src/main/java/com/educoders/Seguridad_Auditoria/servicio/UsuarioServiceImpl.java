@@ -30,7 +30,8 @@ public class UsuarioServiceImpl implements UsuarioService {
     @Transactional(readOnly = true)
     public Page<UsuarioResponse> listar(String tipoUsuario, Boolean activo, Pageable pageable) {
         if (tipoUsuario != null && !tipoUsuario.isBlank()) {
-            return usuarioRepository.findByTipoUsuario(tipoUsuario.toUpperCase(), pageable)
+            Class<?> clase = obtenerClasePorTipo(tipoUsuario.toUpperCase());
+            return usuarioRepository.findByTipoUsuario(clase, pageable)
                     .map(this::convertirARespuesta);
         }
         if (activo != null) {
@@ -39,6 +40,16 @@ public class UsuarioServiceImpl implements UsuarioService {
         }
         return usuarioRepository.findAll(pageable)
                 .map(this::convertirARespuesta);
+    }
+
+    private Class<?> obtenerClasePorTipo(String tipo) {
+        return switch (tipo) {
+            case "DOCENTE" -> com.educoders.Seguridad_Auditoria.dominio.Docente.class;
+            case "APODERADO" -> com.educoders.Seguridad_Auditoria.dominio.Apoderado.class;
+            case "ESTUDIANTE" -> com.educoders.Seguridad_Auditoria.dominio.Estudiante.class;
+            case "ADMINISTRADOR" -> com.educoders.Seguridad_Auditoria.dominio.Administrador.class;
+            default -> throw new ReglaNegocioException("Tipo de usuario no válido: " + tipo);
+        };
     }
 
     @Override

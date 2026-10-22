@@ -5,11 +5,13 @@ import com.educoders.Gestion_Academica_Motor_Evaluacion.persistencia.*;
 import com.educoders.Gestion_Academica_Motor_Evaluacion.presentacion.dto.*;
 import com.educoders.Infraestructura_Servicios.exception.ConflictoException;
 import com.educoders.Infraestructura_Servicios.exception.RecursoNoEncontradoException;
+import com.educoders.Infraestructura_Servicios.exception.ReglaNegocioException;
 import com.educoders.Seguridad_Auditoria.dominio.Docente;
 import com.educoders.Seguridad_Auditoria.persistencia.DocenteRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -75,18 +77,26 @@ public class GradoSeccionServiceImpl implements GradoSeccionService {
         AnioAcademico anio = anioAcademicoRepository.findById(request.getAnioAcademicoId())
                 .orElseThrow(() -> new RecursoNoEncontradoException("Año académico no encontrado con ID: " + request.getAnioAcademicoId()));
 
-        if (seccionRepository.existsByGradoIdAndAnioAcademicoIdAndNombre(request.getGradoId(), request.getAnioAcademicoId(), request.getNombre())) {
+        // Validar que el año académico no esté finalizado
+        if (anio.getFechaFin() != null && anio.getFechaFin().isBefore(LocalDate.now())) {
+            throw new ReglaNegocioException("No se pueden crear secciones en un año académico finalizado.");
+        }
+
+        // Validar capacidad máxima (1-65535)
+        if (request.getCapacidadMaxima() < 1 || request.getCapacidadMaxima() > 65535) {
+            throw new ReglaNegocioException("La capacidad máxima debe estar entre 1 y 65535.");
+        }
+
+        // Validar duplicado ignorando mayúsculas
+        if (seccionRepository.existsByGradoIdAndAnioAcademicoIdAndNombreIgnoreCase(request.getGradoId(), request.getAnioAcademicoId(), request.getNombre())) {
             throw new ConflictoException("La sección '" + request.getNombre() + "' ya existe para este grado y año académico.");
         }
 
-        Docente tutor = null;
-        if (request.getTutorId() != null) {
-            tutor = docenteRepository.findById(request.getTutorId())
-                    .orElseThrow(() -> new RecursoNoEncontradoException("Docente tutor no encontrado con ID: " + request.getTutorId()));
+        Docente tutor = docenteRepository.findById(request.getTutorId())
+                .orElseThrow(() -> new RecursoNoEncontradoException("Docente tutor no encontrado con ID: " + request.getTutorId()));
 
-            if (seccionRepository.existsByAnioAcademicoIdAndTutorId(request.getAnioAcademicoId(), request.getTutorId())) {
-                throw new ConflictoException("El docente ya es tutor de otra sección en el mismo año académico.");
-            }
+        if (seccionRepository.existsByAnioAcademicoIdAndTutorId(request.getAnioAcademicoId(), request.getTutorId())) {
+            throw new ConflictoException("El docente ya es tutor de otra sección en el mismo año académico.");
         }
 
         Seccion seccion = Seccion.builder()
@@ -134,5 +144,56 @@ public class GradoSeccionServiceImpl implements GradoSeccionService {
                 .tutorId(s.getTutor() != null ? s.getTutor().getId() : null)
                 .tutorNombreCompleto(tutorNombre)
                 .build();
+    }
+
+    @Override
+    @Transactional
+    public SeccionResponse actualizarSeccion(Long id, ActualizarSeccionRequest request) {
+        Seccion seccion = seccionRepository.findById(id)
+                .orElseThrow(() -> new RecursoNoEncontradoException("Sección no encontrada con ID: " + id));
+
+        // Validar y actualizar nombre
+        if (request.getNombre() != null && !request.getNombre().isBlank()) {
+            if (!request.getNombre().equals(seccion.getNombre())) {
+                if (seccionRepository.existsByGradoIdAndAnioAcademicoIdAndNombreIgnoreCaseAndIdNot(
+                        seccion.getGrado().getId(),
+                        seccion.getAnioAcademico().getId(),
+                        request.getNombre(),
+                        id)) {
+                    throw new ConflictoException("La sección '" + request.getNombre() + "' ya existe para este grado y año académico.");
+                }
+                seccion.setNombre(request.getNombre());
+            }
+        }
+
+        // Validar y actualizar capacidad máxima
+        if (request.getCapacidadMaxima() != null) {
+            if (request.getCapacidadMaxima() < 1 || request.getCapacidadMaxima() > 65535) {
+                throw new ReglaNegocioException("La capacidad máxima debe estar entre 1 y 65535.");
+            }
+            seccion.setCapacidadMaxima(request.getCapacidadMaxima());
+        }
+
+        // Validar y actualizar tutor
+        if (request.getTutorId() != null) {
+            Docente tutor = docenteRepository.findById(request.getTutorId())
+                    .orElseThrow(() -> new RecursoNoEncontradoException("Docente tutor no encontrado con ID: " + request.getTutorId()));
+
+            // Validar que el tutor no esté en otra sección del mismo año (excluyendo esta sección)
+            if (seccionRepository.existsByAnioAcademicoIdAndTutorIdAndIdNot(
+                    seccion.getAnioAcademico().getId(),
+                    request.getTutorId(),
+                    id)) {
+                throw new ConflictoException("El docente ya es tutor de otra sección en el mismo año académico.");
+            }
+
+            seccion.setTutor(tutor);
+        } else if (request.getTutorId() == null && seccion.getTutor() != null) {
+            // Permitir quitar el tutor (se envía null explícitamente)
+            seccion.setTutor(null);
+        }
+
+        Seccion actualizada = seccionRepository.save(seccion);
+        return mapToSeccionResponse(actualizada);
     }
 }
