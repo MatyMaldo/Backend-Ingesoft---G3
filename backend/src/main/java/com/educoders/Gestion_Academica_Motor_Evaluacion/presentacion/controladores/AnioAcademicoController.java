@@ -8,6 +8,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
+import java.util.Optional;
 
 @RestController
 @RequestMapping("/api/v1/anios-academicos")
@@ -23,5 +24,15 @@ public class AnioAcademicoController {
     public ResponseEntity<RespuestaApiResponse<List<AnioAcademicoResponse>>> listarAniosAcademicos() {
         List<AnioAcademicoResponse> response = anioAcademicoService.listarAniosAcademicos();
         return ResponseEntity.ok(RespuestaApiResponse.crearExito(response));
+    }
+
+    @GetMapping("/con-periodo-matricula-vigente")
+    public ResponseEntity<RespuestaApiResponse<AnioAcademicoResponse>> obtenerAnioAcademicoConPeriodoMatriculaVigente() {
+        Optional<AnioAcademicoResponse> response = anioAcademicoService.obtenerAnioAcademicoConPeriodoMatriculaVigente();
+        if (response.isPresent()) {
+            return ResponseEntity.ok(RespuestaApiResponse.crearExito(response.get()));
+        } else {
+            return ResponseEntity.ok(RespuestaApiResponse.crearError("No existe un año académico futuro con período de matrícula vigente."));
+        }
     }
 }
