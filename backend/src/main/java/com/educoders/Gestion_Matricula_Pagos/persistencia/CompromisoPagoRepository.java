@@ -1,6 +1,7 @@
 package com.educoders.Gestion_Matricula_Pagos.persistencia;
 
 import com.educoders.Gestion_Matricula_Pagos.dominio.CompromisoPago;
+import com.educoders.Infraestructura_Servicios.enums.Mes;
 import com.educoders.Infraestructura_Servicios.enums.TipoCompromiso;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
@@ -14,6 +15,11 @@ public interface CompromisoPagoRepository extends JpaRepository<CompromisoPago, 
      * Verifica si existe un compromiso de un determinado tipo (ej. MATRICULA) para la matrícula dada.
      */
     boolean existsByMatriculaIdAndTipoCompromiso(Long matriculaId, TipoCompromiso tipoCompromiso);
-
     Optional<CompromisoPago> findByMatriculaIdAndTipoCompromiso(Long matriculaId, TipoCompromiso tipoCompromiso);
+
+    /**
+     * HU-GEMAP-05: Verifica si ya existe una pensión emitida para una matrícula en un mes determinado.
+     */
+    boolean existsByMatriculaIdAndTipoCompromisoAndMes(Long matriculaId, TipoCompromiso tipoCompromiso, Mes mes);
+    Optional<CompromisoPago> findByMatriculaIdAndTipoCompromisoAndMes(Long matriculaId, TipoCompromiso tipoCompromiso, Mes mes);
 }

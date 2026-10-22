@@ -9,11 +9,13 @@ import com.educoders.Gestion_Matricula_Pagos.persistencia.MatriculaRepository;
 import com.educoders.Gestion_Matricula_Pagos.persistencia.PeriodoMatriculaRepository;
 import com.educoders.Gestion_Matricula_Pagos.presentacion.dto.CompromisoPagoResponse;
 import com.educoders.Gestion_Matricula_Pagos.presentacion.dto.EmitirCompromisoMatriculaRequest;
+import com.educoders.Gestion_Matricula_Pagos.presentacion.dto.EmitirCompromisoPensionRequest;
 import com.educoders.Infraestructura_Servicios.enums.EstadoCompromisoPago;
 import com.educoders.Infraestructura_Servicios.enums.TipoCompromiso;
 import com.educoders.Infraestructura_Servicios.exception.ConflictoException;
 import com.educoders.Infraestructura_Servicios.exception.RecursoNoEncontradoException;
 import com.educoders.Infraestructura_Servicios.exception.ReglaNegocioException;
+import com.educoders.Infraestructura_Servicios.servicio.ServicioNotificacionEmail;
 import com.educoders.Seguridad_Auditoria.dominio.Apoderado;
 import com.educoders.Seguridad_Auditoria.dominio.Estudiante;
 
@@ -27,17 +29,21 @@ import java.time.LocalDate;
 public class CompromisoPagoServiceImpl implements CompromisoPagoService {
 
     private static final BigDecimal MONTO_MATRICULA_PREDETERMINADO = new BigDecimal("350.00");
+    private static final BigDecimal MONTO_PENSION_PREDETERMINADO = new BigDecimal("450.00");
 
     private final CompromisoPagoRepository compromisoPagoRepository;
     private final MatriculaRepository matriculaRepository;
     private final PeriodoMatriculaRepository periodoMatriculaRepository;
+    private final ServicioNotificacionEmail servicioNotificacionEmail;
 
     public CompromisoPagoServiceImpl(CompromisoPagoRepository compromisoPagoRepository,
                                      MatriculaRepository matriculaRepository,
-                                     PeriodoMatriculaRepository periodoMatriculaRepository) {
+                                     PeriodoMatriculaRepository periodoMatriculaRepository,
+                                     ServicioNotificacionEmail servicioNotificacionEmail) {
         this.compromisoPagoRepository = compromisoPagoRepository;
         this.matriculaRepository = matriculaRepository;
         this.periodoMatriculaRepository = periodoMatriculaRepository;
+        this.servicioNotificacionEmail = servicioNotificacionEmail;
     }
 
     @Override
@@ -73,15 +79,15 @@ public class CompromisoPagoServiceImpl implements CompromisoPagoService {
             throw new ConflictoException("El compromiso de pago de matrícula ya fue emitido previamente para esta matrícula.");
         }
 
-        // 5. Asignar monto original
+        // 5. Asignar monto original (personalizado o predeterminado)
         BigDecimal montoFinal = (request.montoPersonalizado() != null && request.montoPersonalizado().compareTo(BigDecimal.ZERO) > 0)
                 ? request.montoPersonalizado()
                 : MONTO_MATRICULA_PREDETERMINADO;
 
-        // 6. Construir y guardar entidad
+        // 6. Construir y guardar entidad de compromiso de matrícula
         CompromisoPago compromiso = CompromisoPago.builder()
                 .tipoCompromiso(TipoCompromiso.MATRICULA)
-                .mes(null) // Para matrículas mes es null por BD
+                .mes(null) // Para matrículas el campo mes es null por BD
                 .fechaEmision(hoy)
                 .montoOriginal(montoFinal)
                 .montoMora(BigDecimal.ZERO)
@@ -90,6 +96,79 @@ public class CompromisoPagoServiceImpl implements CompromisoPagoService {
                 .build();
 
         CompromisoPago guardado = compromisoPagoRepository.save(compromiso);
+
+        // 7. Notificación por correo electrónico al apoderado
+        Estudiante est = matricula.getEstudiante();
+        Apoderado apod = est.getApoderado();
+        if (apod != null) {
+            servicioNotificacionEmail.enviarCorreoCompromisoPago(
+                    apod.getEmail(),
+                    apod.getNombre() + " " + apod.getApellidoPaterno(),
+                    est.getNombre() + " " + est.getApellidoPaterno(),
+                    "Matrícula Escolar",
+                    guardado.calcularMontoTotal()
+            );
+        }
+
+        return mapToResponse(guardado);
+    }
+
+    @Override
+    @Transactional
+    public CompromisoPagoResponse emitirCompromisoPension(EmitirCompromisoPensionRequest request) {
+        LocalDate hoy = LocalDate.now();
+
+        // 1. Obtener la matrícula existente
+        Matricula matricula = matriculaRepository.findById(request.matriculaId())
+                .orElseThrow(() -> RecursoNoEncontradoException.de("Matrícula", request.matriculaId()));
+
+        // 2. Validar que la matrícula esté vigente (no cancelada)
+        if (matricula.esCancelada()) {
+            throw new ReglaNegocioException("No se pueden emitir compromisos de pensión para una matrícula cancelada.");
+        }
+
+        // 3. Validar duplicidad de pensión para el mismo mes
+        boolean yaEmitido = compromisoPagoRepository.existsByMatriculaIdAndTipoCompromisoAndMes(
+                matricula.getId(),
+                TipoCompromiso.PENSION,
+                request.mes()
+        );
+
+        if (yaEmitido) {
+            throw new ConflictoException(
+                    "Ya existe un compromiso de pago de pensión emitido para el mes de " + request.mes() + " en esta matrícula.");
+        }
+
+        // 4. Asignar monto original (personalizado o predeterminado)
+        BigDecimal montoFinal = (request.montoPersonalizado() != null && request.montoPersonalizado().compareTo(BigDecimal.ZERO) > 0)
+                ? request.montoPersonalizado()
+                : MONTO_PENSION_PREDETERMINADO;
+
+        // 5. Construir y guardar entidad de pensión
+        CompromisoPago compromiso = CompromisoPago.builder()
+                .tipoCompromiso(TipoCompromiso.PENSION)
+                .mes(request.mes())
+                .fechaEmision(hoy)
+                .montoOriginal(montoFinal)
+                .montoMora(BigDecimal.ZERO)
+                .estado(EstadoCompromisoPago.PENDIENTE)
+                .matricula(matricula)
+                .build();
+
+        CompromisoPago guardado = compromisoPagoRepository.save(compromiso);
+
+        // 6. Notificación por correo electrónico al apoderado
+        Estudiante est = matricula.getEstudiante();
+        Apoderado apod = est.getApoderado();
+        if (apod != null) {
+            servicioNotificacionEmail.enviarCorreoCompromisoPago(
+                    apod.getEmail(),
+                    apod.getNombre() + " " + apod.getApellidoPaterno(),
+                    est.getNombre() + " " + est.getApellidoPaterno(),
+                    "Pensión Mensual - " + request.mes(),
+                    guardado.calcularMontoTotal()
+            );
+        }
 
         return mapToResponse(guardado);
     }
