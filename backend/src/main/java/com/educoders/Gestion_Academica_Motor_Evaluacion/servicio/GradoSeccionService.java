@@ -11,4 +11,5 @@ public interface GradoSeccionService {
     SeccionResponse crearSeccion(CrearSeccionRequest request);
     List<SeccionResponse> listarSecciones();
     List<SeccionResponse> listarSeccionesPorGradoYAnio(Long gradoId, Long anioId);
+    SeccionResponse actualizarSeccion(Long id, ActualizarSeccionRequest request);
 }
