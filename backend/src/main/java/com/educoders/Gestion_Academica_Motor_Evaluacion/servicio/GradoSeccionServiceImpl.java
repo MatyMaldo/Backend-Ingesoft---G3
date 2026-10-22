@@ -5,11 +5,13 @@ import com.educoders.Gestion_Academica_Motor_Evaluacion.persistencia.*;
 import com.educoders.Gestion_Academica_Motor_Evaluacion.presentacion.dto.*;
 import com.educoders.Infraestructura_Servicios.exception.ConflictoException;
 import com.educoders.Infraestructura_Servicios.exception.RecursoNoEncontradoException;
+import com.educoders.Infraestructura_Servicios.exception.ReglaNegocioException;
 import com.educoders.Seguridad_Auditoria.dominio.Docente;
 import com.educoders.Seguridad_Auditoria.persistencia.DocenteRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -75,7 +77,18 @@ public class GradoSeccionServiceImpl implements GradoSeccionService {
         AnioAcademico anio = anioAcademicoRepository.findById(request.getAnioAcademicoId())
                 .orElseThrow(() -> new RecursoNoEncontradoException("Año académico no encontrado con ID: " + request.getAnioAcademicoId()));
 
-        if (seccionRepository.existsByGradoIdAndAnioAcademicoIdAndNombre(request.getGradoId(), request.getAnioAcademicoId(), request.getNombre())) {
+        // Validar que el año académico no esté finalizado
+        if (anio.getFechaFin() != null && anio.getFechaFin().isBefore(LocalDate.now())) {
+            throw new ReglaNegocioException("No se pueden crear secciones en un año académico finalizado.");
+        }
+
+        // Validar capacidad máxima (1-65535)
+        if (request.getCapacidadMaxima() < 1 || request.getCapacidadMaxima() > 65535) {
+            throw new ReglaNegocioException("La capacidad máxima debe estar entre 1 y 65535.");
+        }
+
+        // Validar duplicado ignorando mayúsculas
+        if (seccionRepository.existsByGradoIdAndAnioAcademicoIdAndNombreIgnoreCase(request.getGradoId(), request.getAnioAcademicoId(), request.getNombre())) {
             throw new ConflictoException("La sección '" + request.getNombre() + "' ya existe para este grado y año académico.");
         }
 

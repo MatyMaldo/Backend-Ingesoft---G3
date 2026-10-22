@@ -11,6 +11,7 @@ public class CrearSeccionRequest {
 
     @NotNull(message = "La capacidad máxima es obligatoria")
     @Min(value = 1, message = "La capacidad máxima debe ser mayor a 0")
+    @jakarta.validation.constraints.Max(value = 65535, message = "La capacidad máxima no puede exceder 65535")
     private Integer capacidadMaxima;
 
     @NotNull(message = "El ID del grado es obligatorio")

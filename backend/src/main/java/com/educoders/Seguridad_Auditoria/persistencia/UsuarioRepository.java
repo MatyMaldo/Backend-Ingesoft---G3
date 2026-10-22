@@ -27,6 +27,6 @@ public interface UsuarioRepository extends JpaRepository<Usuario, Long> {
     /** Filtros de listado. */
     Page<Usuario> findByActivo(boolean activo, Pageable pageable);
 
-    @Query("SELECT u FROM Usuario u WHERE TYPE(u) = :tipoUsuario")
-    Page<Usuario> findByTipoUsuario(String tipoUsuario, Pageable pageable);
+    @Query("SELECT u FROM Usuario u WHERE TYPE(u) = :clase")
+    Page<Usuario> findByTipoUsuario(Class<?> clase, Pageable pageable);
 }
