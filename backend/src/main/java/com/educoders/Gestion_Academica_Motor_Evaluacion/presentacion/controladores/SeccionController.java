@@ -1,4 +1,5 @@
 package com.educoders.Gestion_Academica_Motor_Evaluacion.presentacion.controladores;
+import com.educoders.Gestion_Academica_Motor_Evaluacion.presentacion.dto.ActualizarSeccionRequest;
 import com.educoders.Gestion_Academica_Motor_Evaluacion.presentacion.dto.CrearSeccionRequest;
 import com.educoders.Gestion_Academica_Motor_Evaluacion.presentacion.dto.SeccionResponse;
 import com.educoders.Gestion_Academica_Motor_Evaluacion.servicio.GradoSeccionService;
@@ -41,6 +42,14 @@ public class SeccionController {
             response = gradoSeccionService.listarSecciones();
         }
 
+        return ResponseEntity.ok(RespuestaApiResponse.crearExito(response));
+    }
+
+    @PatchMapping("/{id}")
+    public ResponseEntity<RespuestaApiResponse<SeccionResponse>> actualizarSeccion(
+            @PathVariable Long id,
+            @Valid @RequestBody ActualizarSeccionRequest request) {
+        SeccionResponse response = gradoSeccionService.actualizarSeccion(id, request);
         return ResponseEntity.ok(RespuestaApiResponse.crearExito(response));
     }
 }

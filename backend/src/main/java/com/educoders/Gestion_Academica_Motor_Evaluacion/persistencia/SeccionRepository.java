@@ -21,4 +21,22 @@ public interface SeccionRepository extends JpaRepository<Seccion, Long> {
     boolean existsByGradoIdAndAnioAcademicoIdAndNombreIgnoreCase(@Param("gradoId") Long gradoId,
                                                                  @Param("anioAcademicoId") Long anioAcademicoId,
                                                                  @Param("nombre") String nombre);
+
+    @Query("SELECT CASE WHEN COUNT(s) > 0 THEN true ELSE false END FROM Seccion s " +
+           "WHERE s.grado.id = :gradoId " +
+           "AND s.anioAcademico.id = :anioAcademicoId " +
+           "AND LOWER(s.nombre) = LOWER(:nombre) " +
+           "AND s.id != :seccionId")
+    boolean existsByGradoIdAndAnioAcademicoIdAndNombreIgnoreCaseAndIdNot(@Param("gradoId") Long gradoId,
+                                                                         @Param("anioAcademicoId") Long anioAcademicoId,
+                                                                         @Param("nombre") String nombre,
+                                                                         @Param("seccionId") Long seccionId);
+
+    @Query("SELECT CASE WHEN COUNT(s) > 0 THEN true ELSE false END FROM Seccion s " +
+           "WHERE s.anioAcademico.id = :anioAcademicoId " +
+           "AND s.tutor.id = :tutorId " +
+           "AND s.id != :seccionId")
+    boolean existsByAnioAcademicoIdAndTutorIdAndIdNot(@Param("anioAcademicoId") Long anioAcademicoId,
+                                                      @Param("tutorId") Long tutorId,
+                                                      @Param("seccionId") Long seccionId);
 }
