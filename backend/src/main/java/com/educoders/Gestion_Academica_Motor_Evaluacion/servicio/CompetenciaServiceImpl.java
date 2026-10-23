@@ -97,6 +97,7 @@ public class CompetenciaServiceImpl implements CompetenciaService {
         }
 
         competenciaRepository.delete(competencia);
+        competenciaRepository.flush();
     }
 
     private CompetenciaResponse convertirARespuesta(Competencia competencia) {

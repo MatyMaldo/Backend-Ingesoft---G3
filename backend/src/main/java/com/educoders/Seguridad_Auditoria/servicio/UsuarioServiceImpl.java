@@ -1,5 +1,6 @@
 package com.educoders.Seguridad_Auditoria.servicio;
 
+import com.educoders.Seguridad_Auditoria.dominio.Administrador;
 import com.educoders.Seguridad_Auditoria.dominio.Usuario;
 import com.educoders.Seguridad_Auditoria.persistencia.UsuarioRepository;
 import com.educoders.Seguridad_Auditoria.presentacion.dto.ActualizarUsuarioRequest;
@@ -69,6 +70,10 @@ public class UsuarioServiceImpl implements UsuarioService {
     public UsuarioResponse actualizar(Long idUsuario, ActualizarUsuarioRequest solicitud) {
         Usuario usuario = obtenerEntidad(idUsuario);
 
+        if (usuario instanceof Administrador) {
+            throw new ReglaNegocioException("No se pueden modificar usuarios administrador.");
+        }
+
         if (tieneTexto(solicitud.nombre())) {
             usuario.setNombre(solicitud.nombre());
         }
@@ -81,8 +86,9 @@ public class UsuarioServiceImpl implements UsuarioService {
         }
 
         if (tieneTexto(solicitud.dni()) && !solicitud.dni().equals(usuario.getDni())) {
-            if (usuarioRepository.existsByDniAndIdNot(solicitud.dni(), idUsuario)) {
-                throw new ConflictoException("Ya existe otro usuario con el DNI indicado.");
+            if (usuarioRepository.existsByDniAndTipoUsuarioAndIdNot(
+                    solicitud.dni(), usuario.getClass(), idUsuario)) {
+                throw new ConflictoException("Ya existe otro usuario con el DNI indicado para este tipo de usuario.");
             }
             usuario.setDni(solicitud.dni());
             usuario.setUsername(solicitud.dni());   // el username sigue al DNI
@@ -112,6 +118,10 @@ public class UsuarioServiceImpl implements UsuarioService {
     public UsuarioResponse desactivar(Long idUsuario) {
         Usuario usuario = obtenerEntidad(idUsuario);
 
+        if (usuario instanceof Administrador) {
+            throw new ReglaNegocioException("No se pueden desactivar usuarios administrador.");
+        }
+
         if (!usuario.isActivo()) {
             throw new ReglaNegocioException("El usuario ya se encuentra inactivo.");
         }
@@ -124,6 +134,10 @@ public class UsuarioServiceImpl implements UsuarioService {
     @Transactional
     public UsuarioResponse reactivar(Long idUsuario) {
         Usuario usuario = obtenerEntidad(idUsuario);
+
+        if (usuario instanceof Administrador) {
+            throw new ReglaNegocioException("No se pueden reactivar usuarios administrador.");
+        }
 
         if (usuario.isActivo()) {
             throw new ReglaNegocioException("El usuario ya se encuentra activo.");

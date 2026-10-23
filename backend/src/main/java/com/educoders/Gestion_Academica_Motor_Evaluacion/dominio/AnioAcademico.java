@@ -10,7 +10,7 @@ public class AnioAcademico {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false, unique = true)
+    @Column(nullable = false, unique = true, columnDefinition = "SMALLINT")
     private Integer anio;
 
     @Column(name = "fecha_inicio", nullable = false)

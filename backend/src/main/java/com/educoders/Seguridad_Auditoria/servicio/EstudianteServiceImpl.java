@@ -121,9 +121,9 @@ public class EstudianteServiceImpl implements EstudianteService {
             String email,
             String codigo) {
 
-        if (usuarioRepository.existsByDni(dni)) {
+        if (usuarioRepository.existsByDniAndTipoUsuario(dni, Estudiante.class)) {
             throw new ConflictoException(
-                    "Ya existe un usuario registrado con el DNI indicado."
+                    "Ya existe un estudiante registrado con el DNI indicado."
             );
         }
 
