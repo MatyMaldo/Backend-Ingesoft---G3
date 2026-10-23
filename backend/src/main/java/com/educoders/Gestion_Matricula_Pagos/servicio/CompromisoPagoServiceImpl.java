@@ -7,6 +7,7 @@ import com.educoders.Gestion_Matricula_Pagos.dominio.PeriodoMatricula;
 import com.educoders.Gestion_Matricula_Pagos.persistencia.CompromisoPagoRepository;
 import com.educoders.Gestion_Matricula_Pagos.persistencia.MatriculaRepository;
 import com.educoders.Gestion_Matricula_Pagos.persistencia.PeriodoMatriculaRepository;
+import com.educoders.Gestion_Matricula_Pagos.presentacion.dto.CompromisoApoderadoResponse;
 import com.educoders.Gestion_Matricula_Pagos.presentacion.dto.CompromisoPagoResponse;
 import com.educoders.Gestion_Matricula_Pagos.presentacion.dto.EmitirCompromisoMatriculaRequest;
 import com.educoders.Gestion_Matricula_Pagos.presentacion.dto.EmitirCompromisoPensionRequest;
@@ -19,11 +20,14 @@ import com.educoders.Infraestructura_Servicios.servicio.ServicioNotificacionEmai
 import com.educoders.Seguridad_Auditoria.dominio.Apoderado;
 import com.educoders.Seguridad_Auditoria.dominio.Estudiante;
 
+import com.educoders.Seguridad_Auditoria.persistencia.EstudianteRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.List;
+import java.util.Optional;
 
 @Service
 public class CompromisoPagoServiceImpl implements CompromisoPagoService {
@@ -35,15 +39,17 @@ public class CompromisoPagoServiceImpl implements CompromisoPagoService {
     private final MatriculaRepository matriculaRepository;
     private final PeriodoMatriculaRepository periodoMatriculaRepository;
     private final ServicioNotificacionEmail servicioNotificacionEmail;
+    private final EstudianteRepository estudianteRepository;
 
     public CompromisoPagoServiceImpl(CompromisoPagoRepository compromisoPagoRepository,
                                      MatriculaRepository matriculaRepository,
                                      PeriodoMatriculaRepository periodoMatriculaRepository,
-                                     ServicioNotificacionEmail servicioNotificacionEmail) {
+                                     ServicioNotificacionEmail servicioNotificacionEmail, EstudianteRepository estudianteRepository) {
         this.compromisoPagoRepository = compromisoPagoRepository;
         this.matriculaRepository = matriculaRepository;
         this.periodoMatriculaRepository = periodoMatriculaRepository;
         this.servicioNotificacionEmail = servicioNotificacionEmail;
+        this.estudianteRepository = estudianteRepository;
     }
 
     @Override
@@ -172,6 +178,76 @@ public class CompromisoPagoServiceImpl implements CompromisoPagoService {
 
         return mapToResponse(guardado);
     }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<CompromisoApoderadoResponse> listarCompromisosPorEstudianteYAnio(Long apoderadoId, Long estudianteId, Integer anio) {
+        if (!estudianteRepository.existsByIdAndApoderadoId(estudianteId, apoderadoId)) {
+            throw new ReglaNegocioException("El estudiante especificado no se encuentra asociado al apoderado autenticado.");
+        }
+
+        LocalDate hoy = LocalDate.now();
+        return compromisoPagoRepository.findByEstudianteAndAnioOpcional(estudianteId, anio)
+                .stream()
+                .map(c -> mapToCompromisoApoderadoResponse(c, hoy))
+                .toList();
+    }
+
+    // --- Métodos Auxiliares ---
+
+    private CompromisoApoderadoResponse mapToCompromisoApoderadoResponse(CompromisoPago c, LocalDate hoy) {
+        Matricula m = c.getMatricula();
+        boolean esCancelada = m.esCancelada();
+        String etiquetaMatricula = esCancelada ? "Matrícula cancelada" : null;
+
+        ResultadoEvaluacionBloqueo evaluacion = evaluarHabilitacionPago(c, hoy);
+
+        return new CompromisoApoderadoResponse(
+                c.getId(),
+                c.getTipoCompromiso(),
+                c.getMes(),
+                c.getFechaEmision(),
+                c.getMontoOriginal(),
+                c.getMontoMora(),
+                c.calcularMontoTotal(),
+                c.getEstado(),
+                m.getId(),
+                esCancelada,
+                etiquetaMatricula,
+                evaluacion.sePuedeRegistrarPago(),
+                evaluacion.motivoBloqueo()
+        );
+    }
+
+    private ResultadoEvaluacionBloqueo evaluarHabilitacionPago(CompromisoPago c, LocalDate hoy) {
+        if (c.esPagado()) {
+            return new ResultadoEvaluacionBloqueo(false, "El compromiso ya se encuentra pagado.");
+        }
+
+        Matricula matricula = c.getMatricula();
+        if (matricula.esCancelada()) {
+            return new ResultadoEvaluacionBloqueo(false, "La matrícula del estudiante ha sido cancelada.");
+        }
+
+        if (c.getTipoCompromiso() == TipoCompromiso.MATRICULA) {
+            Long anioAcademicoId = matricula.getSeccion().getAnioAcademico().getId();
+            boolean periodoVigente = periodoMatriculaRepository.findByAnioAcademicoId(anioAcademicoId)
+                    .map(periodo -> periodo.estaVigente(hoy))
+                    .orElse(false);
+
+            if (!periodoVigente) {
+                return new ResultadoEvaluacionBloqueo(false, "El período de matrícula ha finalizado o no se encuentra vigente.");
+            }
+        }
+
+        // Si el compromiso es de tipo Pension, este NUNCA se cancela
+
+        return new ResultadoEvaluacionBloqueo(true, null);
+    }
+
+    private record ResultadoEvaluacionBloqueo(boolean sePuedeRegistrarPago, String motivoBloqueo) {}
+
+
 
     private CompromisoPagoResponse mapToResponse(CompromisoPago c) {
         Estudiante est = c.getMatricula().getEstudiante();
