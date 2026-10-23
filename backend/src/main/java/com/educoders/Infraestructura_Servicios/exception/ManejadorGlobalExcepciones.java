@@ -8,6 +8,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.server.ResponseStatusException;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 
 /**
  * Centraliza la traducción de excepciones a respuestas HTTP uniformes.
@@ -57,5 +59,27 @@ public class ManejadorGlobalExcepciones {
     public ResponseEntity<RespuestaApiResponse<Void>> manejarNoEncontrado(RecursoNoEncontradoException ex) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
                 .body(RespuestaApiResponse.crearError(ex.getMessage()));
+    }
+    @ExceptionHandler(ResponseStatusException.class)
+    public ResponseEntity<RespuestaApiResponse<Void>> manejarEstadoHttp(
+            ResponseStatusException excepcion) {
+
+        String mensaje = excepcion.getReason() != null
+                ? excepcion.getReason()
+                : "No se pudo completar la solicitud";
+
+        return ResponseEntity
+                .status(excepcion.getStatusCode())
+                .body(RespuestaApiResponse.crearError(mensaje));
+    }
+
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<RespuestaApiResponse<Void>> manejarJsonInvalido(
+            HttpMessageNotReadableException excepcion) {
+
+        return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body(RespuestaApiResponse.crearError(
+                        "El cuerpo de la solicitud no contiene un JSON válido"));
     }
 }
