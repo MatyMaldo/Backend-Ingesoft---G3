@@ -13,5 +13,5 @@ public interface ServicioAlmacenamientoArchivo {
     /**
      * Elimina un archivo mediante su URL almacenada si la operación es rechazada/revertida.
      */
-    void eliminarArchivo(String rutaUrl);
+    // void eliminarArchivo(String rutaUrl);
 }
