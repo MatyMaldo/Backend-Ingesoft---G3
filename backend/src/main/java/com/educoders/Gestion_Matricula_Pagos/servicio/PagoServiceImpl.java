@@ -231,6 +231,14 @@ public class PagoServiceImpl implements PagoService {
             throw new ReglaNegocioException("El usuario especificado no tiene el rol de Administrador para rechazar pagos.");
         }
 
+        /*
+        *  Ejemplo de uso de auditoria: FASE DE CAPTURA DE DATOS ANTES DE CAMBIOS
+        *   // FASE DE CAPTURA DE DATOS PREVIOS
+            String estadoPagoAnt = pago.getEstado().name();
+            String estadoCompromisoAnt = compromiso.getEstado().name();
+            String estadoMatriculaAnt = matricula.getEstado().name();
+        * */
+
         // Step 6: Realizar la transición de estados en las entidades e ingresar motivo
         pago.setEstado(EstadoPago.RECHAZADO);
         pago.setMotivo(request.motivo());
@@ -256,6 +264,24 @@ public class PagoServiceImpl implements PagoService {
                 compromiso.getTipoCompromiso().name(),
                 request.motivo()
         );
+
+        /*
+         *   Ejemplo de uso de auditoria: FASE DE REGISTRO DE AUDITORIA DE LOS CAMBIOS DE ESTADOS
+        // FASE DE REGISTRO DE AUDITORÍA (Garantizada contra fallos y aislada)
+        auditoriaService.registrarAuditoria(new RegistrarAuditoriaRequestDTO(
+                validador.getId(),
+                CategoriaAuditoria.PAGOS,
+                TipoAccionAuditoria.CAMBIO_ESTADO,
+                "Pago",
+                pagoGuardado.getId(),
+                "Rechazo de pago por el administrador",
+                List.of(
+                        new DetalleAuditoriaDTO("estadoPago", estadoPagoAnt, pagoGuardado.getEstado().name()),
+                        new DetalleAuditoriaDTO("estadoCompromiso", estadoCompromisoAnt, compromiso.getEstado().name()),
+                        new DetalleAuditoriaDTO("estadoMatricula", estadoMatriculaAnt, matricula.getEstado().name())
+                )
+        ));
+        */
 
         // Step 9: Mapear y retornar la respuesta DTO actualizada
         return PagoAdminDetailResponse.fromEntity(pagoGuardado);

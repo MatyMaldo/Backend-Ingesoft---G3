@@ -1,6 +1,8 @@
 package com.educoders.Infraestructura_Servicios.exception;
 
 import com.educoders.Infraestructura_Servicios.dto.RespuestaApiResponse;
+import com.educoders.Seguridad_Auditoria.servicio.LogErrorService;
+import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -19,6 +21,13 @@ public class ManejadorGlobalExcepciones {
 
     private static final Logger REGISTRO = LoggerFactory.getLogger(ManejadorGlobalExcepciones.class);
 
+    // 1. Inyección por constructor del nuevo servicio
+    private final LogErrorService logErrorService;
+
+    public ManejadorGlobalExcepciones(LogErrorService logErrorService) {
+        this.logErrorService = logErrorService;
+    }
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<RespuestaApiResponse<Void>> manejarValidacion(MethodArgumentNotValidException excepcion) {
         String mensaje = excepcion.getBindingResult()
@@ -33,12 +42,47 @@ public class ManejadorGlobalExcepciones {
                 .body(RespuestaApiResponse.crearError(mensaje));
     }
 
+    // 2. Método actualizado agregando HttpServletRequest para capturar URI y Método HTTP
     @ExceptionHandler(Exception.class)
-    public ResponseEntity<RespuestaApiResponse<Void>> manejarErrorInesperado(Exception excepcion) {
+    public ResponseEntity<RespuestaApiResponse<Void>> manejarErrorInesperado(
+            Exception excepcion, HttpServletRequest request) {
+
         REGISTRO.error("Error inesperado en la aplicación", excepcion);
+
+        // Identificar la primera clase de nuestro paquete que originó la excepción
+        String claseOrigen = obtenerClaseOrigen(excepcion);
+
+        logErrorService.registrarError(
+                claseOrigen,
+                "Excepción no controlada",
+                excepcion.getMessage() != null ? excepcion.getMessage() : "Error sin mensaje explícito",
+                convertirStackTraceATexto(excepcion),
+                request.getRequestURI(),
+                request.getMethod(),
+                HttpStatus.INTERNAL_SERVER_ERROR.value(),
+                null
+        );
+
         return ResponseEntity
                 .status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(RespuestaApiResponse.crearError("Ocurrió un error inesperado"));
+    }
+    private String obtenerClaseOrigen(Throwable throwable) {
+        if (throwable.getStackTrace() != null) {
+            for (StackTraceElement elem : throwable.getStackTrace()) {
+                if (elem.getClassName().startsWith("com.educoders")) {
+                    return elem.getClassName();
+                }
+            }
+        }
+        return "Desconocido";
+    }
+    // Método auxiliar para convertir la pila de llamadas
+    private String convertirStackTraceATexto(Throwable throwable) {
+        java.io.StringWriter sw = new java.io.StringWriter();
+        java.io.PrintWriter pw = new java.io.PrintWriter(sw);
+        throwable.printStackTrace(pw);
+        return sw.toString();
     }
 
     @ExceptionHandler(ReglaNegocioException.class)

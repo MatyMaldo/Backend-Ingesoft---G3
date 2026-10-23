@@ -14,7 +14,7 @@ import jakarta.persistence.Table;
  * Representa el registro simplificado de asistencia de un estudiante para el prototipo.
  */
 @Entity
-@Table(name = "asistencias_estudiantes")
+@Table(name = "asistencias_estudiante")
 public class AsistenciaEstudiante {
 
     @Id
