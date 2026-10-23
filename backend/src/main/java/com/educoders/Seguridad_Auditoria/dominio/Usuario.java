@@ -11,7 +11,7 @@ import java.time.LocalDateTime;
 @Entity
 @Table(name = "usuarios")
 @Inheritance(strategy = InheritanceType.JOINED)
-@DiscriminatorColumn(name = "tipo_usuario")
+@DiscriminatorColumn(name = "tipo_usuario", discriminatorType = DiscriminatorType.STRING, columnDefinition = "ENUM('ADMINISTRADOR','DOCENTE','APODERADO','ESTUDIANTE')")
 public abstract class Usuario {
 
     @Id

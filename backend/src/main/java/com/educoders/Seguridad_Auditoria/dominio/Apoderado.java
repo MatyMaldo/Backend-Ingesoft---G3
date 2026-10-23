@@ -15,7 +15,7 @@ import jakarta.persistence.Table;
 @DiscriminatorValue("APODERADO")
 public class Apoderado extends Usuario {
 
-    @Column(name = "edad", nullable = false)
+    @Column(name = "edad", nullable = true, columnDefinition = "TINYINT UNSIGNED")
     private Integer edad;
 
     public Integer getEdad() {
