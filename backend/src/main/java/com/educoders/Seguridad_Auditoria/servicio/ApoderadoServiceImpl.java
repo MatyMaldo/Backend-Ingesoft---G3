@@ -98,9 +98,9 @@ public class ApoderadoServiceImpl implements ApoderadoService {
 
     private void validarUnicidad(String dni, String email) {
 
-        if (usuarioRepository.existsByDni(dni)) {
+        if (usuarioRepository.existsByDniAndTipoUsuario(dni, Apoderado.class)) {
             throw new ConflictoException(
-                    "Ya existe un usuario registrado con el DNI indicado."
+                    "Ya existe un apoderado registrado con el DNI indicado."
             );
         }
 

@@ -35,7 +35,7 @@ public class AutenticacionServiceImpl implements AutenticacionService {
         String identificador = request.identificador().trim();
 
         // Primera iteración: solo Administrador.
-        if (!"ADMIN".equalsIgnoreCase(request.perfil().trim())) {
+        if (!"ADMINISTRADOR".equalsIgnoreCase(request.perfil().trim())) {
             throw credencialesInvalidas();
         }
 
@@ -67,13 +67,13 @@ public class AutenticacionServiceImpl implements AutenticacionService {
         }
 
         // Generar sesión JWT.
-        String token = jwtService.generarToken(usuario, "ADMIN");
+        String token = jwtService.generarToken(usuario, "ADMINISTRADOR");
 
         LoginResponse.UsuarioLoginResponse datosUsuario =
                 new LoginResponse.UsuarioLoginResponse(
                         usuario.getId(),
                         usuario.getNombre(),
-                        "ADMIN"
+                        "ADMINISTRADOR"
                 );
 
         return new LoginResponse(token, datosUsuario);

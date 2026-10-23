@@ -44,4 +44,27 @@ public interface UsuarioRepository extends JpaRepository<Usuario, Long> {
             @Param("tipoUsuario") Class<? extends Usuario> tipoUsuario
     );
 
+    @Query("""
+       SELECT COUNT(u) > 0
+       FROM Usuario u
+       WHERE u.dni = :dni
+       AND TYPE(u) = :tipoUsuario
+       AND u.id <> :id
+       """)
+    boolean existsByDniAndTipoUsuarioAndIdNot(
+            @Param("dni") String dni,
+            @Param("tipoUsuario") Class<? extends Usuario> tipoUsuario,
+            @Param("id") Long id
+    );
+
+    @Query("""
+   SELECT COUNT(u) > 0
+   FROM Usuario u
+   WHERE u.dni = :dni
+   AND TYPE(u) = :tipoUsuario
+   """)
+    boolean existsByDniAndTipoUsuario(
+            @Param("dni") String dni,
+            @Param("tipoUsuario") Class<? extends Usuario> tipoUsuario
+    );
 }

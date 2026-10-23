@@ -60,7 +60,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 String usuarioId = claims.getSubject();
                 String rol = claims.get("rol", String.class);
 
-                if (usuarioId != null && "ADMIN".equals(rol)) {
+                if (usuarioId != null && "ADMINISTRADOR".equals(rol)) {
 
                     Long id = Long.valueOf(usuarioId);
 

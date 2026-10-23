@@ -87,8 +87,8 @@ public class DocenteServiceImpl implements DocenteService {
 
     /** Valida la unicidad de DNI, correo y username exigida por HU-SAT-01. */
     private void validarUnicidad(String dni, String email) {
-        if (usuarioRepository.existsByDni(dni)) {
-            throw new ConflictoException("Ya existe un usuario registrado con el DNI indicado.");
+        if (usuarioRepository.existsByDniAndTipoUsuario(dni, Docente.class)) {
+            throw new ConflictoException("Ya existe un docente registrado con el DNI indicado.");
         }
         if (usuarioRepository.existsByEmail(email)) {
             throw new ConflictoException("Ya existe un usuario registrado con el correo indicado.");
