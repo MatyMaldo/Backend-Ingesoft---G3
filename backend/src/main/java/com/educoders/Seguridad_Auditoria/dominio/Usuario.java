@@ -27,7 +27,7 @@ public abstract class Usuario {
     @Column(name = "apellido_materno")
     private String apellidoMaterno;
 
-    @Column(name = "dni", unique = true, nullable = false)
+    @Column(name = "dni", nullable = false)
     private String dni;
 
     @Column(name = "username", unique = true, nullable = false)
