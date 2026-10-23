@@ -64,7 +64,8 @@ public class EstudianteServiceImpl implements EstudianteService {
         estudiante.setApellidoMaterno(solicitud.apellidoMaterno());
         estudiante.setDni(solicitud.dni());
 
-        estudiante.setUsername(solicitud.dni());
+        // Username es la parte local del email (antes del @)
+        estudiante.setUsername(extraerUsernameDeEmail(solicitud.email()));
 
         estudiante.setEmail(solicitud.email());
         estudiante.setTelefono(solicitud.telefono());
@@ -133,7 +134,7 @@ public class EstudianteServiceImpl implements EstudianteService {
             );
         }
 
-        if (usuarioRepository.existsByUsername(dni)) {
+        if (usuarioRepository.existsByUsername(extraerUsernameDeEmail(email))) {
             throw new ConflictoException(
                     "Ya existe un usuario registrado con ese identificador."
             );
@@ -144,5 +145,9 @@ public class EstudianteServiceImpl implements EstudianteService {
                     "Ya existe un estudiante registrado con ese código."
             );
         }
+    }
+
+    private String extraerUsernameDeEmail(String email) {
+        return email.substring(0, email.indexOf('@'));
     }
 }

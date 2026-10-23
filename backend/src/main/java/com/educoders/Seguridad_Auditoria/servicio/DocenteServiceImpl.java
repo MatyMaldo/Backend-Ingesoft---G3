@@ -47,7 +47,7 @@ public class DocenteServiceImpl implements DocenteService {
         docente.setApellidoPaterno(solicitud.apellidoPaterno());
         docente.setApellidoMaterno(solicitud.apellidoMaterno());
         docente.setDni(solicitud.dni());
-        docente.setUsername(solicitud.dni());
+        docente.setUsername(extraerUsernameDeEmail(solicitud.email()));
         docente.setEmail(solicitud.email());
         docente.setTelefono(solicitud.telefono());
         docente.setPasswordHash(passwordEncoder.encode(solicitud.password()));
@@ -94,8 +94,12 @@ public class DocenteServiceImpl implements DocenteService {
             throw new ConflictoException("Ya existe un usuario registrado con el correo indicado.");
         }
 
-        if (usuarioRepository.existsByUsername(dni)) {
+        if (usuarioRepository.existsByUsername(extraerUsernameDeEmail(email))) {
             throw new ConflictoException("Ya existe un usuario registrado con ese identificador.");
         }
+    }
+
+    private String extraerUsernameDeEmail(String email) {
+        return email.substring(0, email.indexOf('@'));
     }
 }

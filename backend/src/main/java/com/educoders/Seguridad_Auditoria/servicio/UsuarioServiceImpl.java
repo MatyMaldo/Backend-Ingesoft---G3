@@ -91,7 +91,6 @@ public class UsuarioServiceImpl implements UsuarioService {
                 throw new ConflictoException("Ya existe otro usuario con el DNI indicado para este tipo de usuario.");
             }
             usuario.setDni(solicitud.dni());
-            usuario.setUsername(solicitud.dni());   // el username sigue al DNI
         }
 
         if (tieneTexto(solicitud.email()) && !solicitud.email().equals(usuario.getEmail())) {
@@ -99,6 +98,8 @@ public class UsuarioServiceImpl implements UsuarioService {
                 throw new ConflictoException("Ya existe otro usuario con el correo indicado.");
             }
             usuario.setEmail(solicitud.email());
+            // Actualizar username basado en el nuevo email
+            usuario.setUsername(extraerUsernameDeEmail(solicitud.email()));
         }
 
         if (solicitud.telefono() != null) {
@@ -155,6 +156,11 @@ public class UsuarioServiceImpl implements UsuarioService {
     /** @return true si el texto no es nulo ni está en blanco. */
     private boolean tieneTexto(String valor) {
         return valor != null && !valor.isBlank();
+    }
+
+    /** Extrae la parte local del email (antes del @) para usar como username. */
+    private String extraerUsernameDeEmail(String email) {
+        return email.substring(0, email.indexOf('@'));
     }
 
     /**

@@ -48,8 +48,8 @@ public class ApoderadoServiceImpl implements ApoderadoService {
         apoderado.setApellidoMaterno(solicitud.apellidoMaterno());
         apoderado.setDni(solicitud.dni());
 
-        // Igual que en el registro de docentes: el DNI será el username.
-        apoderado.setUsername(solicitud.dni());
+        // Username es la parte local del email (antes del @)
+        apoderado.setUsername(extraerUsernameDeEmail(solicitud.email()));
 
         apoderado.setEmail(solicitud.email());
         apoderado.setTelefono(solicitud.telefono());
@@ -110,10 +110,14 @@ public class ApoderadoServiceImpl implements ApoderadoService {
             );
         }
 
-        if (usuarioRepository.existsByUsername(dni)) {
+        if (usuarioRepository.existsByUsername(extraerUsernameDeEmail(email))) {
             throw new ConflictoException(
                     "Ya existe un usuario registrado con ese identificador."
             );
         }
+    }
+
+    private String extraerUsernameDeEmail(String email) {
+        return email.substring(0, email.indexOf('@'));
     }
 }

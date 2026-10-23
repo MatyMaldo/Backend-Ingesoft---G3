@@ -14,7 +14,7 @@ public class Seccion {
     @Column(nullable = false, length = 40)
     private String nombre;
 
-    @Column(name = "capacidad_maxima", nullable = false)
+    @Column(name = "capacidad_maxima", nullable = false, columnDefinition = "SMALLINT UNSIGNED")
     private Integer capacidadMaxima;
 
     @ManyToOne(fetch = FetchType.LAZY)
