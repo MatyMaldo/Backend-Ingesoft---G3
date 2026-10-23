@@ -14,4 +14,20 @@ public interface ServicioNotificacionEmail {
             String concepto,
             BigDecimal monto
     );
+
+    void enviarCorreoValidacionPago(
+            String emailDestino,
+            String nombreApoderado,
+            String nombreEstudiante,
+            String concepto,
+            BigDecimal monto
+    );
+
+    void enviarCorreoRechazoPago(
+            String emailDestino,
+            String nombreApoderado,
+            String nombreEstudiante,
+            String concepto,
+            String motivo
+    );
 }

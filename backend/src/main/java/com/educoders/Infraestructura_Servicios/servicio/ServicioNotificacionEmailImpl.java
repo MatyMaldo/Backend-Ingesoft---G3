@@ -55,4 +55,73 @@ public class ServicioNotificacionEmailImpl implements ServicioNotificacionEmail 
             log.error("No se pudo enviar el correo a {}: {}", emailDestino, e.getMessage());
         }
     }
+
+    @Override
+    public void enviarCorreoValidacionPago(
+            String emailDestino,
+            String nombreApoderado,
+            String nombreEstudiante,
+            String concepto,
+            BigDecimal monto) {
+
+        if (emailDestino == null || emailDestino.isBlank()) {
+            log.warn("No se pudo enviar correo: El apoderado no tiene un email registrado.");
+            return;
+        }
+
+        try {
+            SimpleMailMessage mensaje = new SimpleMailMessage();
+            mensaje.setTo(emailDestino);
+            mensaje.setSubject("Educoders - Confirmación de Pago Validado: " + concepto);
+            mensaje.setText(String.format(
+                    "Estimado(a) %s,\n\n" +
+                            "Le informamos que el pago registrado para el estudiante %s ha sido VALIDADO exitosamente.\n\n" +
+                            "Concepto: %s\n" +
+                            "Monto Validado: S/ %.2f\n\n" +
+                            "Atentamente,\n" +
+                            "Administración EduCoders",
+                    nombreApoderado, nombreEstudiante, concepto, monto
+            ));
+
+            mailSender.send(mensaje);
+            log.info("Correo de validación enviado a: {}", emailDestino);
+        } catch (Exception e) {
+            log.error("No se pudo enviar correo de validación a {}: {}", emailDestino, e.getMessage());
+        }
+    }
+
+    @Override
+    public void enviarCorreoRechazoPago(
+            String emailDestino,
+            String nombreApoderado,
+            String nombreEstudiante,
+            String concepto,
+            String motivo) {
+
+        if (emailDestino == null || emailDestino.isBlank()) {
+            log.warn("No se pudo enviar correo: El apoderado no tiene un email registrado.");
+            return;
+        }
+
+        try {
+            SimpleMailMessage mensaje = new SimpleMailMessage();
+            mensaje.setTo(emailDestino);
+            mensaje.setSubject("Educoders - Rechazo de Comprobante de Pago: " + concepto);
+            mensaje.setText(String.format(
+                    "Estimado(a) %s,\n\n" +
+                            "Le informamos que el pago registrado para el estudiante %s ha sido RECHAZADO.\n\n" +
+                            "Concepto: %s\n" +
+                            "Motivo de rechazo: %s\n\n" +
+                            "Por favor, ingrese a la plataforma para regularizar la situación y adjuntar un nuevo comprobante valido.\n\n" +
+                            "Atentamente,\n" +
+                            "Administración EduCoders",
+                    nombreApoderado, nombreEstudiante, concepto, motivo
+            ));
+
+            mailSender.send(mensaje);
+            log.info("Correo de rechazo enviado a: {}", emailDestino);
+        } catch (Exception e) {
+            log.error("No se pudo enviar correo de rechazo a {}: {}", emailDestino, e.getMessage());
+        }
+    }
 }
