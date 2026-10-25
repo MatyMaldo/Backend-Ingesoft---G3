@@ -11,6 +11,8 @@ public class SeccionResponse {
     private Integer anioAcademico;
     private Long tutorId;
     private String tutorNombreCompleto;
+    private Long matriculadosConfirmados;
+    private Long vacantesDisponibles;
 
     public SeccionResponse() {
     }
@@ -25,6 +27,7 @@ public class SeccionResponse {
         this.anioAcademico = anioAcademico;
         this.tutorId = tutorId;
         this.tutorNombreCompleto = tutorNombreCompleto;
+
     }
 
     public Long getId() {
@@ -99,6 +102,26 @@ public class SeccionResponse {
         this.tutorNombreCompleto = tutorNombreCompleto;
     }
 
+
+    public Long getMatriculadosConfirmados() {
+        return matriculadosConfirmados;
+    }
+
+    public void setMatriculadosConfirmados(Long matriculadosConfirmados) {
+        this.matriculadosConfirmados = matriculadosConfirmados;
+    }
+
+    public Long getVacantesDisponibles() {
+        return vacantesDisponibles;
+    }
+
+    public void setVacantesDisponibles(Long vacantesDisponibles) {
+        this.vacantesDisponibles = vacantesDisponibles;
+    }
+
+
+
+
     public static SeccionResponseBuilder builder() {
         return new SeccionResponseBuilder();
     }
@@ -113,6 +136,8 @@ public class SeccionResponse {
         private Integer anioAcademico;
         private Long tutorId;
         private String tutorNombreCompleto;
+
+
 
         public SeccionResponseBuilder id(Long id) {
             this.id = id;

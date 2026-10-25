@@ -2,6 +2,11 @@ package com.educoders.Gestion_Academica_Motor_Evaluacion.presentacion.dto;
 
 import jakarta.validation.constraints.NotBlank;
 
+/**
+ * DTO utilizado para recibir los datos necesarios
+ * para registrar un nuevo grado académico.
+ */
+
 public class CrearGradoRequest {
 
     @NotBlank(message = "El nombre del grado es obligatorio")
