@@ -2,17 +2,24 @@ package com.educoders.Gestion_Academica_Motor_Evaluacion.presentacion.dto;
 
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Pattern;
-
+import jakarta.validation.constraints.Max;
+import com.fasterxml.jackson.annotation.JsonIgnore;
+/**
+ * DTO utilizado para recibir los datos de actualización
+ * parcial de una sección académica.
+ */
 public class ActualizarSeccionRequest {
 
     @Pattern(regexp = "^[A-Za-z]$", message = "El nombre de la sección debe ser una sola letra del alfabeto")
     private String nombre;
 
     @Min(value = 1, message = "La capacidad máxima debe ser mayor a 0")
-    @jakarta.validation.constraints.Max(value = 65535, message = "La capacidad máxima no puede exceder 65535")
+    @Max(value = 65535, message = "La capacidad máxima no puede exceder 65535")
     private Integer capacidadMaxima;
 
     private Long tutorId;
+
+    private boolean tutorIdPresente;
 
     public ActualizarSeccionRequest() {
     }
@@ -20,7 +27,7 @@ public class ActualizarSeccionRequest {
     public ActualizarSeccionRequest(String nombre, Integer capacidadMaxima, Long tutorId) {
         this.nombre = nombre;
         this.capacidadMaxima = capacidadMaxima;
-        this.tutorId = tutorId;
+        setTutorId(tutorId);
     }
 
     public String getNombre() {
@@ -45,5 +52,12 @@ public class ActualizarSeccionRequest {
 
     public void setTutorId(Long tutorId) {
         this.tutorId = tutorId;
+        this.tutorIdPresente = true;
+    }
+
+    @JsonIgnore
+
+    public boolean tieneTutorIdPresente() {
+        return tutorIdPresente;
     }
 }

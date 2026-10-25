@@ -39,4 +39,7 @@ public interface SeccionRepository extends JpaRepository<Seccion, Long> {
     boolean existsByAnioAcademicoIdAndTutorIdAndIdNot(@Param("anioAcademicoId") Long anioAcademicoId,
                                                       @Param("tutorId") Long tutorId,
                                                       @Param("seccionId") Long seccionId);
+
+    List<Seccion> findByAnioAcademicoId(Long anioAcademicoId);
+
 }

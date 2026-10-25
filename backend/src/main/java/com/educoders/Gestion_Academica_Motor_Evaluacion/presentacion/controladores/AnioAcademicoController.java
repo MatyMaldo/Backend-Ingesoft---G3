@@ -6,6 +6,10 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import com.educoders.Gestion_Academica_Motor_Evaluacion.presentacion.dto.VacantesAnioResponse;
+import com.educoders.Gestion_Academica_Motor_Evaluacion.servicio.GradoSeccionService;
+import org.springframework.web.bind.annotation.PathVariable;
+
 
 import java.util.List;
 import java.util.Optional;
@@ -16,8 +20,12 @@ public class AnioAcademicoController {
 
     private final com.educoders.Gestion_Academica_Motor_Evaluacion.servicio.AnioAcademicoService anioAcademicoService;
 
-    public AnioAcademicoController(com.educoders.Gestion_Academica_Motor_Evaluacion.servicio.AnioAcademicoService anioAcademicoService) {
+    private final GradoSeccionService gradoSeccionService;
+
+    public AnioAcademicoController(com.educoders.Gestion_Academica_Motor_Evaluacion.servicio.AnioAcademicoService anioAcademicoService,
+                                   GradoSeccionService gradoSeccionService) {
         this.anioAcademicoService = anioAcademicoService;
+        this.gradoSeccionService = gradoSeccionService;
     }
 
     @GetMapping
@@ -35,4 +43,18 @@ public class AnioAcademicoController {
             return ResponseEntity.ok(RespuestaApiResponse.crearError("No existe un año académico futuro con período de matrícula vigente."));
         }
     }
+
+
+    @GetMapping("/{anioId}/vacantes")
+    public ResponseEntity<RespuestaApiResponse<VacantesAnioResponse>>
+    consultarVacantesAnio(@PathVariable Long anioId) {
+
+        VacantesAnioResponse response =
+                gradoSeccionService.consultarVacantesAnio(anioId);
+
+        return ResponseEntity.ok(
+                RespuestaApiResponse.crearExito(response)
+        );
+    }
+
 }

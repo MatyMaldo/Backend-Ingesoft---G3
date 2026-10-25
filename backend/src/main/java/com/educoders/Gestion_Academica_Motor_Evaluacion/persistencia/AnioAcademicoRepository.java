@@ -20,4 +20,6 @@ public interface AnioAcademicoRepository extends JpaRepository<AnioAcademico, Lo
      * Busca años académicos futuros ordenados por fecha de inicio ascendente
      */
     List<AnioAcademico> findByFechaInicioGreaterThanOrderByFechaInicioAsc(LocalDate fechaInicio);
+
+    Optional<AnioAcademico> findFirstByAnioLessThanOrderByAnioDesc(Integer anio);
 }

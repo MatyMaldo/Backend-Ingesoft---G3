@@ -1,8 +1,19 @@
 package com.educoders.Gestion_Academica_Motor_Evaluacion.servicio;
 
-import com.educoders.Gestion_Academica_Motor_Evaluacion.dominio.*;
-import com.educoders.Gestion_Academica_Motor_Evaluacion.persistencia.*;
-import com.educoders.Gestion_Academica_Motor_Evaluacion.presentacion.dto.*;
+import com.educoders.Gestion_Academica_Motor_Evaluacion.dominio.AnioAcademico;
+import com.educoders.Gestion_Academica_Motor_Evaluacion.dominio.Grado;
+import com.educoders.Gestion_Academica_Motor_Evaluacion.dominio.Seccion;
+
+import com.educoders.Gestion_Academica_Motor_Evaluacion.persistencia.AnioAcademicoRepository;
+import com.educoders.Gestion_Academica_Motor_Evaluacion.persistencia.GradoRepository;
+import com.educoders.Gestion_Academica_Motor_Evaluacion.persistencia.SeccionRepository;
+
+import com.educoders.Gestion_Academica_Motor_Evaluacion.presentacion.dto.ActualizarSeccionRequest;
+import com.educoders.Gestion_Academica_Motor_Evaluacion.presentacion.dto.CrearGradoRequest;
+import com.educoders.Gestion_Academica_Motor_Evaluacion.presentacion.dto.CrearSeccionRequest;
+import com.educoders.Gestion_Academica_Motor_Evaluacion.presentacion.dto.GradoResponse;
+import com.educoders.Gestion_Academica_Motor_Evaluacion.presentacion.dto.SeccionResponse;
+
 import com.educoders.Infraestructura_Servicios.exception.ConflictoException;
 import com.educoders.Infraestructura_Servicios.exception.RecursoNoEncontradoException;
 import com.educoders.Infraestructura_Servicios.exception.ReglaNegocioException;
@@ -11,27 +22,49 @@ import com.educoders.Seguridad_Auditoria.persistencia.DocenteRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.educoders.Gestion_Matricula_Pagos.persistencia.MatriculaRepository;
+import com.educoders.Infraestructura_Servicios.enums.EstadoMatricula;
+
 import java.time.LocalDate;
 import java.util.List;
 import java.util.stream.Collectors;
 
+import com.educoders.Gestion_Matricula_Pagos.persistencia.PeriodoMatriculaRepository;
+import com.educoders.Gestion_Academica_Motor_Evaluacion.presentacion.dto.VacantesAnioResponse;
+import com.educoders.Gestion_Academica_Motor_Evaluacion.presentacion.dto.GradoConSeccionesResponse;
+import java.util.Comparator;
 @Service
+/**
+ * Implementación de los servicios de gestión de grados y secciones académicas.
+ *
+ * Gestiona el registro, consulta y actualización de información académica,
+ * aplicando las validaciones y reglas de negocio correspondientes.
+ */
 public class GradoSeccionServiceImpl implements GradoSeccionService {
 
     private final GradoRepository gradoRepository;
     private final SeccionRepository seccionRepository;
     private final AnioAcademicoRepository anioAcademicoRepository;
     private final DocenteRepository docenteRepository;
+    private final PeriodoMatriculaRepository periodoMatriculaRepository;
+    private final MatriculaRepository matriculaRepository;
 
-    public GradoSeccionServiceImpl(GradoRepository gradoRepository,
-                                   SeccionRepository seccionRepository,
-                                   AnioAcademicoRepository anioAcademicoRepository,
-                                   DocenteRepository docenteRepository) {
+    public GradoSeccionServiceImpl(
+            GradoRepository gradoRepository,
+            SeccionRepository seccionRepository,
+            AnioAcademicoRepository anioAcademicoRepository,
+            DocenteRepository docenteRepository,
+            PeriodoMatriculaRepository periodoMatriculaRepository,
+            MatriculaRepository matriculaRepository) {
+
         this.gradoRepository = gradoRepository;
         this.seccionRepository = seccionRepository;
         this.anioAcademicoRepository = anioAcademicoRepository;
         this.docenteRepository = docenteRepository;
+        this.periodoMatriculaRepository = periodoMatriculaRepository;
+        this.matriculaRepository = matriculaRepository;
     }
+
 
     @Override
     @Transactional
@@ -77,34 +110,44 @@ public class GradoSeccionServiceImpl implements GradoSeccionService {
         AnioAcademico anio = anioAcademicoRepository.findById(request.getAnioAcademicoId())
                 .orElseThrow(() -> new RecursoNoEncontradoException("Año académico no encontrado con ID: " + request.getAnioAcademicoId()));
 
-        // Validar que el año académico no esté finalizado
-        if (anio.getFechaFin() != null && anio.getFechaFin().isBefore(LocalDate.now())) {
-            throw new ReglaNegocioException("No se pueden crear secciones en un año académico finalizado.");
+
+        // Validar que el año académico esté en preparación
+        LocalDate hoy = LocalDate.now();
+
+        LocalDate inicioMatricula = periodoMatriculaRepository
+                .findByAnioAcademicoId(anio.getId())
+                .map(periodo -> periodo.getFechaInicio())
+                .orElse(null);
+
+        boolean enPreparacion = false;
+
+        if (inicioMatricula != null && hoy.isBefore(inicioMatricula)) {
+            enPreparacion = anioAcademicoRepository
+                    .findFirstByAnioLessThanOrderByAnioDesc(anio.getAnio())
+                    .map(anioAnterior ->
+                            anioAnterior.getFechaFin() != null
+                                    && hoy.isAfter(anioAnterior.getFechaFin()))
+                    .orElse(true);
         }
 
-        // Validar capacidad máxima (1-65535)
-        if (request.getCapacidadMaxima() < 1 || request.getCapacidadMaxima() > 65535) {
-            throw new ReglaNegocioException("La capacidad máxima debe estar entre 1 y 65535.");
+        if (!enPreparacion) {
+            throw new ReglaNegocioException(
+                    "El registro de secciones solo está habilitado mientras el año académico está en preparación");
         }
+
 
         // Validar duplicado ignorando mayúsculas
         if (seccionRepository.existsByGradoIdAndAnioAcademicoIdAndNombreIgnoreCase(request.getGradoId(), request.getAnioAcademicoId(), request.getNombre())) {
             throw new ConflictoException("La sección '" + request.getNombre() + "' ya existe para este grado y año académico.");
         }
 
-        Docente tutor = docenteRepository.findById(request.getTutorId())
-                .orElseThrow(() -> new RecursoNoEncontradoException("Docente tutor no encontrado con ID: " + request.getTutorId()));
 
-        if (seccionRepository.existsByAnioAcademicoIdAndTutorId(request.getAnioAcademicoId(), request.getTutorId())) {
-            throw new ConflictoException("El docente ya es tutor de otra sección en el mismo año académico.");
-        }
 
         Seccion seccion = Seccion.builder()
-                .nombre(request.getNombre())
-                .capacidadMaxima(request.getCapacidadMaxima())
+                .nombre(request.getNombre().toUpperCase(java.util.Locale.ROOT))
+                .capacidadMaxima(30)
                 .grado(grado)
                 .anioAcademico(anio)
-                .tutor(tutor)
                 .build();
 
         Seccion guardada = seccionRepository.save(seccion);
@@ -127,13 +170,29 @@ public class GradoSeccionServiceImpl implements GradoSeccionService {
                 .collect(Collectors.toList());
     }
 
+
     private SeccionResponse mapToSeccionResponse(Seccion s) {
         String tutorNombre = null;
+
         if (s.getTutor() != null && s.getTutor().getNombre() != null) {
-            tutorNombre = s.getTutor().getNombre() + " " + s.getTutor().getApellidoPaterno();
+            tutorNombre = s.getTutor().getNombre()
+                    + " " + s.getTutor().getApellidoPaterno();
         }
 
-        return SeccionResponse.builder()
+        // Contar solo las matrículas confirmadas
+        long matriculadosConfirmados = matriculaRepository
+                .countBySeccionIdAndEstadoIn(
+                        s.getId(),
+                        List.of(EstadoMatricula.CONFIRMADA)
+                );
+
+        // Calcular las vacantes disponibles
+        long vacantesDisponibles = Math.max(
+                0L,
+                (long) s.getCapacidadMaxima() - matriculadosConfirmados
+        );
+
+        SeccionResponse response = SeccionResponse.builder()
                 .id(s.getId())
                 .nombre(s.getNombre())
                 .capacidadMaxima(s.getCapacidadMaxima())
@@ -144,7 +203,13 @@ public class GradoSeccionServiceImpl implements GradoSeccionService {
                 .tutorId(s.getTutor() != null ? s.getTutor().getId() : null)
                 .tutorNombreCompleto(tutorNombre)
                 .build();
+
+        response.setMatriculadosConfirmados(matriculadosConfirmados);
+        response.setVacantesDisponibles(vacantesDisponibles);
+
+        return response;
     }
+
 
     @Override
     @Transactional
@@ -168,32 +233,118 @@ public class GradoSeccionServiceImpl implements GradoSeccionService {
 
         // Validar y actualizar capacidad máxima
         if (request.getCapacidadMaxima() != null) {
-            if (request.getCapacidadMaxima() < 1 || request.getCapacidadMaxima() > 65535) {
-                throw new ReglaNegocioException("La capacidad máxima debe estar entre 1 y 65535.");
-            }
+
             seccion.setCapacidadMaxima(request.getCapacidadMaxima());
         }
 
         // Validar y actualizar tutor
-        if (request.getTutorId() != null) {
-            Docente tutor = docenteRepository.findById(request.getTutorId())
-                    .orElseThrow(() -> new RecursoNoEncontradoException("Docente tutor no encontrado con ID: " + request.getTutorId()));
+        if (request.tieneTutorIdPresente()) {
+            if (request.getTutorId() == null) {
+                seccion.setTutor(null);
+            } else {
+                Docente tutor = docenteRepository.findById(request.getTutorId())
+                        .orElseThrow(() -> new RecursoNoEncontradoException(
+                                "Docente tutor no encontrado con ID: " + request.getTutorId()));
 
-            // Validar que el tutor no esté en otra sección del mismo año (excluyendo esta sección)
-            if (seccionRepository.existsByAnioAcademicoIdAndTutorIdAndIdNot(
-                    seccion.getAnioAcademico().getId(),
-                    request.getTutorId(),
-                    id)) {
-                throw new ConflictoException("El docente ya es tutor de otra sección en el mismo año académico.");
+                if (seccionRepository.existsByAnioAcademicoIdAndTutorIdAndIdNot(
+                        seccion.getAnioAcademico().getId(), request.getTutorId(), id)) {
+                    throw new ConflictoException(
+                            "El docente ya es tutor de otra sección en el mismo año académico.");
+                }
+
+                seccion.setTutor(tutor);
             }
-
-            seccion.setTutor(tutor);
-        } else if (request.getTutorId() == null && seccion.getTutor() != null) {
-            // Permitir quitar el tutor (se envía null explícitamente)
-            seccion.setTutor(null);
         }
 
         Seccion actualizada = seccionRepository.save(seccion);
         return mapToSeccionResponse(actualizada);
     }
+
+    @Override
+    @Transactional(readOnly = true)
+    public VacantesAnioResponse consultarVacantesAnio(Long anioId) {
+
+        AnioAcademico anio = anioAcademicoRepository.findById(anioId)
+                .orElseThrow(() -> new RecursoNoEncontradoException(
+                        "Año académico no encontrado con ID: " + anioId));
+
+        List<Seccion> secciones =
+                seccionRepository.findByAnioAcademicoId(anioId);
+
+        long capacidadTotal = 0;
+        long matriculasOcupantes = 0;
+
+        for (Seccion seccion : secciones) {
+            capacidadTotal += seccion.getCapacidadMaxima();
+
+            matriculasOcupantes += matriculaRepository
+                    .countBySeccionIdAndEstadoIn(
+                            seccion.getId(),
+                            List.of(
+                                    EstadoMatricula.PENDIENTE,
+                                    EstadoMatricula.CONFIRMADA
+                            )
+                    );
+        }
+
+        long vacantesDisponibles =
+                Math.max(0L, capacidadTotal - matriculasOcupantes);
+
+        return new VacantesAnioResponse(
+                anio.getId(),
+                anio.getAnio(),
+                capacidadTotal,
+                matriculasOcupantes,
+                vacantesDisponibles
+        );
+    }
+
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<GradoConSeccionesResponse> listarGradosConSecciones(Long anioId) {
+
+        // Verificar que el año académico exista
+        anioAcademicoRepository.findById(anioId)
+                .orElseThrow(() -> new RecursoNoEncontradoException(
+                        "Año académico no encontrado con ID: " + anioId));
+
+        // Obtener todos los grados, incluidos los que no tienen secciones
+        List<Grado> grados = gradoRepository.findAll();
+
+        return grados.stream()
+                .sorted(Comparator.comparing(
+                        Grado::getId,
+                        Comparator.nullsLast(Comparator.naturalOrder())
+                ))
+                .map(grado -> {
+
+                    List<SeccionResponse> secciones =
+                            seccionRepository
+                                    .findByGradoIdAndAnioAcademicoId(
+                                            grado.getId(), anioId)
+                                    .stream()
+                                    .sorted(Comparator.comparing(
+                                            Seccion::getNombre,
+                                            Comparator.nullsLast(
+                                                    String.CASE_INSENSITIVE_ORDER)
+                                    ))
+                                    .map(this::mapToSeccionResponse)
+                                    .collect(Collectors.toList());
+
+                    String estado = secciones.isEmpty()
+                            ? "Sin secciones"
+                            : "Con secciones";
+
+                    return new GradoConSeccionesResponse(
+                            grado.getId(),
+                            grado.getNombre(),
+                            secciones,
+                            estado
+                    );
+                })
+                .collect(Collectors.toList());
+    }
+
+
 }
