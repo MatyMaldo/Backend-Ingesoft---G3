@@ -37,8 +37,12 @@ public class AsistenciaService {
      */
     @Transactional
     public AsistenciaResponse registrarAsistencia(RegistrarAsistenciaRequest solicitud) {
-        String nombreEstudiante = solicitud.nombreEstudiante().trim();
-        AsistenciaEstudiante asistencia = new AsistenciaEstudiante(nombreEstudiante, solicitud.estado());
+        AsistenciaEstudiante asistencia = new AsistenciaEstudiante(
+                solicitud.fechaRegistro(),
+                solicitud.estado(),
+                solicitud.sesionClaseId(),
+                solicitud.estudianteId()
+        );
         AsistenciaEstudiante asistenciaGuardada = repositorioAsistencia.guardarAsistencia(asistencia);
         return convertirARespuesta(asistenciaGuardada);
     }
@@ -46,7 +50,9 @@ public class AsistenciaService {
     private AsistenciaResponse convertirARespuesta(AsistenciaEstudiante asistencia) {
         return new AsistenciaResponse(
                 asistencia.obtenerId(),
-                asistencia.obtenerNombreEstudiante(),
-                asistencia.obtenerEstado());
+                asistencia.getFechaRegistro(),
+                asistencia.obtenerEstado(),
+                asistencia.getSesionClaseId(),
+                asistencia.getEstudianteId());
     }
 }

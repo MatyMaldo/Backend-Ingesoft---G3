@@ -10,9 +10,8 @@ public interface LogErrorService {
 
     void registrarError(String origen, String tipoError, String mensaje, String detalle,
                         String endpoint, String metodoHttp,
-                        Integer codigoEstado, Long usuarioId);
+                        Short codigoEstado, Long usuarioId);
 
     Page<LogErrorResponse> listarErrores(LocalDateTime fechaInicio,
-                                         LocalDateTime fechaFin,
-                                         String modulo, Pageable pageable);
+                                         LocalDateTime fechaFin, Pageable pageable);
 }

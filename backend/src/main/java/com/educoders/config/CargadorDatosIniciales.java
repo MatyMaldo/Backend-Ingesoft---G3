@@ -6,6 +6,8 @@ import com.educoders.Infraestructura_Servicios.enums.EstadoAsistencia;
 import jakarta.annotation.PostConstruct;
 import org.springframework.stereotype.Component;
 
+import java.time.LocalDate;
+
 /**
  * Carga datos de demostración únicamente cuando la tabla de asistencias se encuentra vacía.
  */
@@ -24,11 +26,13 @@ public class CargadorDatosIniciales {
             return;
         }
 
+        LocalDate fechaHoy = LocalDate.now();
+
         repositorioAsistencia.guardarAsistencia(
-                new AsistenciaEstudiante("Juan Pérez", EstadoAsistencia.PRESENTE));
+                new AsistenciaEstudiante(fechaHoy, EstadoAsistencia.PRESENTE, 1L, 1L));
         repositorioAsistencia.guardarAsistencia(
-                new AsistenciaEstudiante("Ana Torres", EstadoAsistencia.TARDANZA));
+                new AsistenciaEstudiante(fechaHoy, EstadoAsistencia.TARDANZA, 1L, 2L));
         repositorioAsistencia.guardarAsistencia(
-                new AsistenciaEstudiante("Luis Ramos", EstadoAsistencia.FALTA));
+                new AsistenciaEstudiante(fechaHoy, EstadoAsistencia.FALTA, 1L, 3L));
     }
 }

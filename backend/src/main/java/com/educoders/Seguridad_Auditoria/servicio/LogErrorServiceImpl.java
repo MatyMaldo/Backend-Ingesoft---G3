@@ -1,6 +1,5 @@
 package com.educoders.Seguridad_Auditoria.servicio;
 
-import com.educoders.Infraestructura_Servicios.enums.Modulo;
 import com.educoders.Seguridad_Auditoria.dominio.LogError;
 import com.educoders.Seguridad_Auditoria.dominio.Usuario;
 import com.educoders.Seguridad_Auditoria.persistencia.LogErrorRepository;
@@ -32,15 +31,12 @@ public class LogErrorServiceImpl implements LogErrorService {
     @Override
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void registrarError(String origen, String tipoError, String mensaje, String detalle,
-                               String endpoint, String metodoHttp, Integer codigoEstado, Long usuarioId) {
+                               String endpoint, String metodoHttp, Short codigoEstado, Long usuarioId) {
         try {
             Usuario usuario = null;
             if (usuarioId != null) {
                 usuario = usuarioRepository.findById(usuarioId).orElse(null);
             }
-
-            // Resolver el módulo a partir del origen y del endpoint
-            Modulo modulo = Modulo.resolverModulo(origen, endpoint);
 
             String mensajeSeguro = (mensaje != null && mensaje.length() > 2000)
                     ? mensaje.substring(0, 1997) + "..."
@@ -49,7 +45,6 @@ public class LogErrorServiceImpl implements LogErrorService {
             LogError logError = new LogError(
                     LocalDateTime.now(),
                     usuario,
-                    modulo,
                     tipoError,
                     mensajeSeguro,
                     detalle,
@@ -66,17 +61,8 @@ public class LogErrorServiceImpl implements LogErrorService {
 
     @Override
     @Transactional(readOnly = true)
-    public Page<LogErrorResponse> listarErrores(LocalDateTime fechaInicio, LocalDateTime fechaFin, String modulo, Pageable pageable) {
-        Modulo moduloEnum = null;
-        if (modulo != null && !modulo.isBlank()) {
-            try {
-                moduloEnum = Modulo.valueOf(modulo.trim().toUpperCase());
-            } catch (IllegalArgumentException ex) {
-                // Si el texto enviado no coincide con un Enum válido, permanece null
-            }
-        }
-
-        return logErrorRepository.buscarConFiltros(fechaInicio, fechaFin, moduloEnum, pageable)
+    public Page<LogErrorResponse> listarErrores(LocalDateTime fechaInicio, LocalDateTime fechaFin, Pageable pageable) {
+        return logErrorRepository.buscarConFiltros(fechaInicio, fechaFin, pageable)
                 .map(LogErrorResponse::desdeEntidad);
     }
 }

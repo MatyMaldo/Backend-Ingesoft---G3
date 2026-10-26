@@ -59,7 +59,7 @@ public class ManejadorGlobalExcepciones {
                 convertirStackTraceATexto(excepcion),
                 request.getRequestURI(),
                 request.getMethod(),
-                HttpStatus.INTERNAL_SERVER_ERROR.value(),
+                (short) HttpStatus.INTERNAL_SERVER_ERROR.value(),
                 null
         );
 

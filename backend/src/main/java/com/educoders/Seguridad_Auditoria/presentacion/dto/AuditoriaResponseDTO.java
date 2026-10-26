@@ -1,6 +1,5 @@
 package com.educoders.Seguridad_Auditoria.presentacion.dto;
 
-import com.educoders.Infraestructura_Servicios.enums.CategoriaAuditoria;
 import com.educoders.Infraestructura_Servicios.enums.TipoAccionAuditoria;
 
 import java.time.LocalDateTime;
@@ -10,8 +9,7 @@ public class AuditoriaResponseDTO {
     private Long id;
     private LocalDateTime fechaHora;
     private Long usuarioId;
-    private CategoriaAuditoria categoria;
-    private TipoAccionAuditoria accion;
+    private String accion;
     private String entidad;
     private Long entidadId;
     private String descripcion;
@@ -20,13 +18,12 @@ public class AuditoriaResponseDTO {
     public AuditoriaResponseDTO() {
     }
 
-    public AuditoriaResponseDTO(Long id, LocalDateTime fechaHora, Long usuarioId, CategoriaAuditoria categoria,
-                                TipoAccionAuditoria accion, String entidad, Long entidadId,
+    public AuditoriaResponseDTO(Long id, LocalDateTime fechaHora, Long usuarioId, String accion,
+                                String entidad, Long entidadId,
                                 String descripcion, List<DetalleAuditoriaDTO> detalles) {
         this.id = id;
         this.fechaHora = fechaHora;
         this.usuarioId = usuarioId;
-        this.categoria = categoria;
         this.accion = accion;
         this.entidad = entidad;
         this.entidadId = entidadId;
@@ -43,11 +40,8 @@ public class AuditoriaResponseDTO {
     public Long getUsuarioId() { return usuarioId; }
     public void setUsuarioId(Long usuarioId) { this.usuarioId = usuarioId; }
 
-    public CategoriaAuditoria getCategoria() { return categoria; }
-    public void setCategoria(CategoriaAuditoria categoria) { this.categoria = categoria; }
-
-    public TipoAccionAuditoria getAccion() { return accion; }
-    public void setAccion(TipoAccionAuditoria accion) { this.accion = accion; }
+    public String getAccion() { return accion; }
+    public void setAccion(String accion) { this.accion = accion; }
 
     public String getEntidad() { return entidad; }
     public void setEntidad(String entidad) { this.entidad = entidad; }

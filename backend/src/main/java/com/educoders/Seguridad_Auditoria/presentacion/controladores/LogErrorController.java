@@ -27,7 +27,6 @@ public class LogErrorController {
     public ResponseEntity<RespuestaApiResponse<Page<LogErrorResponse>>> listarErrores(
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime fechaInicio,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime fechaFin,
-            @RequestParam(required = false) String modulo,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "15") int size,
             @RequestParam(defaultValue = "fechaHora") String sortBy,
@@ -39,7 +38,7 @@ public class LogErrorController {
 
         Pageable pageable = PageRequest.of(page, size, sort);
 
-        Page<LogErrorResponse> pagina = logErrorService.listarErrores(fechaInicio, fechaFin, modulo, pageable);
+        Page<LogErrorResponse> pagina = logErrorService.listarErrores(fechaInicio, fechaFin, pageable);
         return ResponseEntity.ok(RespuestaApiResponse.crearExito(pagina));
     }
 }

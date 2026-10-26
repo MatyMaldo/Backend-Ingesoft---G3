@@ -42,8 +42,7 @@ public class AuditoriaServiceImpl implements AuditoriaService {
             Auditoria auditoria = new Auditoria();
             auditoria.setFechaHora(LocalDateTime.now());
             auditoria.setUsuarioId(usuarioIdFinal);
-            auditoria.setCategoria(dto.getCategoria());
-            auditoria.setAccion(dto.getAccion());
+            auditoria.setAccion(dto.getAccion().name());
             auditoria.setEntidad(dto.getEntidad());
             auditoria.setEntidadId(dto.getEntidadId());
             auditoria.setDescripcion(dto.getDescripcion());
@@ -67,9 +66,9 @@ public class AuditoriaServiceImpl implements AuditoriaService {
 
     @Override
     @Transactional(readOnly = true)
-    public Page<AuditoriaResponseDTO> listarAuditorias(CategoriaAuditoria categoria, TipoAccionAuditoria accion,
+    public Page<AuditoriaResponseDTO> listarAuditorias(TipoAccionAuditoria accion,
                                                        LocalDateTime fechaInicio, LocalDateTime fechaFin, Pageable pageable) {
-        Page<Auditoria> auditorias = auditoriaRepository.buscarConFiltros(categoria, accion, fechaInicio, fechaFin, pageable);
+        Page<Auditoria> auditorias = auditoriaRepository.buscarConFiltros(accion, fechaInicio, fechaFin, pageable);
         return auditorias.map(this::mapearAResponse);
     }
 
@@ -108,7 +107,6 @@ public class AuditoriaServiceImpl implements AuditoriaService {
                 auditoria.getId(),
                 auditoria.getFechaHora(),
                 auditoria.getUsuarioId(),
-                auditoria.getCategoria(),
                 auditoria.getAccion(),
                 auditoria.getEntidad(),
                 auditoria.getEntidadId(),

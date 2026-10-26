@@ -8,13 +8,12 @@ public record LogErrorResponse(
         LocalDateTime fechaHora,
         Long usuarioId,
         String nombreUsuario,
-        String modulo,
         String tipoError,
         String mensaje,
         String detalle,
         String endpoint,
         String metodoHttp,
-        Integer codigoEstado
+        Short codigoEstado
 ) {
     public static LogErrorResponse desdeEntidad(LogError entidad) {
         String nombreUsr = "Sistema";
@@ -25,14 +24,11 @@ public record LogErrorResponse(
             nombreUsr = entidad.getUsuario().getNombre() + " " + entidad.getUsuario().getApellidoPaterno();
         }
 
-        String moduloTexto = entidad.getModulo() != null ? entidad.getModulo().name() : null;
-
         return new LogErrorResponse(
                 entidad.getId(),
                 entidad.getFechaHora(),
                 usrId,
                 nombreUsr,
-                moduloTexto,
                 entidad.getTipoError(),
                 entidad.getMensaje(),
                 entidad.getDetalle(),
