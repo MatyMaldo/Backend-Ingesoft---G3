@@ -48,6 +48,7 @@ public class GradoSeccionServiceImpl implements GradoSeccionService {
     private final DocenteRepository docenteRepository;
     private final PeriodoMatriculaRepository periodoMatriculaRepository;
     private final MatriculaRepository matriculaRepository;
+    private final ValidadorVentanaAcademica validadorVentana;
 
     public GradoSeccionServiceImpl(
             GradoRepository gradoRepository,
@@ -55,7 +56,8 @@ public class GradoSeccionServiceImpl implements GradoSeccionService {
             AnioAcademicoRepository anioAcademicoRepository,
             DocenteRepository docenteRepository,
             PeriodoMatriculaRepository periodoMatriculaRepository,
-            MatriculaRepository matriculaRepository) {
+            MatriculaRepository matriculaRepository,
+            ValidadorVentanaAcademica validadorVentana) {
 
         this.gradoRepository = gradoRepository;
         this.seccionRepository = seccionRepository;
@@ -63,6 +65,7 @@ public class GradoSeccionServiceImpl implements GradoSeccionService {
         this.docenteRepository = docenteRepository;
         this.periodoMatriculaRepository = periodoMatriculaRepository;
         this.matriculaRepository = matriculaRepository;
+        this.validadorVentana = validadorVentana;
     }
 
 
@@ -111,28 +114,34 @@ public class GradoSeccionServiceImpl implements GradoSeccionService {
                 .orElseThrow(() -> new RecursoNoEncontradoException("Año académico no encontrado con ID: " + request.getAnioAcademicoId()));
 
 
-        // Validar que el año académico esté en preparación
+        // Validar que el año académico esté en preparación o el periodo de matrícula esté vigente
         LocalDate hoy = LocalDate.now();
 
-        LocalDate inicioMatricula = periodoMatriculaRepository
+        var periodoMatricula = periodoMatriculaRepository
                 .findByAnioAcademicoId(anio.getId())
-                .map(periodo -> periodo.getFechaInicio())
                 .orElse(null);
 
         boolean enPreparacion = false;
 
-        if (inicioMatricula != null && hoy.isBefore(inicioMatricula)) {
-            enPreparacion = anioAcademicoRepository
-                    .findFirstByAnioLessThanOrderByAnioDesc(anio.getAnio())
-                    .map(anioAnterior ->
-                            anioAnterior.getFechaFin() != null
-                                    && hoy.isAfter(anioAnterior.getFechaFin()))
-                    .orElse(true);
+        if (periodoMatricula != null) {
+            // Permitir si el periodo de matrícula está vigente
+            if (periodoMatricula.estaVigente(hoy)) {
+                enPreparacion = true;
+            }
+            // O si estamos antes del inicio de matrícula (fase de preparación)
+            else if (hoy.isBefore(periodoMatricula.getFechaInicio())) {
+                enPreparacion = anioAcademicoRepository
+                        .findFirstByAnioLessThanOrderByAnioDesc(anio.getAnio())
+                        .map(anioAnterior ->
+                                anioAnterior.getFechaFin() != null
+                                        && hoy.isAfter(anioAnterior.getFechaFin()))
+                        .orElse(true);
+            }
         }
 
         if (!enPreparacion) {
             throw new ReglaNegocioException(
-                    "El registro de secciones solo está habilitado mientras el año académico está en preparación");
+                    "El registro de secciones solo está habilitado mientras el año académico está en preparación o el periodo de matrícula está vigente");
         }
 
 
@@ -217,6 +226,11 @@ public class GradoSeccionServiceImpl implements GradoSeccionService {
         Seccion seccion = seccionRepository.findById(id)
                 .orElseThrow(() -> new RecursoNoEncontradoException("Sección no encontrada con ID: " + id));
 
+        // Validar que la ventana académica esté abierta para modificar tutor
+        validadorVentana.verificarVentanaAbierta(
+                "No se puede modificar el tutor. El año académico ya inició."
+        );
+
         // Validar y actualizar nombre
         if (request.getNombre() != null && !request.getNombre().isBlank()) {
             if (!request.getNombre().equals(seccion.getNombre())) {
@@ -245,6 +259,11 @@ public class GradoSeccionServiceImpl implements GradoSeccionService {
                 Docente tutor = docenteRepository.findById(request.getTutorId())
                         .orElseThrow(() -> new RecursoNoEncontradoException(
                                 "Docente tutor no encontrado con ID: " + request.getTutorId()));
+
+                if (!tutor.isActivo()) {
+                    throw new ReglaNegocioException(
+                            "No se puede asignar un docente inactivo como tutor.");
+                }
 
                 if (seccionRepository.existsByAnioAcademicoIdAndTutorIdAndIdNot(
                         seccion.getAnioAcademico().getId(), request.getTutorId(), id)) {

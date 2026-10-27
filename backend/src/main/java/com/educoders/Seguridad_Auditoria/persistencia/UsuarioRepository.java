@@ -33,6 +33,9 @@ public interface UsuarioRepository extends JpaRepository<Usuario, Long> {
     @Query("SELECT u FROM Usuario u WHERE TYPE(u) = :clase")
     Page<Usuario> findByTipoUsuario(Class<?> clase, Pageable pageable);
 
+    @Query("SELECT u FROM Usuario u WHERE TYPE(u) = :clase AND u.activo = :activo")
+    Page<Usuario> findByTipoUsuarioAndActivo(Class<?> clase, boolean activo, Pageable pageable);
+
     @Query("""
        SELECT u
        FROM Usuario u

@@ -41,5 +41,6 @@ public interface SeccionRepository extends JpaRepository<Seccion, Long> {
                                                       @Param("seccionId") Long seccionId);
 
     List<Seccion> findByAnioAcademicoId(Long anioAcademicoId);
+    List<Seccion> findByTutorId(Long tutorId);
 
 }
