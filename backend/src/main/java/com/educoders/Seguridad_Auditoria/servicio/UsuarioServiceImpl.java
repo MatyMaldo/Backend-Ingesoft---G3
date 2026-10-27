@@ -1,6 +1,7 @@
 package com.educoders.Seguridad_Auditoria.servicio;
 
 import com.educoders.Seguridad_Auditoria.dominio.Administrador;
+import com.educoders.Seguridad_Auditoria.dominio.Docente;
 import com.educoders.Seguridad_Auditoria.dominio.Usuario;
 import com.educoders.Seguridad_Auditoria.persistencia.UsuarioRepository;
 import com.educoders.Seguridad_Auditoria.presentacion.dto.ActualizarUsuarioRequest;
@@ -8,10 +9,18 @@ import com.educoders.Seguridad_Auditoria.presentacion.dto.UsuarioResponse;
 import com.educoders.Infraestructura_Servicios.exception.ConflictoException;
 import com.educoders.Infraestructura_Servicios.exception.RecursoNoEncontradoException;
 import com.educoders.Infraestructura_Servicios.exception.ReglaNegocioException;
+import com.educoders.Gestion_Academica_Motor_Evaluacion.dominio.Seccion;
+import com.educoders.Gestion_Academica_Motor_Evaluacion.persistencia.SeccionRepository;
+import com.educoders.Gestion_Academica_Motor_Evaluacion.persistencia.BimestreRepository;
+import com.educoders.Infraestructura_Servicios.enums.NombreBimestre;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.time.LocalDate;
+import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * Reglas de negocio de HU-SAT-02.
@@ -22,9 +31,15 @@ import org.springframework.transaction.annotation.Transactional;
 public class UsuarioServiceImpl implements UsuarioService {
 
     private final UsuarioRepository usuarioRepository;
+    private final SeccionRepository seccionRepository;
+    private final BimestreRepository bimestreRepository;
 
-    public UsuarioServiceImpl(UsuarioRepository usuarioRepository) {
+    public UsuarioServiceImpl(UsuarioRepository usuarioRepository,
+                              SeccionRepository seccionRepository,
+                              BimestreRepository bimestreRepository) {
         this.usuarioRepository = usuarioRepository;
+        this.seccionRepository = seccionRepository;
+        this.bimestreRepository = bimestreRepository;
     }
 
     @Override
@@ -32,6 +47,10 @@ public class UsuarioServiceImpl implements UsuarioService {
     public Page<UsuarioResponse> listar(String tipoUsuario, Boolean activo, Pageable pageable) {
         if (tipoUsuario != null && !tipoUsuario.isBlank()) {
             Class<?> clase = obtenerClasePorTipo(tipoUsuario.toUpperCase());
+            if (activo != null) {
+                return usuarioRepository.findByTipoUsuarioAndActivo(clase, activo, pageable)
+                        .map(this::convertirARespuesta);
+            }
             return usuarioRepository.findByTipoUsuario(clase, pageable)
                     .map(this::convertirARespuesta);
         }
@@ -112,7 +131,8 @@ public class UsuarioServiceImpl implements UsuarioService {
     /**
      * Desactivar no elimina. El usuario
      * conserva sus registros históricos y queda bloqueado para iniciar
-     * sesión.
+     * sesión. Si es un docente, se verifica si es tutor de alguna sección
+     * y se informa al administrador.
      */
     @Override
     @Transactional
@@ -125,6 +145,66 @@ public class UsuarioServiceImpl implements UsuarioService {
 
         if (!usuario.isActivo()) {
             throw new ReglaNegocioException("El usuario ya se encuentra inactivo.");
+        }
+
+        // Si es docente, verificar secciones donde es tutor
+        if (usuario instanceof Docente docente) {
+            List<Seccion> seccionesComoTutor = seccionRepository.findByTutorId(idUsuario);
+
+            if (!seccionesComoTutor.isEmpty()) {
+                // Desactivar usuario
+                usuario.setActivo(false);
+                usuarioRepository.save(usuario);
+
+                // Solo remover tutor de secciones cuyo año académico esté abierto
+                List<UsuarioResponse.SeccionAfectadaInfo> seccionesInfo = new java.util.ArrayList<>();
+                LocalDate hoy = LocalDate.now();
+
+                for (Seccion seccion : seccionesComoTutor) {
+                    // Verificar si el año académico de esta sección está abierto
+                    var primerBimestre = bimestreRepository
+                            .findFirstByNombreAndAnioAcademicoIdOrderByAnioAcademicoAnioDesc(
+                                    NombreBimestre.BIM_1,
+                                    seccion.getAnioAcademico().getId());
+
+                    boolean anioAbierto = primerBimestre.isPresent()
+                            && hoy.isBefore(primerBimestre.get().getFechaInicio());
+
+                    if (anioAbierto) {
+                        // Año académico abierto: remover tutor
+                        seccion.setTutor(null);
+                        seccionRepository.save(seccion);
+
+                        seccionesInfo.add(new UsuarioResponse.SeccionAfectadaInfo(
+                            seccion.getId(),
+                            seccion.getNombre(),
+                            seccion.getGrado().getNombre(),
+                            seccion.getAnioAcademico().getAnio()
+                        ));
+                    }
+                    // Si el año está cerrado, NO se remueve el tutor (se mantiene histórico)
+                }
+
+                return new UsuarioResponse(
+                    usuario.getId(),
+                    usuario.getNombre(),
+                    usuario.getApellidoPaterno(),
+                    usuario.getApellidoMaterno(),
+                    String.join(" ",
+                        usuario.getNombre(),
+                        usuario.getApellidoPaterno(),
+                        usuario.getApellidoMaterno() == null ? "" : usuario.getApellidoMaterno()
+                    ).trim(),
+                    usuario.getDni(),
+                    usuario.getUsername(),
+                    usuario.getEmail(),
+                    usuario.getTelefono(),
+                    usuario.getClass().getSimpleName().toUpperCase(),
+                    false,
+                    usuario.getFechaCreacion(),
+                    seccionesInfo.isEmpty() ? null : seccionesInfo
+                );
+            }
         }
 
         usuario.setActivo(false);

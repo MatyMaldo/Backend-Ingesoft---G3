@@ -12,4 +12,7 @@ public interface BimestreRepository extends JpaRepository<Bimestre, Long> {
     // Busca el primer BIM_1 ordenado por el año del AnioAcademico de forma descendente.
     Optional<Bimestre> findFirstByNombreOrderByAnioAcademicoAnioDesc(NombreBimestre nombre);
 
+    // Busca el primer bimestre de un nombre específico para un año académico específico
+    Optional<Bimestre> findFirstByNombreAndAnioAcademicoIdOrderByAnioAcademicoAnioDesc(NombreBimestre nombre, Long anioAcademicoId);
+
 }
