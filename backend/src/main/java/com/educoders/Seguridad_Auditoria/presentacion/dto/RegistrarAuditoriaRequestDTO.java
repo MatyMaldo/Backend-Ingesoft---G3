@@ -1,5 +1,6 @@
 package com.educoders.Seguridad_Auditoria.presentacion.dto;
 
+import com.educoders.Infraestructura_Servicios.enums.CategoriaAuditoria;
 import com.educoders.Infraestructura_Servicios.enums.TipoAccionAuditoria;
 
 import java.util.ArrayList;
@@ -7,6 +8,7 @@ import java.util.List;
 
 public class RegistrarAuditoriaRequestDTO {
     private Long usuarioId;
+    private CategoriaAuditoria categoria;
     private TipoAccionAuditoria accion;
     private String entidad;
     private Long entidadId;
@@ -16,9 +18,11 @@ public class RegistrarAuditoriaRequestDTO {
     public RegistrarAuditoriaRequestDTO() {
     }
 
-    public RegistrarAuditoriaRequestDTO(Long usuarioId, TipoAccionAuditoria accion,
-                                        String entidad, Long entidadId, String descripcion, List<DetalleAuditoriaDTO> detalles) {
+    public RegistrarAuditoriaRequestDTO(Long usuarioId, CategoriaAuditoria categoria,
+                                        TipoAccionAuditoria accion, String entidad,
+                                        Long entidadId, String descripcion, List<DetalleAuditoriaDTO> detalles) {
         this.usuarioId = usuarioId;
+        this.categoria = categoria;
         this.accion = accion;
         this.entidad = entidad;
         this.entidadId = entidadId;
@@ -28,6 +32,9 @@ public class RegistrarAuditoriaRequestDTO {
 
     public Long getUsuarioId() { return usuarioId; }
     public void setUsuarioId(Long usuarioId) { this.usuarioId = usuarioId; }
+
+    public CategoriaAuditoria getCategoria() { return categoria; }
+    public void setCategoria(CategoriaAuditoria categoria) { this.categoria = categoria; }
 
     public TipoAccionAuditoria getAccion() { return accion; }
     public void setAccion(TipoAccionAuditoria accion) { this.accion = accion; }

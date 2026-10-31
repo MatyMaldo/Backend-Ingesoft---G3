@@ -1,5 +1,6 @@
 package com.educoders.Seguridad_Auditoria.dominio;
 
+import com.educoders.Infraestructura_Servicios.enums.CategoriaAuditoria;
 import com.educoders.Infraestructura_Servicios.enums.TipoAccionAuditoria;
 import jakarta.persistence.*;
 
@@ -21,8 +22,13 @@ public class Auditoria {
     @Column(name = "usuario_id")
     private Long usuarioId;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "categoria", nullable = false, length = 60)
+    private CategoriaAuditoria categoria;
+
+    @Enumerated(EnumType.STRING)
     @Column(name = "accion", nullable = false, length = 60)
-    private String accion;
+    private TipoAccionAuditoria accion;
 
     @Column(name = "entidad", nullable = false, length = 100)
     private String entidad;
@@ -53,8 +59,11 @@ public class Auditoria {
     public Long getUsuarioId() { return usuarioId; }
     public void setUsuarioId(Long usuarioId) { this.usuarioId = usuarioId; }
 
-    public String getAccion() { return accion; }
-    public void setAccion(String accion) { this.accion = accion; }
+    public CategoriaAuditoria getCategoria() { return categoria; }
+    public void setCategoria(CategoriaAuditoria categoria) { this.categoria = categoria; }
+
+    public TipoAccionAuditoria getAccion() { return accion; }
+    public void setAccion(TipoAccionAuditoria accion) { this.accion = accion; }
 
     public String getEntidad() { return entidad; }
     public void setEntidad(String entidad) { this.entidad = entidad; }

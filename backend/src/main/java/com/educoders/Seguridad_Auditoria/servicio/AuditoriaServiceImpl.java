@@ -42,7 +42,8 @@ public class AuditoriaServiceImpl implements AuditoriaService {
             Auditoria auditoria = new Auditoria();
             auditoria.setFechaHora(LocalDateTime.now());
             auditoria.setUsuarioId(usuarioIdFinal);
-            auditoria.setAccion(dto.getAccion().name());
+            auditoria.setCategoria(dto.getCategoria() != null ? dto.getCategoria() : CategoriaAuditoria.SISTEMA);
+            auditoria.setAccion(dto.getAccion());
             auditoria.setEntidad(dto.getEntidad());
             auditoria.setEntidadId(dto.getEntidadId());
             auditoria.setDescripcion(dto.getDescripcion());
@@ -58,7 +59,7 @@ public class AuditoriaServiceImpl implements AuditoriaService {
                 }
             }
 
-            auditoriaRepository.save(auditoria);
+            auditoriaRepository.saveAndFlush(auditoria);
         } catch (Exception e) {
             log.error("Fallo al registrar auditoría para la entidad '{}': {}", dto.getEntidad(), e.getMessage(), e);
         }
@@ -66,17 +67,19 @@ public class AuditoriaServiceImpl implements AuditoriaService {
 
     @Override
     @Transactional(readOnly = true)
-    public Page<AuditoriaResponseDTO> listarAuditorias(TipoAccionAuditoria accion,
+    public Page<AuditoriaResponseDTO> listarAuditorias(CategoriaAuditoria categoria,
+                                                       TipoAccionAuditoria accion,
                                                        LocalDateTime fechaInicio, LocalDateTime fechaFin, Pageable pageable) {
-        Page<Auditoria> auditorias = auditoriaRepository.buscarConFiltros(accion, fechaInicio, fechaFin, pageable);
+        Page<Auditoria> auditorias = auditoriaRepository.buscarConFiltros(categoria, accion, fechaInicio, fechaFin, pageable);
         return auditorias.map(this::mapearAResponse);
     }
 
     @Override
     @Transactional(readOnly = true)
-    public List<AuditoriaResponseDTO> obtenerHistorialPorEntidad(String entidad, Long entidadId) {
-        List<Auditoria> historial = auditoriaRepository.findByEntidadAndEntidadIdOrderByFechaHoraAsc(entidad, entidadId);
-        return historial.stream().map(this::mapearAResponse).collect(Collectors.toList());
+    public Page<AuditoriaResponseDTO> obtenerHistorialPorEntidad(String entidad, Long entidadId, Pageable pageable) {
+        Page<Auditoria> historial = auditoriaRepository
+                .findByEntidadAndEntidadIdOrderByFechaHoraAsc(entidad, entidadId, pageable);
+        return historial.map(this::mapearAResponse);
     }
 
     @Override
@@ -88,18 +91,24 @@ public class AuditoriaServiceImpl implements AuditoriaService {
     }
 
     private Long obtenerUsuarioIdAutenticado(Long idProporcionado) {
-        if (idProporcionado != null) {
-            return idProporcionado;
-        }
+        // 1) Prioridad al usuario autenticado en el token (no confiable en el payload).
         try {
             Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-            if (auth != null && auth.isAuthenticated() && auth.getPrincipal() instanceof Long) {
-                return (Long) auth.getPrincipal();
+            if (auth != null && auth.isAuthenticated() && auth.getPrincipal() != null) {
+                String principal = auth.getPrincipal().toString();
+                if (!principal.isBlank() && !"anonymousUser".equalsIgnoreCase(principal)) {
+                    try {
+                        return Long.valueOf(principal);
+                    } catch (NumberFormatException ignored) {
+                        // principal no numérico; se ignora
+                    }
+                }
             }
         } catch (Exception e) {
             log.warn("No se pudo extraer el usuario del SecurityContext: {}", e.getMessage());
         }
-        return null; // Devuelve null si no hay usuario autenticado (ej. proceso batch/automático del Sistema)
+        // 2) Fallback: id proporcionado (procesos internos / sistema).
+        return idProporcionado;
     }
 
     private AuditoriaResponseDTO mapearAResponse(Auditoria auditoria) {
@@ -107,7 +116,8 @@ public class AuditoriaServiceImpl implements AuditoriaService {
                 auditoria.getId(),
                 auditoria.getFechaHora(),
                 auditoria.getUsuarioId(),
-                auditoria.getAccion(),
+                auditoria.getCategoria(),
+                auditoria.getAccion().name(),
                 auditoria.getEntidad(),
                 auditoria.getEntidadId(),
                 auditoria.getDescripcion(),

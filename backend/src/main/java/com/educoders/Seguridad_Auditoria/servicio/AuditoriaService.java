@@ -1,5 +1,6 @@
 package com.educoders.Seguridad_Auditoria.servicio;
 
+import com.educoders.Infraestructura_Servicios.enums.CategoriaAuditoria;
 import com.educoders.Infraestructura_Servicios.enums.TipoAccionAuditoria;
 import com.educoders.Seguridad_Auditoria.presentacion.dto.AuditoriaResponseDTO;
 import com.educoders.Seguridad_Auditoria.presentacion.dto.RegistrarAuditoriaRequestDTO;
@@ -11,8 +12,9 @@ import java.util.List;
 
 public interface AuditoriaService {
     void registrarAuditoria(RegistrarAuditoriaRequestDTO dto);
-    Page<AuditoriaResponseDTO> listarAuditorias(TipoAccionAuditoria accion,
+    Page<AuditoriaResponseDTO> listarAuditorias(CategoriaAuditoria categoria,
+                                                TipoAccionAuditoria accion,
                                                 LocalDateTime fechaInicio, LocalDateTime fechaFin, Pageable pageable);
-    List<AuditoriaResponseDTO> obtenerHistorialPorEntidad(String entidad, Long entidadId);
+    Page<AuditoriaResponseDTO> obtenerHistorialPorEntidad(String entidad, Long entidadId, Pageable pageable);
     AuditoriaResponseDTO obtenerPorId(Long id);
 }
