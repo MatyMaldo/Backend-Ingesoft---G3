@@ -16,6 +16,15 @@ cloudinary.cloud-name=tu_cloud_name
 cloudinary.api-key=tu_api_key
 cloudinary.api-secret=tu_api_secret
 
+# Mail (SMTP) Credentials
+spring.mail.host=${MAIL_HOST:sandbox.smtp.mailtrap.io}
+spring.mail.port=${MAIL_PORT:2525}
+spring.mail.username=${MAIL_USERNAME:tu_usuario_mailtrap}
+spring.mail.password=${MAIL_PASSWORD:tu_password_mailtrap}
+spring.mail.properties.mail.smtp.auth=true
+spring.mail.properties.mail.smtp.starttls.enable=true
+spring.mail.properties.mail.smtp.from=${MAIL_FROM:noreply@educoders.com}
+
 # Permitir archivos de hasta 10MB en la capa HTTP
 spring.servlet.multipart.max-file-size=10MB
 spring.servlet.multipart.max-request-size=10MB
