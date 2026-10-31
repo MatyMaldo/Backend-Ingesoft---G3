@@ -5,17 +5,22 @@ import com.educoders.Gestion_Matricula_Pagos.dominio.Pago;
 import com.educoders.Gestion_Matricula_Pagos.persistencia.CompromisoPagoRepository;
 import com.educoders.Gestion_Matricula_Pagos.persistencia.PagoRepository;
 import com.educoders.Gestion_Matricula_Pagos.presentacion.dto.*;
+import com.educoders.Infraestructura_Servicios.enums.CategoriaAuditoria;
 import com.educoders.Infraestructura_Servicios.enums.EstadoCompromisoPago;
 import com.educoders.Infraestructura_Servicios.enums.EstadoMatricula;
 import com.educoders.Infraestructura_Servicios.enums.EstadoPago;
+import com.educoders.Infraestructura_Servicios.enums.TipoAccionAuditoria;
 import com.educoders.Infraestructura_Servicios.enums.TipoCompromiso;
 import com.educoders.Infraestructura_Servicios.exception.RecursoNoEncontradoException;
 import com.educoders.Infraestructura_Servicios.exception.ReglaNegocioException;
 import com.educoders.Infraestructura_Servicios.servicio.ServicioAlmacenamientoArchivo;
 import com.educoders.Infraestructura_Servicios.servicio.ServicioNotificacionEmail;
 import com.educoders.Seguridad_Auditoria.dominio.Administrador;
+import com.educoders.Seguridad_Auditoria.servicio.AuditoriaService;
 import com.educoders.Seguridad_Auditoria.dominio.Usuario;
 import com.educoders.Seguridad_Auditoria.persistencia.UsuarioRepository;
+import com.educoders.Seguridad_Auditoria.presentacion.dto.DetalleAuditoriaDTO;
+import com.educoders.Seguridad_Auditoria.presentacion.dto.RegistrarAuditoriaRequestDTO;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -33,17 +38,20 @@ public class PagoServiceImpl implements PagoService {
     private final UsuarioRepository usuarioRepository;
     private final ServicioAlmacenamientoArchivo servicioAlmacenamientoArchivo;
     private final ServicioNotificacionEmail servicioNotificacionEmail;
+    private final AuditoriaService auditoriaService;
 
     public PagoServiceImpl(PagoRepository pagoRepository,
                            CompromisoPagoRepository compromisoPagoRepository,
                            UsuarioRepository usuarioRepository,
                            ServicioAlmacenamientoArchivo servicioAlmacenamientoArchivo,
-                           ServicioNotificacionEmail servicioNotificacionEmail) {
+                           ServicioNotificacionEmail servicioNotificacionEmail,
+                           AuditoriaService auditoriaService) {
         this.pagoRepository = pagoRepository;
         this.compromisoPagoRepository = compromisoPagoRepository;
         this.usuarioRepository = usuarioRepository;
         this.servicioAlmacenamientoArchivo = servicioAlmacenamientoArchivo;
         this.servicioNotificacionEmail = servicioNotificacionEmail;
+        this.auditoriaService = auditoriaService;
     }
 
     @Override
