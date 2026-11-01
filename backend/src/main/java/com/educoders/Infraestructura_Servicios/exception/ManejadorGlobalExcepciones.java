@@ -121,6 +121,23 @@ public class ManejadorGlobalExcepciones {
     public ResponseEntity<RespuestaApiResponse<Void>> manejarJsonInvalido(
             HttpMessageNotReadableException excepcion) {
 
+        // Verificar si es un error de deserialización de enum
+        Throwable causa = excepcion.getCause();
+        if (causa instanceof com.fasterxml.jackson.databind.JsonMappingException) {
+            com.fasterxml.jackson.databind.JsonMappingException jsonEx = (com.fasterxml.jackson.databind.JsonMappingException) causa;
+            if (jsonEx.getPath() != null && !jsonEx.getPath().isEmpty()) {
+                String fieldName = jsonEx.getPath().get(jsonEx.getPath().size() - 1).getFieldName();
+                
+                // Personalizar mensaje para el campo valorNota
+                if ("valorNota".equals(fieldName)) {
+                    return ResponseEntity
+                            .status(HttpStatus.BAD_REQUEST)
+                            .body(RespuestaApiResponse.crearError(
+                                    "La nota debe pertenecer a la escala del CNEB (AD, A, B, C)"));
+                }
+            }
+        }
+
         return ResponseEntity
                 .status(HttpStatus.BAD_REQUEST)
                 .body(RespuestaApiResponse.crearError(
