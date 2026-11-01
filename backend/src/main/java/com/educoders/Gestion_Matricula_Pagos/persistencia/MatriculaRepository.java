@@ -7,6 +7,7 @@ import org.springframework.stereotype.Repository;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 public interface MatriculaRepository extends JpaRepository<Matricula, Long> {
@@ -27,4 +28,6 @@ public interface MatriculaRepository extends JpaRepository<Matricula, Long> {
     );
 
     List<Matricula> findBySeccionId(Long seccionId);
+
+    Optional<Matricula> findByEstudianteIdAndSeccionId(Long estudianteId, Long seccionId);
 }
