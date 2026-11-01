@@ -61,6 +61,12 @@ public class AnioAcademico {
         this.fechaFin = fechaFin;
     }
 
+    public boolean estaVigente() {
+        LocalDate hoy = LocalDate.now();
+        return (fechaInicio != null && fechaFin != null) &&
+               !hoy.isBefore(fechaInicio) && !hoy.isAfter(fechaFin);
+    }
+
     // Builder manual
     public static AnioAcademicoBuilder builder() {
         return new AnioAcademicoBuilder();

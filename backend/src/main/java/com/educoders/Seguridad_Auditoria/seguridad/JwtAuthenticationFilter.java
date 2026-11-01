@@ -1,7 +1,9 @@
 
 package com.educoders.Seguridad_Auditoria.seguridad;
 import com.educoders.Seguridad_Auditoria.dominio.Administrador;
+import com.educoders.Seguridad_Auditoria.dominio.Docente;
 import com.educoders.Seguridad_Auditoria.dominio.Usuario;
+import com.educoders.Seguridad_Auditoria.persistencia.DocenteRepository;
 import com.educoders.Seguridad_Auditoria.persistencia.UsuarioRepository;
 import com.educoders.Seguridad_Auditoria.servicio.JwtService;
 
@@ -29,13 +31,16 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtService jwtService;
     private final UsuarioRepository usuarioRepository;
+    private final DocenteRepository docenteRepository;
 
     public JwtAuthenticationFilter(
             JwtService jwtService,
-            UsuarioRepository usuarioRepository
+            UsuarioRepository usuarioRepository,
+            DocenteRepository docenteRepository
     ) {
         this.jwtService = jwtService;
         this.usuarioRepository = usuarioRepository;
+        this.docenteRepository = docenteRepository;
     }
 
     @Override
@@ -60,27 +65,31 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 String usuarioId = claims.getSubject();
                 String rol = claims.get("rol", String.class);
 
-                if (usuarioId != null && "ADMINISTRADOR".equals(rol)) {
+                if (usuarioId != null && ("ADMINISTRADOR".equals(rol) || "DOCENTE".equals(rol))) {
 
                     Long id = Long.valueOf(usuarioId);
 
-                    Optional<Usuario> usuarioOptional =
-                            usuarioRepository.findById(id);
+                    Optional<? extends Usuario> usuarioOptional;
+
+                    if ("DOCENTE".equals(rol)) {
+                        usuarioOptional = docenteRepository.findById(id);
+                    } else {
+                        usuarioOptional = usuarioRepository.findById(id);
+                    }
 
                     if (usuarioOptional.isPresent()) {
 
                         Usuario usuario = usuarioOptional.get();
 
-                        if (usuario.isActivo()
-                                && usuario instanceof Administrador) {
+                        if (usuario.isActivo()) {
 
                             var authorities = List.of(
-                                    new SimpleGrantedAuthority("ROLE_ADMIN")
+                                    new SimpleGrantedAuthority("ROLE_" + rol)
                             );
 
                             var authentication =
                                     new UsernamePasswordAuthenticationToken(
-                                            usuario.getId().toString(),
+                                            usuario,
                                             null,
                                             authorities
                                     );

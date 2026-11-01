@@ -63,6 +63,10 @@ public class SeguridadConfig {
                                 HttpMethod.POST,
                                 "/api/v1/auth/login"
                         ).permitAll()
+                        .requestMatchers(
+                                HttpMethod.POST,
+                                "/api/v1/evaluaciones"
+                        ).hasAnyRole("ADMIN", "DOCENTE")
                         .anyRequest().hasRole("ADMIN")
                 )
 
