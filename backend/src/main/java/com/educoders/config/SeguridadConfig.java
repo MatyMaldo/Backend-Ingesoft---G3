@@ -63,15 +63,24 @@ public class SeguridadConfig {
                                 HttpMethod.POST,
                                 "/api/v1/auth/login"
                         ).permitAll()
+                        // --- HU-EVAL-01 ---
                         .requestMatchers(
                                 HttpMethod.POST,
                                 "/api/v1/evaluaciones"
                         ).hasAnyRole("ADMIN", "DOCENTE")
+
+                        // --- HU-EVAL-02 ---
                         .requestMatchers(
                                 HttpMethod.POST,
                                 "/api/v1/evaluaciones/*/notas"
                         ).hasAnyRole("ADMIN", "DOCENTE")
-                        .anyRequest().hasRole("ADMIN")
+
+                        // --- HU-EVAL-03 ---
+                        // Permite que estudiantes y apoderados consulten las notas
+                        .requestMatchers(
+                                HttpMethod.GET,
+                                "/api/v1/estudiantes/*/revision-notas/**"
+                        ).hasAnyRole("ADMIN", "ESTUDIANTE", "APODERADO")
                 )
 
                 .addFilterBefore(

@@ -1,9 +1,13 @@
 
 package com.educoders.Seguridad_Auditoria.seguridad;
 import com.educoders.Seguridad_Auditoria.dominio.Administrador;
+import com.educoders.Seguridad_Auditoria.dominio.Apoderado;
 import com.educoders.Seguridad_Auditoria.dominio.Docente;
+import com.educoders.Seguridad_Auditoria.dominio.Estudiante;
 import com.educoders.Seguridad_Auditoria.dominio.Usuario;
+import com.educoders.Seguridad_Auditoria.persistencia.ApoderadoRepository;
 import com.educoders.Seguridad_Auditoria.persistencia.DocenteRepository;
+import com.educoders.Seguridad_Auditoria.persistencia.EstudianteRepository;
 import com.educoders.Seguridad_Auditoria.persistencia.UsuarioRepository;
 import com.educoders.Seguridad_Auditoria.servicio.JwtService;
 
@@ -32,15 +36,21 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private final JwtService jwtService;
     private final UsuarioRepository usuarioRepository;
     private final DocenteRepository docenteRepository;
+    private final EstudianteRepository estudianteRepository;
+    private final ApoderadoRepository apoderadoRepository;
 
     public JwtAuthenticationFilter(
             JwtService jwtService,
             UsuarioRepository usuarioRepository,
-            DocenteRepository docenteRepository
+            DocenteRepository docenteRepository,
+            EstudianteRepository estudianteRepository,
+            ApoderadoRepository apoderadoRepository
     ) {
         this.jwtService = jwtService;
         this.usuarioRepository = usuarioRepository;
         this.docenteRepository = docenteRepository;
+        this.estudianteRepository = estudianteRepository;
+        this.apoderadoRepository = apoderadoRepository;
     }
 
     @Override
@@ -65,7 +75,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 String usuarioId = claims.getSubject();
                 String rol = claims.get("rol", String.class);
 
-                if (usuarioId != null && ("ADMINISTRADOR".equals(rol) || "DOCENTE".equals(rol))) {
+                if (usuarioId != null && ("ADMINISTRADOR".equals(rol) || "DOCENTE".equals(rol) || "ESTUDIANTE".equals(rol) || "APODERADO".equals(rol))) {
 
                     Long id = Long.valueOf(usuarioId);
 
@@ -73,6 +83,10 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
                     if ("DOCENTE".equals(rol)) {
                         usuarioOptional = docenteRepository.findById(id);
+                    } else if ("ESTUDIANTE".equals(rol)) {
+                        usuarioOptional = estudianteRepository.findById(id);
+                    } else if ("APODERADO".equals(rol)) {
+                        usuarioOptional = apoderadoRepository.findById(id);
                     } else {
                         usuarioOptional = usuarioRepository.findById(id);
                     }
