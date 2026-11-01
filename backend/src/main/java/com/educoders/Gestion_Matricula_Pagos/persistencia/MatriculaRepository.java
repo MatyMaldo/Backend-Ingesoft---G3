@@ -3,6 +3,8 @@ package com.educoders.Gestion_Matricula_Pagos.persistencia;
 import com.educoders.Gestion_Matricula_Pagos.dominio.Matricula;
 import com.educoders.Infraestructura_Servicios.enums.EstadoMatricula;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.Collection;
@@ -30,4 +32,14 @@ public interface MatriculaRepository extends JpaRepository<Matricula, Long> {
     List<Matricula> findBySeccionId(Long seccionId);
 
     Optional<Matricula> findByEstudianteIdAndSeccionId(Long estudianteId, Long seccionId);
+
+    List<Matricula> findByEstudianteIdOrderBySeccionAnioAcademicoAnioDesc(Long estudianteId);
+
+    @Query("SELECT m FROM Matricula m " +
+            "JOIN FETCH m.seccion s " +
+            "JOIN FETCH s.anioAcademico a " +
+            "JOIN FETCH s.grado g " +
+            "WHERE m.estudiante.id = :idEstudiante " +
+            "ORDER BY a.anio DESC")
+    List<Matricula> buscarMatriculasConSeccionYAnio(@Param("idEstudiante") Long idEstudiante);
 }

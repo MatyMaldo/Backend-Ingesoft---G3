@@ -2,9 +2,13 @@
 package com.educoders.Seguridad_Auditoria.servicio;
 
 import com.educoders.Seguridad_Auditoria.dominio.Administrador;
+import com.educoders.Seguridad_Auditoria.dominio.Apoderado;
 import com.educoders.Seguridad_Auditoria.dominio.Docente;
+import com.educoders.Seguridad_Auditoria.dominio.Estudiante;
 import com.educoders.Seguridad_Auditoria.dominio.Usuario;
+import com.educoders.Seguridad_Auditoria.persistencia.ApoderadoRepository;
 import com.educoders.Seguridad_Auditoria.persistencia.DocenteRepository;
+import com.educoders.Seguridad_Auditoria.persistencia.EstudianteRepository;
 import com.educoders.Seguridad_Auditoria.persistencia.UsuarioRepository;
 import com.educoders.Seguridad_Auditoria.presentacion.dto.LoginRequest;
 import com.educoders.Seguridad_Auditoria.presentacion.dto.LoginResponse;
@@ -19,17 +23,23 @@ public class AutenticacionServiceImpl implements AutenticacionService {
 
     private final UsuarioRepository usuarioRepository;
     private final DocenteRepository docenteRepository;
+    private final EstudianteRepository estudianteRepository;
+    private final ApoderadoRepository apoderadoRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
 
     public AutenticacionServiceImpl(
             UsuarioRepository usuarioRepository,
             DocenteRepository docenteRepository,
+            EstudianteRepository estudianteRepository,
+            ApoderadoRepository apoderadoRepository,
             PasswordEncoder passwordEncoder,
             JwtService jwtService
     ) {
         this.usuarioRepository = usuarioRepository;
         this.docenteRepository = docenteRepository;
+        this.estudianteRepository = estudianteRepository;
+        this.apoderadoRepository = apoderadoRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
     }
@@ -54,6 +64,18 @@ public class AutenticacionServiceImpl implements AutenticacionService {
                     : docenteRepository.findByDni(identificador))
                     .orElseThrow(this::credencialesInvalidas);
             if (!(usuario instanceof Docente)) throw credencialesInvalidas();
+        } else if ("ESTUDIANTE".equals(perfil)) {
+            usuario = (identificador.contains("@")
+                    ? estudianteRepository.findByEmail(identificador)
+                    : estudianteRepository.findByDni(identificador))
+                    .orElseThrow(this::credencialesInvalidas);
+            if (!(usuario instanceof Estudiante)) throw credencialesInvalidas();
+        } else if ("APODERADO".equals(perfil)) {
+            usuario = (identificador.contains("@")
+                    ? apoderadoRepository.findByEmail(identificador)
+                    : apoderadoRepository.findByDni(identificador))
+                    .orElseThrow(this::credencialesInvalidas);
+            if (!(usuario instanceof Apoderado)) throw credencialesInvalidas();
         } else {
             throw credencialesInvalidas();
         }
