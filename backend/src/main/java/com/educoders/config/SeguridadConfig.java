@@ -135,6 +135,17 @@ public class SeguridadConfig {
                                 "/api/v1/secciones"
                         ).hasRole("ADMINISTRADOR")
 
+                        // HU-EVAL-04 y HU-EVAL-05:
+                        // Consulta y descarga de libretas de notas.
+                        .requestMatchers(
+                                HttpMethod.GET,
+                                "/api/v1/estudiantes/*/libretas",
+                                "/api/v1/estudiantes/*/libretas/**"
+                        ).hasAnyRole(
+                                "ESTUDIANTE",
+                                "APODERADO"
+                        )
+
                         .anyRequest().authenticated()
                 )
 
