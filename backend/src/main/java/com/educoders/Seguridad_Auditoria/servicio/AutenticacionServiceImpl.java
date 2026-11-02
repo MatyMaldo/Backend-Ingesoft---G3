@@ -6,9 +6,7 @@ import com.educoders.Seguridad_Auditoria.dominio.Apoderado;
 import com.educoders.Seguridad_Auditoria.dominio.Docente;
 import com.educoders.Seguridad_Auditoria.dominio.Estudiante;
 import com.educoders.Seguridad_Auditoria.dominio.Usuario;
-import com.educoders.Seguridad_Auditoria.persistencia.ApoderadoRepository;
-import com.educoders.Seguridad_Auditoria.persistencia.DocenteRepository;
-import com.educoders.Seguridad_Auditoria.persistencia.EstudianteRepository;
+
 import com.educoders.Seguridad_Auditoria.persistencia.UsuarioRepository;
 import com.educoders.Seguridad_Auditoria.presentacion.dto.LoginRequest;
 import com.educoders.Seguridad_Auditoria.presentacion.dto.LoginResponse;
@@ -18,28 +16,21 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.util.List;
+
 @Service
 public class AutenticacionServiceImpl implements AutenticacionService {
 
     private final UsuarioRepository usuarioRepository;
-    private final DocenteRepository docenteRepository;
-    private final EstudianteRepository estudianteRepository;
-    private final ApoderadoRepository apoderadoRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
 
     public AutenticacionServiceImpl(
             UsuarioRepository usuarioRepository,
-            DocenteRepository docenteRepository,
-            EstudianteRepository estudianteRepository,
-            ApoderadoRepository apoderadoRepository,
             PasswordEncoder passwordEncoder,
             JwtService jwtService
     ) {
         this.usuarioRepository = usuarioRepository;
-        this.docenteRepository = docenteRepository;
-        this.estudianteRepository = estudianteRepository;
-        this.apoderadoRepository = apoderadoRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
     }
@@ -48,44 +39,98 @@ public class AutenticacionServiceImpl implements AutenticacionService {
     public LoginResponse iniciarSesion(LoginRequest request) {
 
         String identificador = request.identificador().trim();
-        String perfil = request.perfil().trim().toUpperCase();
+
         Usuario usuario;
 
-        //Sprint 2: Login de Administrador y Docente
-        if ("ADMINISTRADOR".equals(perfil)) {
-            usuario = (identificador.contains("@")
-                    ? usuarioRepository.findByEmail(identificador)
-                    : usuarioRepository.findByDni(identificador))
+        if (identificador.contains("@")) {
+            usuario = usuarioRepository.findByEmail(identificador)
                     .orElseThrow(this::credencialesInvalidas);
-            if (!(usuario instanceof Administrador)) throw credencialesInvalidas();
-        } else if ("DOCENTE".equals(perfil)) {
-            usuario = (identificador.contains("@")
-                    ? docenteRepository.findByEmail(identificador)
-                    : docenteRepository.findByDni(identificador))
-                    .orElseThrow(this::credencialesInvalidas);
-            if (!(usuario instanceof Docente)) throw credencialesInvalidas();
-        } else if ("ESTUDIANTE".equals(perfil)) {
-            usuario = (identificador.contains("@")
-                    ? estudianteRepository.findByEmail(identificador)
-                    : estudianteRepository.findByDni(identificador))
-                    .orElseThrow(this::credencialesInvalidas);
-            if (!(usuario instanceof Estudiante)) throw credencialesInvalidas();
-        } else if ("APODERADO".equals(perfil)) {
-            usuario = (identificador.contains("@")
-                    ? apoderadoRepository.findByEmail(identificador)
-                    : apoderadoRepository.findByDni(identificador))
-                    .orElseThrow(this::credencialesInvalidas);
-            if (!(usuario instanceof Apoderado)) throw credencialesInvalidas();
+
+            if (!contrasenaCorrecta(usuario, request.password())) {
+                throw credencialesInvalidas();
+            }
+
         } else {
-            throw credencialesInvalidas();
+            List<Usuario> usuarios =
+                    usuarioRepository.findAllByDni(identificador);
+
+            // Buscar todas las cuentas cuya contraseña coincida.
+            List<Usuario> coincidencias = usuarios.stream()
+                    .filter(u -> contrasenaCorrecta(
+                            u, request.password()
+                    ))
+                    .toList();
+
+            if (coincidencias.isEmpty()) {
+                throw credencialesInvalidas();
+            }
+
+            // Evitar elegir arbitrariamente entre varias cuentas.
+            if (coincidencias.size() > 1) {
+                throw new ResponseStatusException(
+                        HttpStatus.CONFLICT,
+                        "Existen varias cuentas asociadas a estas credenciales. " +
+                                "Inicia sesión con tu correo electrónico."
+                );
+            }
+
+            usuario = coincidencias.get(0);
         }
 
-        if (!passwordEncoder.matches(request.password(), usuario.getPasswordHash())) throw credencialesInvalidas();
-        if (!usuario.isActivo()) throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Tu cuenta está inactiva. Comunícate con el administrador");
+        // Impedir el acceso a cuentas inactivas.
+        if (!usuario.isActivo()) {
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN,
+                    "Tu cuenta está inactiva. Comunícate con el administrador"
+            );
+        }
 
+        // Identificar automáticamente el perfil real.
+        String perfil = obtenerPerfil(usuario);
+
+        // Generar el JWT con el perfil identificado.
         String token = jwtService.generarToken(usuario, perfil);
-        LoginResponse.UsuarioLoginResponse datosUsuario = new LoginResponse.UsuarioLoginResponse(usuario.getId(), usuario.getNombre(), perfil);
+
+        LoginResponse.UsuarioLoginResponse datosUsuario =
+                new LoginResponse.UsuarioLoginResponse(
+                        usuario.getId(),
+                        usuario.getNombre(),
+                        perfil
+                );
+
         return new LoginResponse(token, datosUsuario);
+    }
+
+    private boolean contrasenaCorrecta(
+            Usuario usuario,
+            String password
+    ) {
+        return usuario.getPasswordHash() != null &&
+                passwordEncoder.matches(
+                        password,
+                        usuario.getPasswordHash()
+                );
+    }
+
+    private String obtenerPerfil(Usuario usuario) {
+
+        if (usuario instanceof Administrador) {
+            return "ADMINISTRADOR";
+        }
+
+        if (usuario instanceof Docente) {
+            return "DOCENTE";
+        }
+
+        if (usuario instanceof Estudiante) {
+            return "ESTUDIANTE";
+        }
+
+        if (usuario instanceof Apoderado) {
+            return "APODERADO";
+        }
+
+        throw credencialesInvalidas();
     }
 
     private ResponseStatusException credencialesInvalidas() {
