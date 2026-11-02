@@ -1,13 +1,11 @@
 package com.educoders.Seguridad_Auditoria.presentacion.dto;
 import jakarta.validation.constraints.NotBlank;
 
-import jakarta.validation.constraints.NotBlank;
+
 import jakarta.validation.constraints.Pattern;
 
 public record LoginRequest(
 
-        @NotBlank(message = "Debe seleccionar un perfil.")
-        String perfil,
 
         @NotBlank(message = "El correo electrónico o DNI es obligatorio.")
         @Pattern(

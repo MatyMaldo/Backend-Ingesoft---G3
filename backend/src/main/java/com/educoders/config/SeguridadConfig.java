@@ -14,7 +14,7 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
-
+import jakarta.servlet.DispatcherType;
 import jakarta.servlet.http.HttpServletResponse;
 @Configuration
 @EnableWebSecurity
@@ -51,36 +51,91 @@ public class SeguridadConfig {
                 )
                 .exceptionHandling(exceptions -> exceptions
                         .authenticationEntryPoint((request, response, authException) ->
+                        {
+
+
+                            response.sendError(
+                                    HttpServletResponse.SC_UNAUTHORIZED,
+                                    "No autenticado"
+
+
+                            );
+                        })
+                                /*
                                 response.sendError(
                                         HttpServletResponse.SC_UNAUTHORIZED,
                                         "No autenticado"
                                 )
+                        )*/
+                       .accessDeniedHandler((request, response, accessDeniedException) ->
+                                response.sendError(
+                                        HttpServletResponse.SC_FORBIDDEN,
+                                        "No tiene permisos para acceder a este recurso"
+                                )
                         )
+
                 )
 
                 .authorizeHttpRequests(auth -> auth
+                        // Permitir los despachos internos de errores
+                        .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
+
+                        // Login público
                         .requestMatchers(
                                 HttpMethod.POST,
                                 "/api/v1/auth/login"
                         ).permitAll()
+
                         // --- HU-EVAL-01 ---
                         .requestMatchers(
                                 HttpMethod.POST,
                                 "/api/v1/evaluaciones"
-                        ).hasAnyRole("ADMIN", "DOCENTE")
+                        ).hasAnyRole("ADMINISTRADOR", "DOCENTE")
 
                         // --- HU-EVAL-02 ---
                         .requestMatchers(
                                 HttpMethod.POST,
                                 "/api/v1/evaluaciones/*/notas"
-                        ).hasAnyRole("ADMIN", "DOCENTE")
+                        ).hasAnyRole("ADMINISTRADOR", "DOCENTE")
 
                         // --- HU-EVAL-03 ---
                         // Permite que estudiantes y apoderados consulten las notas
                         .requestMatchers(
                                 HttpMethod.GET,
                                 "/api/v1/estudiantes/*/revision-notas/**"
-                        ).hasAnyRole("ADMIN", "ESTUDIANTE", "APODERADO")
+                        ).hasAnyRole(
+                                "ADMINISTRADOR",
+                                "ESTUDIANTE",
+                                "APODERADO"
+                        )// HU-SAT-07: Consulta de usuarios solo para administradores
+                        .requestMatchers(
+                                HttpMethod.GET,
+                                "/api/v1/usuarios",
+                                "/api/v1/usuarios/*"
+                        ).hasRole("ADMINISTRADOR")
+                        // Gestión administrativa de usuarios
+                        .requestMatchers(
+                                HttpMethod.PATCH,
+                                "/api/v1/usuarios/**"
+                        ).hasRole("ADMINISTRADOR")
+
+                        // Auditorías
+                        .requestMatchers(
+                                "/api/v1/auditorias/**"
+                        ).hasRole("ADMINISTRADOR")
+
+                        // Logs de errores
+                        .requestMatchers(
+                                "/api/admin/logs-error/**"
+                        ).hasRole("ADMINISTRADOR")
+                        // Gestión de grados y secciones
+                        .requestMatchers(
+                                HttpMethod.POST,
+                                "/api/v1/grados",
+                                "/api/v1/secciones"
+                        ).hasRole("ADMINISTRADOR")
+
+                        .anyRequest().authenticated()
                 )
 
                 .addFilterBefore(

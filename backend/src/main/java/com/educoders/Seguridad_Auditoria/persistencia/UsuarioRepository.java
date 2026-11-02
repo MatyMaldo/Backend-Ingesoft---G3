@@ -10,10 +10,14 @@ import org.springframework.data.jpa.repository.Query;
 
 import org.springframework.data.repository.query.Param;
 
+import java.util.List;
+
 
 public interface UsuarioRepository extends JpaRepository<Usuario, Long> {
 
     Optional<Usuario> findByDni(String dni);
+
+    List<Usuario> findAllByDni(String dni);
 
     Optional<Usuario> findByEmail(String email);
 
