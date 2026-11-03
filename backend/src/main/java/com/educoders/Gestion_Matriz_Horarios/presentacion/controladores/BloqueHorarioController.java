@@ -10,6 +10,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
@@ -49,6 +50,19 @@ public class BloqueHorarioController {
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"plantilla-horarios.csv\"")
                 .contentType(MediaType.parseMediaType("text/csv; charset=UTF-8"))
                 .body(csvService.generarPlantilla());
+    }
+
+    /** HU-GEMIH-09: carga masiva de bloques horarios desde CSV. */
+    @PostMapping(value = "/carga-masiva", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<RespuestaApiResponse<CargaMasivaResponse>> cargaMasiva(
+            @RequestParam("file") MultipartFile archivo,
+            @RequestParam(required = false) Long anioAcademicoId) {
+        CargaMasivaResponse resultado = csvService.cargarMasivo(archivo, anioAcademicoId);
+        HttpStatus estado = resultado.getErrores().isEmpty()
+                ? HttpStatus.CREATED
+                : HttpStatus.BAD_REQUEST;
+        return ResponseEntity.status(estado)
+                .body(RespuestaApiResponse.crearExito(resultado));
     }
 
     @GetMapping("/{id}")
