@@ -14,9 +14,11 @@ import com.educoders.Infraestructura_Servicios.enums.EstadoMatricula;
 import com.educoders.Infraestructura_Servicios.enums.EstadoSesion;
 import com.educoders.Infraestructura_Servicios.exception.RecursoNoEncontradoException;
 import com.educoders.Infraestructura_Servicios.exception.ReglaNegocioException;
+import com.educoders.Seguridad_Auditoria.dominio.Apoderado;
 import com.educoders.Seguridad_Auditoria.dominio.Docente;
 import com.educoders.Seguridad_Auditoria.dominio.Estudiante;
 import com.educoders.Seguridad_Auditoria.dominio.Usuario;
+import com.educoders.Seguridad_Auditoria.persistencia.EstudianteRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -38,15 +40,18 @@ public class SesionClaseServiceImpl implements SesionClaseService {
     private final BloqueHorarioRepository bloqueRepo;
     private final PeriodoMatriculaRepository periodoRepo;
     private final MatriculaRepository matriculaRepo;
+    private final EstudianteRepository estudianteRepo;
 
     public SesionClaseServiceImpl(SesionClaseRepository repo,
                                   BloqueHorarioRepository bloqueRepo,
                                   PeriodoMatriculaRepository periodoRepo,
-                                  MatriculaRepository matriculaRepo) {
+                                  MatriculaRepository matriculaRepo,
+                                  EstudianteRepository estudianteRepo) {
         this.repo = repo;
         this.bloqueRepo = bloqueRepo;
         this.periodoRepo = periodoRepo;
         this.matriculaRepo = matriculaRepo;
+        this.estudianteRepo = estudianteRepo;
     }
 
     // ------------------------------------------------------------------
@@ -187,6 +192,31 @@ public class SesionClaseServiceImpl implements SesionClaseService {
         }
 
         Long seccionId = obtenerSeccionDelEstudiante(estudiante.getId(), fechaInicio.getYear());
+        if (seccionId == null) {
+            return List.of();
+        }
+        return listarPorSeccion(seccionId, fechaInicio, fechaFin);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<SesionClaseResponse> listarPorApoderado(Long estudianteId, LocalDate fechaInicio, LocalDate fechaFin) {
+        Usuario usuario = obtenerUsuarioAutenticado();
+        if (!(usuario instanceof Apoderado apoderado)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "Solo un apoderado puede consultar el horario de sus estudiantes.");
+        }
+
+        Estudiante estudiante = estudianteRepo.findById(estudianteId)
+                .orElseThrow(() -> RecursoNoEncontradoException.de("estudiante", estudianteId));
+
+        if (estudiante.getApoderado() == null
+                || !estudiante.getApoderado().getId().equals(apoderado.getId())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "El estudiante no se encuentra a su cargo.");
+        }
+
+        Long seccionId = obtenerSeccionDelEstudiante(estudianteId, fechaInicio.getYear());
         if (seccionId == null) {
             return List.of();
         }
