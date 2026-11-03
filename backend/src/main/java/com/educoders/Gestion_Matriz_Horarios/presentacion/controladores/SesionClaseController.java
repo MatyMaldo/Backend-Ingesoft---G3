@@ -59,6 +59,14 @@ public class SesionClaseController {
                 service.listarMiHorarioDocente(fechaInicio, fechaFin)));
     }
 
+    @GetMapping("/mi-horario/estudiante")
+    public ResponseEntity<RespuestaApiResponse<List<SesionClaseResponse>>> miHorarioEstudiante(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fechaInicio,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fechaFin) {
+        return ResponseEntity.ok(RespuestaApiResponse.crearExito(
+                service.listarMiHorarioEstudiante(fechaInicio, fechaFin)));
+    }
+
     @GetMapping("/{id}")
     public ResponseEntity<RespuestaApiResponse<SesionClaseResponse>> obtener(@PathVariable Long id) {
         return ResponseEntity.ok(RespuestaApiResponse.crearExito(service.obtener(id)));

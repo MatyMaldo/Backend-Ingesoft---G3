@@ -15,8 +15,11 @@ import com.educoders.Gestion_Matriz_Horarios.presentacion.dto.PreviewSesionesReq
 import com.educoders.Gestion_Matriz_Horarios.presentacion.dto.PreviewSesionesResponse;
 import com.educoders.Gestion_Matriz_Horarios.presentacion.dto.SesionClaseResponse;
 import com.educoders.Gestion_Matriz_Horarios.presentacion.dto.SesionOmitida;
+import com.educoders.Gestion_Matricula_Pagos.dominio.Matricula;
 import com.educoders.Gestion_Matricula_Pagos.dominio.PeriodoMatricula;
+import com.educoders.Gestion_Matricula_Pagos.persistencia.MatriculaRepository;
 import com.educoders.Gestion_Matricula_Pagos.persistencia.PeriodoMatriculaRepository;
+import com.educoders.Infraestructura_Servicios.enums.EstadoMatricula;
 import com.educoders.Infraestructura_Servicios.enums.DiaSemana;
 import com.educoders.Infraestructura_Servicios.enums.EstadoSesion;
 import com.educoders.Infraestructura_Servicios.exception.ReglaNegocioException;
@@ -66,6 +69,9 @@ class SesionClaseServiceImplTest {
 
     @Mock
     private PeriodoMatriculaRepository periodoRepo;
+
+    @Mock
+    private MatriculaRepository matriculaRepo;
 
     @InjectMocks
     private SesionClaseServiceImpl sesionService;
@@ -407,5 +413,89 @@ class SesionClaseServiceImplTest {
         ResponseStatusException ex = assertThrows(ResponseStatusException.class,
                 () -> sesionService.listarMiHorarioDocente(LUNES_1, LUNES_1));
         assertEquals(HttpStatus.UNAUTHORIZED, ex.getStatusCode());
+    }
+
+    // --- Tests: mi horario del estudiante autenticado (HU-GEMIH-06) ---
+
+    private Matricula crearMatricula(Long id, Long seccionId, Integer anio, EstadoMatricula estado) {
+        com.educoders.Gestion_Academica_Motor_Evaluacion.dominio.AnioAcademico anioAc =
+                new com.educoders.Gestion_Academica_Motor_Evaluacion.dominio.AnioAcademico();
+        anioAc.setId(1L);
+        anioAc.setAnio(anio);
+
+        Grado grado = new Grado();
+        grado.setId(1L);
+        grado.setNombre("1er Grado");
+
+        Seccion seccion = new Seccion();
+        seccion.setId(seccionId);
+        seccion.setNombre("A");
+        seccion.setGrado(grado);
+        seccion.setAnioAcademico(anioAc);
+
+        Matricula m = new Matricula();
+        m.setId(id);
+        m.setSeccion(seccion);
+        m.setEstado(estado);
+        return m;
+    }
+
+    @Test
+    void listarMiHorarioEstudiante_exitoso() {
+        Estudiante estudiante = new Estudiante();
+        estudiante.setId(5L);
+        autenticarComo(estudiante);
+
+        when(matriculaRepo.buscarMatriculasConSeccionYAnio(5L))
+                .thenReturn(List.of(crearMatricula(1L, 1L, 2027, EstadoMatricula.CONFIRMADA)));
+
+        BloqueHorario bloque = crearBloque(10L, DiaSemana.LUNES, LocalTime.of(8, 0), LocalTime.of(10, 0));
+        SesionClase sesion = crearSesion(100L, bloque, LUNES_1);
+        when(repo.findByBloqueHorarioAsignacionCursoSeccionIdAndFechaBetween(1L, LUNES_1, LUNES_1))
+                .thenReturn(List.of(sesion));
+
+        List<SesionClaseResponse> r = sesionService.listarMiHorarioEstudiante(LUNES_1, LUNES_1);
+
+        assertEquals(1, r.size());
+        assertEquals(100L, r.get(0).getId());
+        assertEquals(1L, r.get(0).getSeccionId());
+    }
+
+    @Test
+    void listarMiHorarioEstudiante_sinMatricula() {
+        Estudiante estudiante = new Estudiante();
+        estudiante.setId(5L);
+        autenticarComo(estudiante);
+
+        when(matriculaRepo.buscarMatriculasConSeccionYAnio(5L)).thenReturn(List.of());
+
+        List<SesionClaseResponse> r = sesionService.listarMiHorarioEstudiante(LUNES_1, LUNES_1);
+
+        assertTrue(r.isEmpty());
+    }
+
+    @Test
+    void listarMiHorarioEstudiante_matriculaCancelada() {
+        Estudiante estudiante = new Estudiante();
+        estudiante.setId(5L);
+        autenticarComo(estudiante);
+
+        when(matriculaRepo.buscarMatriculasConSeccionYAnio(5L))
+                .thenReturn(List.of(crearMatricula(1L, 1L, 2027, EstadoMatricula.CANCELADA)));
+
+        List<SesionClaseResponse> r = sesionService.listarMiHorarioEstudiante(LUNES_1, LUNES_1);
+
+        assertTrue(r.isEmpty());
+    }
+
+    @Test
+    void listarMiHorarioEstudiante_rolIncorrecto() {
+        Docente docente = new Docente();
+        docente.setId(2L);
+        autenticarComo(docente);
+
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class,
+                () -> sesionService.listarMiHorarioEstudiante(LUNES_1, LUNES_1));
+        assertEquals(HttpStatus.FORBIDDEN, ex.getStatusCode());
     }
 }

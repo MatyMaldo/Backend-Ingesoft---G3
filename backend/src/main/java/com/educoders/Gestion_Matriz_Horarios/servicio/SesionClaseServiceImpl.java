@@ -5,13 +5,17 @@ import com.educoders.Gestion_Matriz_Horarios.dominio.SesionClase;
 import com.educoders.Gestion_Matriz_Horarios.persistencia.BloqueHorarioRepository;
 import com.educoders.Gestion_Matriz_Horarios.persistencia.SesionClaseRepository;
 import com.educoders.Gestion_Matriz_Horarios.presentacion.dto.*;
+import com.educoders.Gestion_Matricula_Pagos.dominio.Matricula;
 import com.educoders.Gestion_Matricula_Pagos.dominio.PeriodoMatricula;
+import com.educoders.Gestion_Matricula_Pagos.persistencia.MatriculaRepository;
 import com.educoders.Gestion_Matricula_Pagos.persistencia.PeriodoMatriculaRepository;
 import com.educoders.Infraestructura_Servicios.enums.DiaSemana;
+import com.educoders.Infraestructura_Servicios.enums.EstadoMatricula;
 import com.educoders.Infraestructura_Servicios.enums.EstadoSesion;
 import com.educoders.Infraestructura_Servicios.exception.RecursoNoEncontradoException;
 import com.educoders.Infraestructura_Servicios.exception.ReglaNegocioException;
 import com.educoders.Seguridad_Auditoria.dominio.Docente;
+import com.educoders.Seguridad_Auditoria.dominio.Estudiante;
 import com.educoders.Seguridad_Auditoria.dominio.Usuario;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
@@ -33,13 +37,16 @@ public class SesionClaseServiceImpl implements SesionClaseService {
     private final SesionClaseRepository repo;
     private final BloqueHorarioRepository bloqueRepo;
     private final PeriodoMatriculaRepository periodoRepo;
+    private final MatriculaRepository matriculaRepo;
 
     public SesionClaseServiceImpl(SesionClaseRepository repo,
                                   BloqueHorarioRepository bloqueRepo,
-                                  PeriodoMatriculaRepository periodoRepo) {
+                                  PeriodoMatriculaRepository periodoRepo,
+                                  MatriculaRepository matriculaRepo) {
         this.repo = repo;
         this.bloqueRepo = bloqueRepo;
         this.periodoRepo = periodoRepo;
+        this.matriculaRepo = matriculaRepo;
     }
 
     // ------------------------------------------------------------------
@@ -172,6 +179,22 @@ public class SesionClaseServiceImpl implements SesionClaseService {
 
     @Override
     @Transactional(readOnly = true)
+    public List<SesionClaseResponse> listarMiHorarioEstudiante(LocalDate fechaInicio, LocalDate fechaFin) {
+        Usuario usuario = obtenerUsuarioAutenticado();
+        if (!(usuario instanceof Estudiante estudiante)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "Solo un estudiante puede consultar su propio horario.");
+        }
+
+        Long seccionId = obtenerSeccionDelEstudiante(estudiante.getId(), fechaInicio.getYear());
+        if (seccionId == null) {
+            return List.of();
+        }
+        return listarPorSeccion(seccionId, fechaInicio, fechaFin);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public SesionClaseResponse obtener(Long id) {
         SesionClase s = repo.findById(id)
                 .orElseThrow(() -> RecursoNoEncontradoException.de("sesión de clase", id));
@@ -224,6 +247,19 @@ public class SesionClaseServiceImpl implements SesionClaseService {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "No autenticado");
         }
         return usuario;
+    }
+
+    /** Devuelve la sección de la matrícula del estudiante para el año indicado, o null si no tiene. */
+    private Long obtenerSeccionDelEstudiante(Long estudianteId, Integer anio) {
+        List<Matricula> matriculas = matriculaRepo.buscarMatriculasConSeccionYAnio(estudianteId);
+        return matriculas.stream()
+                .filter(m -> m.getEstado() != EstadoMatricula.CANCELADA)
+                .filter(m -> m.getSeccion() != null
+                        && m.getSeccion().getAnioAcademico() != null
+                        && anio.equals(m.getSeccion().getAnioAcademico().getAnio()))
+                .map(m -> m.getSeccion().getId())
+                .findFirst()
+                .orElse(null);
     }
 
     private SesionClaseResponse mapear(SesionClase s) {
