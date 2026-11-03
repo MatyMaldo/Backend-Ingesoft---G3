@@ -330,6 +330,40 @@ class SesionClaseServiceImplTest {
         assertEquals("No existe un periodo de matrícula registrado para este año académico.", ex.getMessage());
     }
 
+    // --- Tests: listado por sección (HU-GEMIH-03) ---
+
+    @Test
+    void listarPorSeccion_exitoso() {
+        BloqueHorario bloque = crearBloque(10L, DiaSemana.LUNES, LocalTime.of(8, 0), LocalTime.of(10, 0));
+        SesionClase sesion = crearSesion(100L, bloque, LUNES_1);
+
+        when(repo.findByBloqueHorarioAsignacionCursoSeccionIdAndFechaBetween(1L, LUNES_1, LUNES_1))
+                .thenReturn(List.of(sesion));
+
+        List<SesionClaseResponse> r = sesionService.listarPorSeccion(1L, LUNES_1, LUNES_1);
+
+        assertEquals(1, r.size());
+        assertEquals(100L, r.get(0).getId());
+        assertEquals(LUNES_1, r.get(0).getFecha());
+        assertEquals(LocalTime.of(8, 0), r.get(0).getHoraInicio());
+        assertEquals(LocalTime.of(10, 0), r.get(0).getHoraFin());
+        assertEquals("Matematicas", r.get(0).getCursoNombre());
+        assertEquals("Juan Perez", r.get(0).getDocenteNombre());
+        assertEquals("Aula 101", r.get(0).getAulaNombre());
+        assertEquals(1L, r.get(0).getSeccionId());
+        assertEquals(EstadoSesion.PROGRAMADA, r.get(0).getEstado());
+    }
+
+    @Test
+    void listarPorSeccion_sinSesiones() {
+        when(repo.findByBloqueHorarioAsignacionCursoSeccionIdAndFechaBetween(1L, LUNES_1, LUNES_1))
+                .thenReturn(List.of());
+
+        List<SesionClaseResponse> r = sesionService.listarPorSeccion(1L, LUNES_1, LUNES_1);
+
+        assertTrue(r.isEmpty());
+    }
+
     // --- Tests: listado por docente (HU-GEMIH-04) ---
 
     private SesionClase crearSesion(Long id, BloqueHorario bloque, LocalDate fecha) {

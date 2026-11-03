@@ -296,8 +296,8 @@ public class SesionClaseServiceImpl implements SesionClaseService {
         SesionClaseResponse r = new SesionClaseResponse();
         r.setId(s.getId());
         r.setFecha(s.getFecha());
-        r.setHoraInicio(s.getHoraInicio());
-        r.setHoraFin(s.getHoraFin());
+        r.setHoraInicio(s.getHoraInicio().toLocalTime());
+        r.setHoraFin(s.getHoraFin().toLocalTime());
         r.setEstado(s.getEstado());
         r.setBloqueHorarioId(s.getBloqueHorario().getId());
         r.setDiaSemana(s.getBloqueHorario().getDiaSemana());
