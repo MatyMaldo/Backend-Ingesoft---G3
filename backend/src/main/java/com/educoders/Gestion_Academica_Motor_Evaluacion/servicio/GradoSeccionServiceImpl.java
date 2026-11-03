@@ -29,6 +29,7 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.stream.Collectors;
 
+import com.educoders.Gestion_Matricula_Pagos.dominio.PeriodoMatricula;
 import com.educoders.Gestion_Matricula_Pagos.persistencia.PeriodoMatriculaRepository;
 import com.educoders.Gestion_Academica_Motor_Evaluacion.presentacion.dto.VacantesAnioResponse;
 import com.educoders.Gestion_Academica_Motor_Evaluacion.presentacion.dto.GradoConSeccionesResponse;
@@ -114,34 +115,28 @@ public class GradoSeccionServiceImpl implements GradoSeccionService {
                 .orElseThrow(() -> new RecursoNoEncontradoException("Año académico no encontrado con ID: " + request.getAnioAcademicoId()));
 
 
-        // Validar que el año académico esté en preparación o el periodo de matrícula esté vigente
+        // Validar que el año académico esté en preparación (antes del inicio del periodo de matrícula)
         LocalDate hoy = LocalDate.now();
 
-        var periodoMatricula = periodoMatriculaRepository
+        LocalDate inicioMatricula = periodoMatriculaRepository
                 .findByAnioAcademicoId(anio.getId())
+                .map(PeriodoMatricula::getFechaInicio)
                 .orElse(null);
 
         boolean enPreparacion = false;
 
-        if (periodoMatricula != null) {
-            // Permitir si el periodo de matrícula está vigente
-            if (periodoMatricula.estaVigente(hoy)) {
-                enPreparacion = true;
-            }
-            // O si estamos antes del inicio de matrícula (fase de preparación)
-            else if (hoy.isBefore(periodoMatricula.getFechaInicio())) {
-                enPreparacion = anioAcademicoRepository
-                        .findFirstByAnioLessThanOrderByAnioDesc(anio.getAnio())
-                        .map(anioAnterior ->
-                                anioAnterior.getFechaFin() != null
-                                        && hoy.isAfter(anioAnterior.getFechaFin()))
-                        .orElse(true);
-            }
+        if (inicioMatricula != null && hoy.isBefore(inicioMatricula)) {
+            enPreparacion = anioAcademicoRepository
+                    .findFirstByAnioLessThanOrderByAnioDesc(anio.getAnio())
+                    .map(anioAnterior ->
+                            anioAnterior.getFechaFin() != null
+                                    && hoy.isAfter(anioAnterior.getFechaFin()))
+                    .orElse(true);
         }
 
         if (!enPreparacion) {
             throw new ReglaNegocioException(
-                    "El registro de secciones solo está habilitado mientras el año académico está en preparación o el periodo de matrícula está vigente");
+                    "El registro de secciones solo está habilitado mientras el año académico está en preparación");
         }
 
 
