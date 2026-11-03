@@ -42,6 +42,15 @@ public class SesionClaseController {
                 service.listarPorSeccion(seccionId, fechaInicio, fechaFin)));
     }
 
+    @GetMapping("/docente/{docenteId}")
+    public ResponseEntity<RespuestaApiResponse<List<SesionClaseResponse>>> listarPorDocente(
+            @PathVariable Long docenteId,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fechaInicio,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fechaFin) {
+        return ResponseEntity.ok(RespuestaApiResponse.crearExito(
+                service.listarPorDocente(docenteId, fechaInicio, fechaFin)));
+    }
+
     @GetMapping("/{id}")
     public ResponseEntity<RespuestaApiResponse<SesionClaseResponse>> obtener(@PathVariable Long id) {
         return ResponseEntity.ok(RespuestaApiResponse.crearExito(service.obtener(id)));

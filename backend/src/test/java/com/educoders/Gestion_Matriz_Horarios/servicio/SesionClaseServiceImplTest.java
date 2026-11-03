@@ -13,10 +13,12 @@ import com.educoders.Gestion_Matriz_Horarios.presentacion.dto.GenerarSesionesReq
 import com.educoders.Gestion_Matriz_Horarios.presentacion.dto.GenerarSesionesResponse;
 import com.educoders.Gestion_Matriz_Horarios.presentacion.dto.PreviewSesionesRequest;
 import com.educoders.Gestion_Matriz_Horarios.presentacion.dto.PreviewSesionesResponse;
+import com.educoders.Gestion_Matriz_Horarios.presentacion.dto.SesionClaseResponse;
 import com.educoders.Gestion_Matriz_Horarios.presentacion.dto.SesionOmitida;
 import com.educoders.Gestion_Matricula_Pagos.dominio.PeriodoMatricula;
 import com.educoders.Gestion_Matricula_Pagos.persistencia.PeriodoMatriculaRepository;
 import com.educoders.Infraestructura_Servicios.enums.DiaSemana;
+import com.educoders.Infraestructura_Servicios.enums.EstadoSesion;
 import com.educoders.Infraestructura_Servicios.exception.ReglaNegocioException;
 import com.educoders.Seguridad_Auditoria.dominio.Docente;
 
@@ -27,6 +29,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.List;
 import java.util.Optional;
@@ -307,5 +310,44 @@ class SesionClaseServiceImplTest {
         ReglaNegocioException ex = assertThrows(ReglaNegocioException.class,
                 () -> sesionService.generarSesiones(generarReq(LUNES_1, LUNES_1)));
         assertEquals("No existe un periodo de matrícula registrado para este año académico.", ex.getMessage());
+    }
+
+    // --- Tests: listado por docente (HU-GEMIH-04) ---
+
+    private SesionClase crearSesion(Long id, BloqueHorario bloque, LocalDate fecha) {
+        SesionClase s = new SesionClase();
+        s.setId(id);
+        s.setFecha(fecha);
+        s.setHoraInicio(LocalDateTime.of(fecha, bloque.getHoraInicio()));
+        s.setHoraFin(LocalDateTime.of(fecha, bloque.getHoraFin()));
+        s.setEstado(EstadoSesion.PROGRAMADA);
+        s.setBloqueHorario(bloque);
+        return s;
+    }
+
+    @Test
+    void listarPorDocente_exitoso() {
+        BloqueHorario bloque = crearBloque(10L, DiaSemana.LUNES, LocalTime.of(8, 0), LocalTime.of(10, 0));
+        SesionClase sesion = crearSesion(100L, bloque, LUNES_1);
+
+        when(repo.findByBloqueHorarioAsignacionCursoDocenteIdAndFechaBetween(2L, LUNES_1, LUNES_1))
+                .thenReturn(List.of(sesion));
+
+        List<SesionClaseResponse> r = sesionService.listarPorDocente(2L, LUNES_1, LUNES_1);
+
+        assertEquals(1, r.size());
+        assertEquals(100L, r.get(0).getId());
+        assertEquals(2L, r.get(0).getDocenteId());
+        assertEquals(LUNES_1, r.get(0).getFecha());
+    }
+
+    @Test
+    void listarPorDocente_sinSesiones() {
+        when(repo.findByBloqueHorarioAsignacionCursoDocenteIdAndFechaBetween(2L, LUNES_1, LUNES_1))
+                .thenReturn(List.of());
+
+        List<SesionClaseResponse> r = sesionService.listarPorDocente(2L, LUNES_1, LUNES_1);
+
+        assertTrue(r.isEmpty());
     }
 }

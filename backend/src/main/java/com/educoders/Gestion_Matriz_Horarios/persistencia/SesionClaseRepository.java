@@ -9,6 +9,7 @@ import java.util.List;
 public interface SesionClaseRepository extends JpaRepository<SesionClase, Long> {
     List<SesionClase> findByBloqueHorarioId(Long bloqueHorarioId);
     List<SesionClase> findByBloqueHorarioAsignacionCursoSeccionIdAndFechaBetween(Long seccionId, LocalDate inicio, LocalDate fin);
+    List<SesionClase> findByBloqueHorarioAsignacionCursoDocenteIdAndFechaBetween(Long docenteId, LocalDate inicio, LocalDate fin);
     boolean existsByBloqueHorarioIdAndFecha(Long bloqueHorarioId, LocalDate fecha);
     List<SesionClase> findByBloqueHorarioIdAndFecha(Long bloqueHorarioId, LocalDate fecha);
 }

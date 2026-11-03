@@ -148,6 +148,13 @@ public class SesionClaseServiceImpl implements SesionClaseService {
 
     @Override
     @Transactional(readOnly = true)
+    public List<SesionClaseResponse> listarPorDocente(Long docenteId, LocalDate fechaInicio, LocalDate fechaFin) {
+        return repo.findByBloqueHorarioAsignacionCursoDocenteIdAndFechaBetween(docenteId, fechaInicio, fechaFin)
+                .stream().map(this::mapear).toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public SesionClaseResponse obtener(Long id) {
         SesionClase s = repo.findById(id)
                 .orElseThrow(() -> RecursoNoEncontradoException.de("sesión de clase", id));
