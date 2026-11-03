@@ -5,6 +5,7 @@ import com.educoders.Infraestructura_Servicios.enums.TipoAccionAuditoria;
 import com.educoders.Infraestructura_Servicios.exception.RecursoNoEncontradoException;
 import com.educoders.Seguridad_Auditoria.dominio.Auditoria;
 import com.educoders.Seguridad_Auditoria.dominio.DetalleAuditoria;
+import com.educoders.Seguridad_Auditoria.dominio.Usuario;
 import com.educoders.Seguridad_Auditoria.persistencia.AuditoriaRepository;
 import com.educoders.Seguridad_Auditoria.presentacion.dto.AuditoriaResponseDTO;
 import com.educoders.Seguridad_Auditoria.presentacion.dto.DetalleAuditoriaDTO;
@@ -95,7 +96,15 @@ public class AuditoriaServiceImpl implements AuditoriaService {
         try {
             Authentication auth = SecurityContextHolder.getContext().getAuthentication();
             if (auth != null && auth.isAuthenticated() && auth.getPrincipal() != null) {
-                String principal = auth.getPrincipal().toString();
+                Object principalObj = auth.getPrincipal();
+
+                // El filtro JWT actual expone la entidad Usuario como principal.
+                if (principalObj instanceof Usuario usuario) {
+                    return usuario.getId();
+                }
+
+                // Compatibilidad con implementaciones que exponen el id como texto.
+                String principal = principalObj.toString();
                 if (!principal.isBlank() && !"anonymousUser".equalsIgnoreCase(principal)) {
                     try {
                         return Long.valueOf(principal);
