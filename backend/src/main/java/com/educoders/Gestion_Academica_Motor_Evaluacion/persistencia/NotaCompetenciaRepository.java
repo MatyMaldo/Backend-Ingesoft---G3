@@ -26,4 +26,25 @@ public interface NotaCompetenciaRepository extends JpaRepository<NotaCompetencia
             @Param("idEstudiante") Long idEstudiante,
             @Param("idCurso") Long idCurso,
             @Param("idAnioAcademico") Long idAnioAcademico);
+
+
+    // HU-EVAL-04 y HU-EVAL-05:
+    // Obtener las notas por competencia de un estudiante
+    // correspondientes al bimestre de su libreta.
+    @Query("""
+            SELECT nc
+            FROM NotaCompetencia nc
+            JOIN FETCH nc.competencia c
+            JOIN FETCH c.curso curso
+            JOIN FETCH nc.bimestre b
+            WHERE nc.estudiante.id = :idEstudiante
+              AND b.id = :idBimestre
+            ORDER BY curso.nombre, c.nombre
+            """)
+    List<NotaCompetencia> buscarNotasParaLibreta(
+            @Param("idEstudiante") Long idEstudiante,
+            @Param("idBimestre") Long idBimestre
+    );
+
+
 }
