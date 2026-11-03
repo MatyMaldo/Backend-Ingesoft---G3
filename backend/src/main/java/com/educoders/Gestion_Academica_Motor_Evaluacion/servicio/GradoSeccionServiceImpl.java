@@ -33,6 +33,7 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.stream.Collectors;
 
+import com.educoders.Gestion_Matricula_Pagos.dominio.PeriodoMatricula;
 import com.educoders.Gestion_Matricula_Pagos.persistencia.PeriodoMatriculaRepository;
 import com.educoders.Gestion_Academica_Motor_Evaluacion.presentacion.dto.VacantesAnioResponse;
 import com.educoders.Gestion_Academica_Motor_Evaluacion.presentacion.dto.GradoConSeccionesResponse;
@@ -120,19 +121,19 @@ public class GradoSeccionServiceImpl implements GradoSeccionService {
                 .orElseThrow(() -> new RecursoNoEncontradoException("Año académico no encontrado con ID: " + request.getAnioAcademicoId()));
 
 
-        // HU-GEMAP-11: crear secciones solo antes del inicio de matrícula.
+        // Validar que el año académico esté en preparación (antes del inicio del periodo de matrícula)
         LocalDate hoy = LocalDate.now();
 
-        var periodoMatricula = periodoMatriculaRepository
+        LocalDate inicioMatricula = periodoMatriculaRepository
                 .findByAnioAcademicoId(anio.getId())
+                .map(PeriodoMatricula::getFechaInicio)
                 .orElse(null);
+
 
         boolean enPreparacion = false;
 
-        if (periodoMatricula != null
-                && periodoMatricula.getFechaInicio() != null
-                && hoy.isBefore(periodoMatricula.getFechaInicio())) {
-
+        // Permitir crear secciones únicamente antes del inicio de matrícula.
+        if (inicioMatricula != null && hoy.isBefore(inicioMatricula)) {
             enPreparacion = anioAcademicoRepository
                     .findFirstByAnioLessThanOrderByAnioDesc(anio.getAnio())
                     .map(anioAnterior ->
@@ -140,6 +141,7 @@ public class GradoSeccionServiceImpl implements GradoSeccionService {
                                     && hoy.isAfter(anioAnterior.getFechaFin()))
                     .orElse(true);
         }
+
 
         if (!enPreparacion) {
             throw new ReglaNegocioException(

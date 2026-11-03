@@ -2,11 +2,15 @@ package com.educoders.Gestion_Matriz_Horarios.presentacion.controladores;
 
 import com.educoders.Gestion_Matriz_Horarios.presentacion.dto.*;
 import com.educoders.Gestion_Matriz_Horarios.servicio.BloqueHorarioService;
+import com.educoders.Gestion_Matriz_Horarios.servicio.HorarioCsvService;
 import com.educoders.Infraestructura_Servicios.dto.RespuestaApiResponse;
 import jakarta.validation.Valid;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
@@ -15,9 +19,11 @@ import java.util.List;
 public class BloqueHorarioController {
 
     private final BloqueHorarioService service;
+    private final HorarioCsvService csvService;
 
-    public BloqueHorarioController(BloqueHorarioService service) {
+    public BloqueHorarioController(BloqueHorarioService service, HorarioCsvService csvService) {
         this.service = service;
+        this.csvService = csvService;
     }
 
     @PostMapping
@@ -35,6 +41,28 @@ public class BloqueHorarioController {
             @RequestParam(required = false) Long docenteId) {
         List<BloqueHorarioResponse> r = service.listar(gradoId, seccionId, anioId, docenteId);
         return ResponseEntity.ok(RespuestaApiResponse.crearExito(r));
+    }
+
+    /** HU-GEMIH-08: descarga de la plantilla CSV de horarios. */
+    @GetMapping("/plantilla-csv")
+    public ResponseEntity<byte[]> descargarPlantilla() {
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"plantilla-horarios.csv\"")
+                .contentType(MediaType.parseMediaType("text/csv; charset=UTF-8"))
+                .body(csvService.generarPlantilla());
+    }
+
+    /** HU-GEMIH-09: carga masiva de bloques horarios desde CSV. */
+    @PostMapping(value = "/carga-masiva", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<RespuestaApiResponse<CargaMasivaResponse>> cargaMasiva(
+            @RequestParam("file") MultipartFile archivo,
+            @RequestParam(required = false) Long anioAcademicoId) {
+        CargaMasivaResponse resultado = csvService.cargarMasivo(archivo, anioAcademicoId);
+        HttpStatus estado = resultado.getErrores().isEmpty()
+                ? HttpStatus.CREATED
+                : HttpStatus.BAD_REQUEST;
+        return ResponseEntity.status(estado)
+                .body(RespuestaApiResponse.crearExito(resultado));
     }
 
     @GetMapping("/{id}")
