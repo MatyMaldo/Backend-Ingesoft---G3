@@ -18,6 +18,10 @@ import com.educoders.Infraestructura_Servicios.exception.ConflictoException;
 import com.educoders.Infraestructura_Servicios.exception.RecursoNoEncontradoException;
 import com.educoders.Infraestructura_Servicios.exception.ReglaNegocioException;
 import com.educoders.Seguridad_Auditoria.dominio.Docente;
+import com.educoders.Seguridad_Auditoria.servicio.AuditoriaService;
+import com.educoders.Seguridad_Auditoria.presentacion.dto.RegistrarAuditoriaRequestDTO;
+import com.educoders.Infraestructura_Servicios.enums.CategoriaAuditoria;
+import com.educoders.Infraestructura_Servicios.enums.TipoAccionAuditoria;
 import com.educoders.Seguridad_Auditoria.persistencia.DocenteRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -49,6 +53,7 @@ public class GradoSeccionServiceImpl implements GradoSeccionService {
     private final PeriodoMatriculaRepository periodoMatriculaRepository;
     private final MatriculaRepository matriculaRepository;
     private final ValidadorVentanaAcademica validadorVentana;
+    private final AuditoriaService auditoriaService;
 
     public GradoSeccionServiceImpl(
             GradoRepository gradoRepository,
@@ -57,7 +62,7 @@ public class GradoSeccionServiceImpl implements GradoSeccionService {
             DocenteRepository docenteRepository,
             PeriodoMatriculaRepository periodoMatriculaRepository,
             MatriculaRepository matriculaRepository,
-            ValidadorVentanaAcademica validadorVentana) {
+            ValidadorVentanaAcademica validadorVentana, AuditoriaService auditoriaService) {
 
         this.gradoRepository = gradoRepository;
         this.seccionRepository = seccionRepository;
@@ -66,6 +71,7 @@ public class GradoSeccionServiceImpl implements GradoSeccionService {
         this.periodoMatriculaRepository = periodoMatriculaRepository;
         this.matriculaRepository = matriculaRepository;
         this.validadorVentana = validadorVentana;
+        this.auditoriaService = auditoriaService;
     }
 
 
@@ -114,7 +120,7 @@ public class GradoSeccionServiceImpl implements GradoSeccionService {
                 .orElseThrow(() -> new RecursoNoEncontradoException("Año académico no encontrado con ID: " + request.getAnioAcademicoId()));
 
 
-        // Validar que el año académico esté en preparación o el periodo de matrícula esté vigente
+        // HU-GEMAP-11: crear secciones solo antes del inicio de matrícula.
         LocalDate hoy = LocalDate.now();
 
         var periodoMatricula = periodoMatriculaRepository
@@ -123,28 +129,22 @@ public class GradoSeccionServiceImpl implements GradoSeccionService {
 
         boolean enPreparacion = false;
 
-        if (periodoMatricula != null) {
-            // Permitir si el periodo de matrícula está vigente
-            if (periodoMatricula.estaVigente(hoy)) {
-                enPreparacion = true;
-            }
-            // O si estamos antes del inicio de matrícula (fase de preparación)
-            else if (hoy.isBefore(periodoMatricula.getFechaInicio())) {
-                enPreparacion = anioAcademicoRepository
-                        .findFirstByAnioLessThanOrderByAnioDesc(anio.getAnio())
-                        .map(anioAnterior ->
-                                anioAnterior.getFechaFin() != null
-                                        && hoy.isAfter(anioAnterior.getFechaFin()))
-                        .orElse(true);
-            }
+        if (periodoMatricula != null
+                && periodoMatricula.getFechaInicio() != null
+                && hoy.isBefore(periodoMatricula.getFechaInicio())) {
+
+            enPreparacion = anioAcademicoRepository
+                    .findFirstByAnioLessThanOrderByAnioDesc(anio.getAnio())
+                    .map(anioAnterior ->
+                            anioAnterior.getFechaFin() != null
+                                    && hoy.isAfter(anioAnterior.getFechaFin()))
+                    .orElse(true);
         }
 
         if (!enPreparacion) {
             throw new ReglaNegocioException(
-                    "El registro de secciones solo está habilitado mientras el año académico está en preparación o el periodo de matrícula está vigente");
+                    "El registro de secciones solo está habilitado mientras el año académico está en preparación");
         }
-
-
         // Validar duplicado ignorando mayúsculas
         if (seccionRepository.existsByGradoIdAndAnioAcademicoIdAndNombreIgnoreCase(request.getGradoId(), request.getAnioAcademicoId(), request.getNombre())) {
             throw new ConflictoException("La sección '" + request.getNombre() + "' ya existe para este grado y año académico.");
@@ -160,6 +160,19 @@ public class GradoSeccionServiceImpl implements GradoSeccionService {
                 .build();
 
         Seccion guardada = seccionRepository.save(seccion);
+
+        RegistrarAuditoriaRequestDTO registro = new RegistrarAuditoriaRequestDTO();
+        registro.setCategoria(CategoriaAuditoria.CONFIGURACION);
+        registro.setAccion(TipoAccionAuditoria.CREAR);
+        registro.setEntidad("Seccion");
+        registro.setEntidadId(guardada.getId());
+        registro.setDescripcion(
+                "Creacion de la seccion " + guardada.getNombre()
+                + " del grado " + grado.getNombre()
+                + " para el anio academico " + anio.getAnio()
+        );
+
+        auditoriaService.registrarAuditoria(registro);
         return mapToSeccionResponse(guardada);
     }
 
@@ -241,15 +254,18 @@ public class GradoSeccionServiceImpl implements GradoSeccionService {
                         id)) {
                     throw new ConflictoException("La sección '" + request.getNombre() + "' ya existe para este grado y año académico.");
                 }
-                seccion.setNombre(request.getNombre());
+                seccion.setNombre(request.getNombre().toUpperCase(java.util.Locale.ROOT));
             }
         }
 
-        // Validar y actualizar capacidad máxima
-        if (request.getCapacidadMaxima() != null) {
 
-            seccion.setCapacidadMaxima(request.getCapacidadMaxima());
+        // HU-GEMAP-11: la capacidad de cada sección es fija (30).
+        if (request.getCapacidadMaxima() != null
+                && !request.getCapacidadMaxima().equals(30)) {
+            throw new ReglaNegocioException(
+                    "La capacidad máxima de una sección debe ser de 30 estudiantes.");
         }
+
 
         // Validar y actualizar tutor
         if (request.tieneTutorIdPresente()) {
