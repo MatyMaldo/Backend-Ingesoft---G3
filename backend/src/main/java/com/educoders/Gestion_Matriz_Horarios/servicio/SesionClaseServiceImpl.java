@@ -5,14 +5,26 @@ import com.educoders.Gestion_Matriz_Horarios.dominio.SesionClase;
 import com.educoders.Gestion_Matriz_Horarios.persistencia.BloqueHorarioRepository;
 import com.educoders.Gestion_Matriz_Horarios.persistencia.SesionClaseRepository;
 import com.educoders.Gestion_Matriz_Horarios.presentacion.dto.*;
+import com.educoders.Gestion_Matricula_Pagos.dominio.Matricula;
 import com.educoders.Gestion_Matricula_Pagos.dominio.PeriodoMatricula;
+import com.educoders.Gestion_Matricula_Pagos.persistencia.MatriculaRepository;
 import com.educoders.Gestion_Matricula_Pagos.persistencia.PeriodoMatriculaRepository;
 import com.educoders.Infraestructura_Servicios.enums.DiaSemana;
+import com.educoders.Infraestructura_Servicios.enums.EstadoMatricula;
 import com.educoders.Infraestructura_Servicios.enums.EstadoSesion;
 import com.educoders.Infraestructura_Servicios.exception.RecursoNoEncontradoException;
 import com.educoders.Infraestructura_Servicios.exception.ReglaNegocioException;
+import com.educoders.Seguridad_Auditoria.dominio.Apoderado;
+import com.educoders.Seguridad_Auditoria.dominio.Docente;
+import com.educoders.Seguridad_Auditoria.dominio.Estudiante;
+import com.educoders.Seguridad_Auditoria.dominio.Usuario;
+import com.educoders.Seguridad_Auditoria.persistencia.EstudianteRepository;
+import org.springframework.http.HttpStatus;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.DayOfWeek;
 import java.time.LocalDate;
@@ -27,13 +39,19 @@ public class SesionClaseServiceImpl implements SesionClaseService {
     private final SesionClaseRepository repo;
     private final BloqueHorarioRepository bloqueRepo;
     private final PeriodoMatriculaRepository periodoRepo;
+    private final MatriculaRepository matriculaRepo;
+    private final EstudianteRepository estudianteRepo;
 
     public SesionClaseServiceImpl(SesionClaseRepository repo,
                                   BloqueHorarioRepository bloqueRepo,
-                                  PeriodoMatriculaRepository periodoRepo) {
+                                  PeriodoMatriculaRepository periodoRepo,
+                                  MatriculaRepository matriculaRepo,
+                                  EstudianteRepository estudianteRepo) {
         this.repo = repo;
         this.bloqueRepo = bloqueRepo;
         this.periodoRepo = periodoRepo;
+        this.matriculaRepo = matriculaRepo;
+        this.estudianteRepo = estudianteRepo;
     }
 
     // ------------------------------------------------------------------
@@ -148,6 +166,65 @@ public class SesionClaseServiceImpl implements SesionClaseService {
 
     @Override
     @Transactional(readOnly = true)
+    public List<SesionClaseResponse> listarPorDocente(Long docenteId, LocalDate fechaInicio, LocalDate fechaFin) {
+        return repo.findByBloqueHorarioAsignacionCursoDocenteIdAndFechaBetween(docenteId, fechaInicio, fechaFin)
+                .stream().map(this::mapear).toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<SesionClaseResponse> listarMiHorarioDocente(LocalDate fechaInicio, LocalDate fechaFin) {
+        Usuario usuario = obtenerUsuarioAutenticado();
+        if (!(usuario instanceof Docente docente)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "Solo un docente puede consultar su propio horario.");
+        }
+        return listarPorDocente(docente.getId(), fechaInicio, fechaFin);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<SesionClaseResponse> listarMiHorarioEstudiante(LocalDate fechaInicio, LocalDate fechaFin) {
+        Usuario usuario = obtenerUsuarioAutenticado();
+        if (!(usuario instanceof Estudiante estudiante)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "Solo un estudiante puede consultar su propio horario.");
+        }
+
+        Long seccionId = obtenerSeccionDelEstudiante(estudiante.getId(), fechaInicio.getYear());
+        if (seccionId == null) {
+            return List.of();
+        }
+        return listarPorSeccion(seccionId, fechaInicio, fechaFin);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<SesionClaseResponse> listarPorApoderado(Long estudianteId, LocalDate fechaInicio, LocalDate fechaFin) {
+        Usuario usuario = obtenerUsuarioAutenticado();
+        if (!(usuario instanceof Apoderado apoderado)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "Solo un apoderado puede consultar el horario de sus estudiantes.");
+        }
+
+        Estudiante estudiante = estudianteRepo.findById(estudianteId)
+                .orElseThrow(() -> RecursoNoEncontradoException.de("estudiante", estudianteId));
+
+        if (estudiante.getApoderado() == null
+                || !estudiante.getApoderado().getId().equals(apoderado.getId())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "El estudiante no se encuentra a su cargo.");
+        }
+
+        Long seccionId = obtenerSeccionDelEstudiante(estudianteId, fechaInicio.getYear());
+        if (seccionId == null) {
+            return List.of();
+        }
+        return listarPorSeccion(seccionId, fechaInicio, fechaFin);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public SesionClaseResponse obtener(Long id) {
         SesionClase s = repo.findById(id)
                 .orElseThrow(() -> RecursoNoEncontradoException.de("sesión de clase", id));
@@ -193,12 +270,34 @@ public class SesionClaseServiceImpl implements SesionClaseService {
         return bloqueId + "|" + fecha;
     }
 
+    private Usuario obtenerUsuarioAutenticado() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || !auth.isAuthenticated()
+                || !(auth.getPrincipal() instanceof Usuario usuario)) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "No autenticado");
+        }
+        return usuario;
+    }
+
+    /** Devuelve la sección de la matrícula del estudiante para el año indicado, o null si no tiene. */
+    private Long obtenerSeccionDelEstudiante(Long estudianteId, Integer anio) {
+        List<Matricula> matriculas = matriculaRepo.buscarMatriculasConSeccionYAnio(estudianteId);
+        return matriculas.stream()
+                .filter(m -> m.getEstado() != EstadoMatricula.CANCELADA)
+                .filter(m -> m.getSeccion() != null
+                        && m.getSeccion().getAnioAcademico() != null
+                        && anio.equals(m.getSeccion().getAnioAcademico().getAnio()))
+                .map(m -> m.getSeccion().getId())
+                .findFirst()
+                .orElse(null);
+    }
+
     private SesionClaseResponse mapear(SesionClase s) {
         SesionClaseResponse r = new SesionClaseResponse();
         r.setId(s.getId());
         r.setFecha(s.getFecha());
-        r.setHoraInicio(s.getHoraInicio());
-        r.setHoraFin(s.getHoraFin());
+        r.setHoraInicio(s.getHoraInicio().toLocalTime());
+        r.setHoraFin(s.getHoraFin().toLocalTime());
         r.setEstado(s.getEstado());
         r.setBloqueHorarioId(s.getBloqueHorario().getId());
         r.setDiaSemana(s.getBloqueHorario().getDiaSemana());

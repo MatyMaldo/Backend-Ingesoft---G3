@@ -4,13 +4,13 @@ import com.educoders.Infraestructura_Servicios.enums.DiaSemana;
 import com.educoders.Infraestructura_Servicios.enums.EstadoSesion;
 
 import java.time.LocalDate;
-import java.time.LocalDateTime;
+import java.time.LocalTime;
 
 public class SesionClaseResponse {
     private Long id;
     private LocalDate fecha;
-    private LocalDateTime horaInicio;
-    private LocalDateTime horaFin;
+    private LocalTime horaInicio;
+    private LocalTime horaFin;
     private EstadoSesion estado;
     private Long bloqueHorarioId;
     private DiaSemana diaSemana;
@@ -28,10 +28,10 @@ public class SesionClaseResponse {
     public void setId(Long id) { this.id = id; }
     public LocalDate getFecha() { return fecha; }
     public void setFecha(LocalDate fecha) { this.fecha = fecha; }
-    public LocalDateTime getHoraInicio() { return horaInicio; }
-    public void setHoraInicio(LocalDateTime horaInicio) { this.horaInicio = horaInicio; }
-    public LocalDateTime getHoraFin() { return horaFin; }
-    public void setHoraFin(LocalDateTime horaFin) { this.horaFin = horaFin; }
+    public LocalTime getHoraInicio() { return horaInicio; }
+    public void setHoraInicio(LocalTime horaInicio) { this.horaInicio = horaInicio; }
+    public LocalTime getHoraFin() { return horaFin; }
+    public void setHoraFin(LocalTime horaFin) { this.horaFin = horaFin; }
     public EstadoSesion getEstado() { return estado; }
     public void setEstado(EstadoSesion estado) { this.estado = estado; }
     public Long getBloqueHorarioId() { return bloqueHorarioId; }

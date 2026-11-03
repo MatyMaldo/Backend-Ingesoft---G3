@@ -13,20 +13,35 @@ import com.educoders.Gestion_Matriz_Horarios.presentacion.dto.GenerarSesionesReq
 import com.educoders.Gestion_Matriz_Horarios.presentacion.dto.GenerarSesionesResponse;
 import com.educoders.Gestion_Matriz_Horarios.presentacion.dto.PreviewSesionesRequest;
 import com.educoders.Gestion_Matriz_Horarios.presentacion.dto.PreviewSesionesResponse;
+import com.educoders.Gestion_Matriz_Horarios.presentacion.dto.SesionClaseResponse;
 import com.educoders.Gestion_Matriz_Horarios.presentacion.dto.SesionOmitida;
+import com.educoders.Gestion_Matricula_Pagos.dominio.Matricula;
 import com.educoders.Gestion_Matricula_Pagos.dominio.PeriodoMatricula;
+import com.educoders.Gestion_Matricula_Pagos.persistencia.MatriculaRepository;
 import com.educoders.Gestion_Matricula_Pagos.persistencia.PeriodoMatriculaRepository;
+import com.educoders.Infraestructura_Servicios.enums.EstadoMatricula;
 import com.educoders.Infraestructura_Servicios.enums.DiaSemana;
+import com.educoders.Infraestructura_Servicios.enums.EstadoSesion;
 import com.educoders.Infraestructura_Servicios.exception.ReglaNegocioException;
+import com.educoders.Seguridad_Auditoria.dominio.Apoderado;
 import com.educoders.Seguridad_Auditoria.dominio.Docente;
+import com.educoders.Seguridad_Auditoria.dominio.Estudiante;
+import com.educoders.Seguridad_Auditoria.dominio.Usuario;
+import com.educoders.Seguridad_Auditoria.persistencia.EstudianteRepository;
 
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.http.HttpStatus;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.List;
 import java.util.Optional;
@@ -56,6 +71,12 @@ class SesionClaseServiceImplTest {
 
     @Mock
     private PeriodoMatriculaRepository periodoRepo;
+
+    @Mock
+    private MatriculaRepository matriculaRepo;
+
+    @Mock
+    private EstudianteRepository estudianteRepo;
 
     @InjectMocks
     private SesionClaseServiceImpl sesionService;
@@ -307,5 +328,285 @@ class SesionClaseServiceImplTest {
         ReglaNegocioException ex = assertThrows(ReglaNegocioException.class,
                 () -> sesionService.generarSesiones(generarReq(LUNES_1, LUNES_1)));
         assertEquals("No existe un periodo de matrícula registrado para este año académico.", ex.getMessage());
+    }
+
+    // --- Tests: listado por sección (HU-GEMIH-03) ---
+
+    @Test
+    void listarPorSeccion_exitoso() {
+        BloqueHorario bloque = crearBloque(10L, DiaSemana.LUNES, LocalTime.of(8, 0), LocalTime.of(10, 0));
+        SesionClase sesion = crearSesion(100L, bloque, LUNES_1);
+
+        when(repo.findByBloqueHorarioAsignacionCursoSeccionIdAndFechaBetween(1L, LUNES_1, LUNES_1))
+                .thenReturn(List.of(sesion));
+
+        List<SesionClaseResponse> r = sesionService.listarPorSeccion(1L, LUNES_1, LUNES_1);
+
+        assertEquals(1, r.size());
+        assertEquals(100L, r.get(0).getId());
+        assertEquals(LUNES_1, r.get(0).getFecha());
+        assertEquals(LocalTime.of(8, 0), r.get(0).getHoraInicio());
+        assertEquals(LocalTime.of(10, 0), r.get(0).getHoraFin());
+        assertEquals("Matematicas", r.get(0).getCursoNombre());
+        assertEquals("Juan Perez", r.get(0).getDocenteNombre());
+        assertEquals("Aula 101", r.get(0).getAulaNombre());
+        assertEquals(1L, r.get(0).getSeccionId());
+        assertEquals(EstadoSesion.PROGRAMADA, r.get(0).getEstado());
+    }
+
+    @Test
+    void listarPorSeccion_sinSesiones() {
+        when(repo.findByBloqueHorarioAsignacionCursoSeccionIdAndFechaBetween(1L, LUNES_1, LUNES_1))
+                .thenReturn(List.of());
+
+        List<SesionClaseResponse> r = sesionService.listarPorSeccion(1L, LUNES_1, LUNES_1);
+
+        assertTrue(r.isEmpty());
+    }
+
+    // --- Tests: listado por docente (HU-GEMIH-04) ---
+
+    private SesionClase crearSesion(Long id, BloqueHorario bloque, LocalDate fecha) {
+        SesionClase s = new SesionClase();
+        s.setId(id);
+        s.setFecha(fecha);
+        s.setHoraInicio(LocalDateTime.of(fecha, bloque.getHoraInicio()));
+        s.setHoraFin(LocalDateTime.of(fecha, bloque.getHoraFin()));
+        s.setEstado(EstadoSesion.PROGRAMADA);
+        s.setBloqueHorario(bloque);
+        return s;
+    }
+
+    @Test
+    void listarPorDocente_exitoso() {
+        BloqueHorario bloque = crearBloque(10L, DiaSemana.LUNES, LocalTime.of(8, 0), LocalTime.of(10, 0));
+        SesionClase sesion = crearSesion(100L, bloque, LUNES_1);
+
+        when(repo.findByBloqueHorarioAsignacionCursoDocenteIdAndFechaBetween(2L, LUNES_1, LUNES_1))
+                .thenReturn(List.of(sesion));
+
+        List<SesionClaseResponse> r = sesionService.listarPorDocente(2L, LUNES_1, LUNES_1);
+
+        assertEquals(1, r.size());
+        assertEquals(100L, r.get(0).getId());
+        assertEquals(2L, r.get(0).getDocenteId());
+        assertEquals(LUNES_1, r.get(0).getFecha());
+    }
+
+    @Test
+    void listarPorDocente_sinSesiones() {
+        when(repo.findByBloqueHorarioAsignacionCursoDocenteIdAndFechaBetween(2L, LUNES_1, LUNES_1))
+                .thenReturn(List.of());
+
+        List<SesionClaseResponse> r = sesionService.listarPorDocente(2L, LUNES_1, LUNES_1);
+
+        assertTrue(r.isEmpty());
+    }
+
+    // --- Tests: mi horario del docente autenticado (HU-GEMIH-05) ---
+
+    @AfterEach
+    void limpiarContexto() {
+        SecurityContextHolder.clearContext();
+    }
+
+    private void autenticarComo(Usuario usuario) {
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken(usuario, null, List.of()));
+    }
+
+    @Test
+    void listarMiHorarioDocente_exitoso() {
+        Docente docente = new Docente();
+        docente.setId(2L);
+        autenticarComo(docente);
+
+        BloqueHorario bloque = crearBloque(10L, DiaSemana.LUNES, LocalTime.of(8, 0), LocalTime.of(10, 0));
+        SesionClase sesion = crearSesion(100L, bloque, LUNES_1);
+
+        when(repo.findByBloqueHorarioAsignacionCursoDocenteIdAndFechaBetween(2L, LUNES_1, LUNES_1))
+                .thenReturn(List.of(sesion));
+
+        List<SesionClaseResponse> r = sesionService.listarMiHorarioDocente(LUNES_1, LUNES_1);
+
+        assertEquals(1, r.size());
+        assertEquals(100L, r.get(0).getId());
+        assertEquals(2L, r.get(0).getDocenteId());
+    }
+
+    @Test
+    void listarMiHorarioDocente_rolIncorrecto() {
+        Estudiante estudiante = new Estudiante();
+        estudiante.setId(5L);
+        autenticarComo(estudiante);
+
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class,
+                () -> sesionService.listarMiHorarioDocente(LUNES_1, LUNES_1));
+        assertEquals(HttpStatus.FORBIDDEN, ex.getStatusCode());
+    }
+
+    @Test
+    void listarMiHorarioDocente_sinAutenticacion() {
+        SecurityContextHolder.clearContext();
+
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class,
+                () -> sesionService.listarMiHorarioDocente(LUNES_1, LUNES_1));
+        assertEquals(HttpStatus.UNAUTHORIZED, ex.getStatusCode());
+    }
+
+    // --- Tests: mi horario del estudiante autenticado (HU-GEMIH-06) ---
+
+    private Matricula crearMatricula(Long id, Long seccionId, Integer anio, EstadoMatricula estado) {
+        com.educoders.Gestion_Academica_Motor_Evaluacion.dominio.AnioAcademico anioAc =
+                new com.educoders.Gestion_Academica_Motor_Evaluacion.dominio.AnioAcademico();
+        anioAc.setId(1L);
+        anioAc.setAnio(anio);
+
+        Grado grado = new Grado();
+        grado.setId(1L);
+        grado.setNombre("1er Grado");
+
+        Seccion seccion = new Seccion();
+        seccion.setId(seccionId);
+        seccion.setNombre("A");
+        seccion.setGrado(grado);
+        seccion.setAnioAcademico(anioAc);
+
+        Matricula m = new Matricula();
+        m.setId(id);
+        m.setSeccion(seccion);
+        m.setEstado(estado);
+        return m;
+    }
+
+    @Test
+    void listarMiHorarioEstudiante_exitoso() {
+        Estudiante estudiante = new Estudiante();
+        estudiante.setId(5L);
+        autenticarComo(estudiante);
+
+        when(matriculaRepo.buscarMatriculasConSeccionYAnio(5L))
+                .thenReturn(List.of(crearMatricula(1L, 1L, 2027, EstadoMatricula.CONFIRMADA)));
+
+        BloqueHorario bloque = crearBloque(10L, DiaSemana.LUNES, LocalTime.of(8, 0), LocalTime.of(10, 0));
+        SesionClase sesion = crearSesion(100L, bloque, LUNES_1);
+        when(repo.findByBloqueHorarioAsignacionCursoSeccionIdAndFechaBetween(1L, LUNES_1, LUNES_1))
+                .thenReturn(List.of(sesion));
+
+        List<SesionClaseResponse> r = sesionService.listarMiHorarioEstudiante(LUNES_1, LUNES_1);
+
+        assertEquals(1, r.size());
+        assertEquals(100L, r.get(0).getId());
+        assertEquals(1L, r.get(0).getSeccionId());
+    }
+
+    @Test
+    void listarMiHorarioEstudiante_sinMatricula() {
+        Estudiante estudiante = new Estudiante();
+        estudiante.setId(5L);
+        autenticarComo(estudiante);
+
+        when(matriculaRepo.buscarMatriculasConSeccionYAnio(5L)).thenReturn(List.of());
+
+        List<SesionClaseResponse> r = sesionService.listarMiHorarioEstudiante(LUNES_1, LUNES_1);
+
+        assertTrue(r.isEmpty());
+    }
+
+    @Test
+    void listarMiHorarioEstudiante_matriculaCancelada() {
+        Estudiante estudiante = new Estudiante();
+        estudiante.setId(5L);
+        autenticarComo(estudiante);
+
+        when(matriculaRepo.buscarMatriculasConSeccionYAnio(5L))
+                .thenReturn(List.of(crearMatricula(1L, 1L, 2027, EstadoMatricula.CANCELADA)));
+
+        List<SesionClaseResponse> r = sesionService.listarMiHorarioEstudiante(LUNES_1, LUNES_1);
+
+        assertTrue(r.isEmpty());
+    }
+
+    @Test
+    void listarMiHorarioEstudiante_rolIncorrecto() {
+        Docente docente = new Docente();
+        docente.setId(2L);
+        autenticarComo(docente);
+
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class,
+                () -> sesionService.listarMiHorarioEstudiante(LUNES_1, LUNES_1));
+        assertEquals(HttpStatus.FORBIDDEN, ex.getStatusCode());
+    }
+
+    // --- Tests: horario del estudiante a cargo del apoderado (HU-GEMIH-07) ---
+
+    private Estudiante crearEstudiante(Long id, Long apoderadoId) {
+        Apoderado apoderado = new Apoderado();
+        apoderado.setId(apoderadoId);
+
+        Estudiante estudiante = new Estudiante();
+        estudiante.setId(id);
+        estudiante.setApoderado(apoderado);
+        return estudiante;
+    }
+
+    @Test
+    void listarPorApoderado_exitoso() {
+        Apoderado apoderado = new Apoderado();
+        apoderado.setId(4L);
+        autenticarComo(apoderado);
+
+        when(estudianteRepo.findById(5L)).thenReturn(Optional.of(crearEstudiante(5L, 4L)));
+        when(matriculaRepo.buscarMatriculasConSeccionYAnio(5L))
+                .thenReturn(List.of(crearMatricula(1L, 1L, 2027, EstadoMatricula.CONFIRMADA)));
+
+        BloqueHorario bloque = crearBloque(10L, DiaSemana.LUNES, LocalTime.of(8, 0), LocalTime.of(10, 0));
+        SesionClase sesion = crearSesion(100L, bloque, LUNES_1);
+        when(repo.findByBloqueHorarioAsignacionCursoSeccionIdAndFechaBetween(1L, LUNES_1, LUNES_1))
+                .thenReturn(List.of(sesion));
+
+        List<SesionClaseResponse> r = sesionService.listarPorApoderado(5L, LUNES_1, LUNES_1);
+
+        assertEquals(1, r.size());
+        assertEquals(100L, r.get(0).getId());
+        assertEquals(1L, r.get(0).getSeccionId());
+    }
+
+    @Test
+    void listarPorApoderado_noEsSuEstudiante() {
+        Apoderado apoderado = new Apoderado();
+        apoderado.setId(4L);
+        autenticarComo(apoderado);
+
+        when(estudianteRepo.findById(5L)).thenReturn(Optional.of(crearEstudiante(5L, 99L)));
+
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class,
+                () -> sesionService.listarPorApoderado(5L, LUNES_1, LUNES_1));
+        assertEquals(HttpStatus.FORBIDDEN, ex.getStatusCode());
+    }
+
+    @Test
+    void listarPorApoderado_estudianteSinMatricula() {
+        Apoderado apoderado = new Apoderado();
+        apoderado.setId(4L);
+        autenticarComo(apoderado);
+
+        when(estudianteRepo.findById(5L)).thenReturn(Optional.of(crearEstudiante(5L, 4L)));
+        when(matriculaRepo.buscarMatriculasConSeccionYAnio(5L)).thenReturn(List.of());
+
+        List<SesionClaseResponse> r = sesionService.listarPorApoderado(5L, LUNES_1, LUNES_1);
+
+        assertTrue(r.isEmpty());
+    }
+
+    @Test
+    void listarPorApoderado_rolIncorrecto() {
+        Docente docente = new Docente();
+        docente.setId(2L);
+        autenticarComo(docente);
+
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class,
+                () -> sesionService.listarPorApoderado(5L, LUNES_1, LUNES_1));
+        assertEquals(HttpStatus.FORBIDDEN, ex.getStatusCode());
     }
 }

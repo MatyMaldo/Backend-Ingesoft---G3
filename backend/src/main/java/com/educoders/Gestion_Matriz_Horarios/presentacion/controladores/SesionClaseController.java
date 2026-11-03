@@ -42,6 +42,40 @@ public class SesionClaseController {
                 service.listarPorSeccion(seccionId, fechaInicio, fechaFin)));
     }
 
+    @GetMapping("/docente/{docenteId}")
+    public ResponseEntity<RespuestaApiResponse<List<SesionClaseResponse>>> listarPorDocente(
+            @PathVariable Long docenteId,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fechaInicio,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fechaFin) {
+        return ResponseEntity.ok(RespuestaApiResponse.crearExito(
+                service.listarPorDocente(docenteId, fechaInicio, fechaFin)));
+    }
+
+    @GetMapping("/mi-horario/docente")
+    public ResponseEntity<RespuestaApiResponse<List<SesionClaseResponse>>> miHorarioDocente(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fechaInicio,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fechaFin) {
+        return ResponseEntity.ok(RespuestaApiResponse.crearExito(
+                service.listarMiHorarioDocente(fechaInicio, fechaFin)));
+    }
+
+    @GetMapping("/mi-horario/estudiante")
+    public ResponseEntity<RespuestaApiResponse<List<SesionClaseResponse>>> miHorarioEstudiante(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fechaInicio,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fechaFin) {
+        return ResponseEntity.ok(RespuestaApiResponse.crearExito(
+                service.listarMiHorarioEstudiante(fechaInicio, fechaFin)));
+    }
+
+    @GetMapping("/apoderado/{estudianteId}")
+    public ResponseEntity<RespuestaApiResponse<List<SesionClaseResponse>>> listarPorApoderado(
+            @PathVariable Long estudianteId,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fechaInicio,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fechaFin) {
+        return ResponseEntity.ok(RespuestaApiResponse.crearExito(
+                service.listarPorApoderado(estudianteId, fechaInicio, fechaFin)));
+    }
+
     @GetMapping("/{id}")
     public ResponseEntity<RespuestaApiResponse<SesionClaseResponse>> obtener(@PathVariable Long id) {
         return ResponseEntity.ok(RespuestaApiResponse.crearExito(service.obtener(id)));
