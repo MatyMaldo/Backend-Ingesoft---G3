@@ -21,12 +21,19 @@ import com.educoders.Infraestructura_Servicios.enums.DiaSemana;
 import com.educoders.Infraestructura_Servicios.enums.EstadoSesion;
 import com.educoders.Infraestructura_Servicios.exception.ReglaNegocioException;
 import com.educoders.Seguridad_Auditoria.dominio.Docente;
+import com.educoders.Seguridad_Auditoria.dominio.Estudiante;
+import com.educoders.Seguridad_Auditoria.dominio.Usuario;
 
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.http.HttpStatus;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -349,5 +356,56 @@ class SesionClaseServiceImplTest {
         List<SesionClaseResponse> r = sesionService.listarPorDocente(2L, LUNES_1, LUNES_1);
 
         assertTrue(r.isEmpty());
+    }
+
+    // --- Tests: mi horario del docente autenticado (HU-GEMIH-05) ---
+
+    @AfterEach
+    void limpiarContexto() {
+        SecurityContextHolder.clearContext();
+    }
+
+    private void autenticarComo(Usuario usuario) {
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken(usuario, null, List.of()));
+    }
+
+    @Test
+    void listarMiHorarioDocente_exitoso() {
+        Docente docente = new Docente();
+        docente.setId(2L);
+        autenticarComo(docente);
+
+        BloqueHorario bloque = crearBloque(10L, DiaSemana.LUNES, LocalTime.of(8, 0), LocalTime.of(10, 0));
+        SesionClase sesion = crearSesion(100L, bloque, LUNES_1);
+
+        when(repo.findByBloqueHorarioAsignacionCursoDocenteIdAndFechaBetween(2L, LUNES_1, LUNES_1))
+                .thenReturn(List.of(sesion));
+
+        List<SesionClaseResponse> r = sesionService.listarMiHorarioDocente(LUNES_1, LUNES_1);
+
+        assertEquals(1, r.size());
+        assertEquals(100L, r.get(0).getId());
+        assertEquals(2L, r.get(0).getDocenteId());
+    }
+
+    @Test
+    void listarMiHorarioDocente_rolIncorrecto() {
+        Estudiante estudiante = new Estudiante();
+        estudiante.setId(5L);
+        autenticarComo(estudiante);
+
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class,
+                () -> sesionService.listarMiHorarioDocente(LUNES_1, LUNES_1));
+        assertEquals(HttpStatus.FORBIDDEN, ex.getStatusCode());
+    }
+
+    @Test
+    void listarMiHorarioDocente_sinAutenticacion() {
+        SecurityContextHolder.clearContext();
+
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class,
+                () -> sesionService.listarMiHorarioDocente(LUNES_1, LUNES_1));
+        assertEquals(HttpStatus.UNAUTHORIZED, ex.getStatusCode());
     }
 }

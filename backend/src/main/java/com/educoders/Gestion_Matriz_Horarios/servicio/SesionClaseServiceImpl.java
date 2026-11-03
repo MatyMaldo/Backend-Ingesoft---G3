@@ -11,8 +11,14 @@ import com.educoders.Infraestructura_Servicios.enums.DiaSemana;
 import com.educoders.Infraestructura_Servicios.enums.EstadoSesion;
 import com.educoders.Infraestructura_Servicios.exception.RecursoNoEncontradoException;
 import com.educoders.Infraestructura_Servicios.exception.ReglaNegocioException;
+import com.educoders.Seguridad_Auditoria.dominio.Docente;
+import com.educoders.Seguridad_Auditoria.dominio.Usuario;
+import org.springframework.http.HttpStatus;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.DayOfWeek;
 import java.time.LocalDate;
@@ -155,6 +161,17 @@ public class SesionClaseServiceImpl implements SesionClaseService {
 
     @Override
     @Transactional(readOnly = true)
+    public List<SesionClaseResponse> listarMiHorarioDocente(LocalDate fechaInicio, LocalDate fechaFin) {
+        Usuario usuario = obtenerUsuarioAutenticado();
+        if (!(usuario instanceof Docente docente)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "Solo un docente puede consultar su propio horario.");
+        }
+        return listarPorDocente(docente.getId(), fechaInicio, fechaFin);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public SesionClaseResponse obtener(Long id) {
         SesionClase s = repo.findById(id)
                 .orElseThrow(() -> RecursoNoEncontradoException.de("sesión de clase", id));
@@ -198,6 +215,15 @@ public class SesionClaseServiceImpl implements SesionClaseService {
 
     private String clave(Long bloqueId, LocalDate fecha) {
         return bloqueId + "|" + fecha;
+    }
+
+    private Usuario obtenerUsuarioAutenticado() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || !auth.isAuthenticated()
+                || !(auth.getPrincipal() instanceof Usuario usuario)) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "No autenticado");
+        }
+        return usuario;
     }
 
     private SesionClaseResponse mapear(SesionClase s) {

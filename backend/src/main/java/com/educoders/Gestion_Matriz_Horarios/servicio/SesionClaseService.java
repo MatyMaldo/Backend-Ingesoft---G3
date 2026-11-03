@@ -14,5 +14,6 @@ public interface SesionClaseService {
     GenerarSesionesResponse generarSesiones(GenerarSesionesRequest request);
     List<SesionClaseResponse> listarPorSeccion(Long seccionId, LocalDate fechaInicio, LocalDate fechaFin);
     List<SesionClaseResponse> listarPorDocente(Long docenteId, LocalDate fechaInicio, LocalDate fechaFin);
+    List<SesionClaseResponse> listarMiHorarioDocente(LocalDate fechaInicio, LocalDate fechaFin);
     SesionClaseResponse obtener(Long id);
 }
