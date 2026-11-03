@@ -20,6 +20,10 @@ import com.educoders.Gestion_Academica_Motor_Evaluacion.presentacion.dto.Seccion
 import com.educoders.Gestion_Matricula_Pagos.dominio.PeriodoMatricula;
 
 import org.mockito.ArgumentCaptor;
+import com.educoders.Seguridad_Auditoria.servicio.AuditoriaService;
+import com.educoders.Seguridad_Auditoria.presentacion.dto.RegistrarAuditoriaRequestDTO;
+import com.educoders.Infraestructura_Servicios.enums.CategoriaAuditoria;
+import com.educoders.Infraestructura_Servicios.enums.TipoAccionAuditoria;
 
 import java.time.LocalDate;
 import java.util.Optional;
@@ -68,6 +72,9 @@ class GradoSeccionServiceImplTest {
 
     @Mock
     private MatriculaRepository matriculaRepository;
+
+    @Mock
+    private AuditoriaService auditoriaService;
 
     @InjectMocks
     private GradoSeccionServiceImpl gradoSeccionService;
@@ -136,6 +143,19 @@ class GradoSeccionServiceImplTest {
         assertEquals(1L, seccionGuardada.getGrado().getId());
         assertEquals(2L, seccionGuardada.getAnioAcademico().getId());
         assertEquals("A", resultado.getNombre());
+
+        // Verificar la auditoría de creación de sección.
+        ArgumentCaptor<RegistrarAuditoriaRequestDTO> auditoriaCaptor =
+                ArgumentCaptor.forClass(RegistrarAuditoriaRequestDTO.class);
+
+        verify(auditoriaService).registrarAuditoria(auditoriaCaptor.capture());
+
+        RegistrarAuditoriaRequestDTO registro = auditoriaCaptor.getValue();
+
+        assertEquals(CategoriaAuditoria.CONFIGURACION, registro.getCategoria());
+        assertEquals(TipoAccionAuditoria.CREAR, registro.getAccion());
+        assertEquals("Seccion", registro.getEntidad());
+        assertEquals(10L, registro.getEntidadId());
     }
 
 
