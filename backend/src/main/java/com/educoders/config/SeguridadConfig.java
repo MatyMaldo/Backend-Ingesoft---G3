@@ -126,6 +126,7 @@ public class SeguridadConfig {
 
                         // Logs de errores
                         .requestMatchers(
+                                "/api/v1/admin/logs-error/**",
                                 "/api/admin/logs-error/**"
                         ).hasRole("ADMINISTRADOR")
                         // Gestión de grados y secciones

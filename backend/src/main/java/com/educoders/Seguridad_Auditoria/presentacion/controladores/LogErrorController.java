@@ -14,7 +14,7 @@ import org.springframework.web.bind.annotation.*;
 import java.time.LocalDateTime;
 
 @RestController
-@RequestMapping("/api/admin/logs-error")
+@RequestMapping({"/api/v1/admin/logs-error", "/api/admin/logs-error"})
 public class LogErrorController {
 
     private final LogErrorService logErrorService;

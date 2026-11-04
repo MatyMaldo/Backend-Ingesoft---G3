@@ -9,15 +9,26 @@ import com.educoders.Gestion_Matricula_Pagos.persistencia.MatriculaRepository;
 import com.educoders.Gestion_Matricula_Pagos.persistencia.PeriodoMatriculaRepository;
 import com.educoders.Gestion_Matricula_Pagos.presentacion.dto.MatriculaResponse;
 import com.educoders.Gestion_Matricula_Pagos.presentacion.dto.RegistrarMatriculaRequest;
+import com.educoders.Infraestructura_Servicios.enums.CategoriaAuditoria;
 import com.educoders.Infraestructura_Servicios.enums.EstadoMatricula;
+import com.educoders.Infraestructura_Servicios.enums.TipoAccionAuditoria;
 import com.educoders.Infraestructura_Servicios.exception.ConflictoException;
 import com.educoders.Infraestructura_Servicios.exception.RecursoNoEncontradoException;
 import com.educoders.Infraestructura_Servicios.exception.ReglaNegocioException;
+import com.educoders.Seguridad_Auditoria.dominio.Administrador;
 import com.educoders.Seguridad_Auditoria.dominio.Estudiante;
+import com.educoders.Seguridad_Auditoria.dominio.Usuario;
 import com.educoders.Seguridad_Auditoria.persistencia.EstudianteRepository;
+import com.educoders.Seguridad_Auditoria.presentacion.dto.DetalleAuditoriaDTO;
+import com.educoders.Seguridad_Auditoria.presentacion.dto.RegistrarAuditoriaRequestDTO;
+import com.educoders.Seguridad_Auditoria.servicio.AuditoriaService;
 
+import org.springframework.http.HttpStatus;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -29,20 +40,24 @@ public class MatriculaServiceImpl implements MatriculaService {
     private final PeriodoMatriculaRepository periodoMatriculaRepository;
     private final SeccionRepository seccionRepository;
     private final EstudianteRepository estudianteRepository;
+    private final AuditoriaService auditoriaService;
 
     public MatriculaServiceImpl(MatriculaRepository matriculaRepository,
                                 PeriodoMatriculaRepository periodoMatriculaRepository,
                                 SeccionRepository seccionRepository,
-                                EstudianteRepository estudianteRepository) {
+                                EstudianteRepository estudianteRepository,
+                                AuditoriaService auditoriaService) {
         this.matriculaRepository = matriculaRepository;
         this.periodoMatriculaRepository = periodoMatriculaRepository;
         this.seccionRepository = seccionRepository;
         this.estudianteRepository = estudianteRepository;
+        this.auditoriaService = auditoriaService;
     }
 
     @Override
     @Transactional
     public MatriculaResponse registrarMatricula(RegistrarMatriculaRequest request) {
+        exigirAdministrador();
         LocalDate hoy = LocalDate.now();
 
         // 1. Búsqueda y verificación de la Sección
@@ -100,7 +115,38 @@ public class MatriculaServiceImpl implements MatriculaService {
 
         Matricula guardada = matriculaRepository.save(matricula);
 
+        auditoriaService.registrarAuditoria(new RegistrarAuditoriaRequestDTO(
+                null,
+                CategoriaAuditoria.MATRICULA,
+                TipoAccionAuditoria.CREAR,
+                "Matricula",
+                guardada.getId(),
+                "Registro de matrícula",
+                List.of(
+                        new DetalleAuditoriaDTO("estudianteId", null, String.valueOf(estudiante.getId())),
+                        new DetalleAuditoriaDTO("seccionId", null, String.valueOf(seccion.getId())),
+                        new DetalleAuditoriaDTO("estado", null, guardada.getEstado().name())
+                )
+        ));
+
         return mapToResponse(guardada);
+    }
+
+    private void exigirAdministrador() {
+        Usuario usuario = obtenerUsuarioAutenticado();
+        if (!(usuario instanceof Administrador)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "Solo un administrador puede registrar matrículas.");
+        }
+    }
+
+    private Usuario obtenerUsuarioAutenticado() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || !auth.isAuthenticated()
+                || !(auth.getPrincipal() instanceof Usuario usuario)) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "No autenticado");
+        }
+        return usuario;
     }
 
     private MatriculaResponse mapToResponse(Matricula m) {
