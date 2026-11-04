@@ -609,4 +609,73 @@ class SesionClaseServiceImplTest {
                 () -> sesionService.listarPorApoderado(5L, LUNES_1, LUNES_1));
         assertEquals(HttpStatus.FORBIDDEN, ex.getStatusCode());
     }
+
+    // HU-GEMIH-03: Validar fechas al consultar horario por seccion
+    @Test
+    void listarPorSeccion_fechasInvalidas() {
+        assertThrows(ReglaNegocioException.class,
+                () -> sesionService.listarPorSeccion(1L, LUNES_2, LUNES_1));
+    }
+
+    // HU-GEMIH-04: Validar fechas al consultar horario por docente
+    @Test
+    void listarPorDocente_fechasInvalidas() {
+        assertThrows(ReglaNegocioException.class,
+                () -> sesionService.listarPorDocente(2L, LUNES_2, LUNES_1));
+    }
+
+    // HU-GEMIH-06: Validar fechas del horario del estudiante
+    @Test
+    void listarMiHorarioEstudiante_fechasInvalidas() {
+        assertThrows(ReglaNegocioException.class,
+                () -> sesionService.listarMiHorarioEstudiante(LUNES_2, LUNES_1));
+    }
+
+    // HU-GEMIH-07: Validar fechas del horario por apoderado
+    @Test
+    void listarPorApoderado_fechasInvalidas() {
+        assertThrows(ReglaNegocioException.class,
+                () -> sesionService.listarPorApoderado(5L, LUNES_2, LUNES_1));
+    }
+
+
+    // HU-GEMIH-03: Fecha inicial obligatoria
+    @Test
+    void listarPorSeccion_fechaInicioNula() {
+        assertThrows(ReglaNegocioException.class,
+                () -> sesionService.listarPorSeccion(1L, null, LUNES_1));
+    }
+
+    // HU-GEMIH-04: Fecha final obligatoria
+    @Test
+    void listarPorDocente_fechaFinNula() {
+        assertThrows(ReglaNegocioException.class,
+                () -> sesionService.listarPorDocente(2L, LUNES_1, null));
+    }
+
+    // HU-GEMIH-05: El horario propio del docente tambien valida fechas
+    @Test
+    void listarMiHorarioDocente_fechasInvalidas() {
+        Docente docente = new Docente();
+        docente.setId(2L);
+        autenticarComo(docente);
+
+        assertThrows(ReglaNegocioException.class,
+                () -> sesionService.listarMiHorarioDocente(LUNES_2, LUNES_1));
+    }
+
+    // HU-GEMIH-06: Fecha inicial obligatoria
+    @Test
+    void listarMiHorarioEstudiante_fechaInicioNula() {
+        assertThrows(ReglaNegocioException.class,
+                () -> sesionService.listarMiHorarioEstudiante(null, LUNES_1));
+    }
+
+    // HU-GEMIH-07: Fecha inicial obligatoria
+    @Test
+    void listarPorApoderado_fechaInicioNula() {
+        assertThrows(ReglaNegocioException.class,
+                () -> sesionService.listarPorApoderado(5L, null, LUNES_1));
+    }
+
 }

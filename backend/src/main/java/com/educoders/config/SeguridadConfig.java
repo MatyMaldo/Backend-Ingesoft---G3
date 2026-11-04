@@ -146,6 +146,31 @@ public class SeguridadConfig {
                                 "ESTUDIANTE",
                                 "APODERADO"
                         )
+                                // HU-GEMIH-03 y HU-GEMIH-04:
+// Consultas administrativas de horarios
+                                .requestMatchers(
+                                        HttpMethod.GET,
+                                        "/api/v1/sesiones-clase",
+                                        "/api/v1/sesiones-clase/docente/*",
+                                        "/api/v1/sesiones-clase/*"
+                                ).hasRole("ADMINISTRADOR")
+
+// HU-GEMIH-05, HU-GEMIH-06 y HU-GEMIH-07:
+// Consultas de horarios propios
+                                .requestMatchers(
+                                        HttpMethod.GET,
+                                        "/api/v1/sesiones-clase/mi-horario/docente"
+                                ).hasRole("DOCENTE")
+
+                                .requestMatchers(
+                                        HttpMethod.GET,
+                                        "/api/v1/sesiones-clase/mi-horario/estudiante"
+                                ).hasRole("ESTUDIANTE")
+
+                                .requestMatchers(
+                                        HttpMethod.GET,
+                                        "/api/v1/sesiones-clase/apoderado/*"
+                                ).hasRole("APODERADO")
 
                         .anyRequest().authenticated()
                 )

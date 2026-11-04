@@ -160,6 +160,8 @@ public class SesionClaseServiceImpl implements SesionClaseService {
     @Override
     @Transactional(readOnly = true)
     public List<SesionClaseResponse> listarPorSeccion(Long seccionId, LocalDate fechaInicio, LocalDate fechaFin) {
+        validarFechas(fechaInicio, fechaFin);
+
         return repo.findByBloqueHorarioAsignacionCursoSeccionIdAndFechaBetween(seccionId, fechaInicio, fechaFin)
                 .stream().map(this::mapear).toList();
     }
@@ -167,6 +169,8 @@ public class SesionClaseServiceImpl implements SesionClaseService {
     @Override
     @Transactional(readOnly = true)
     public List<SesionClaseResponse> listarPorDocente(Long docenteId, LocalDate fechaInicio, LocalDate fechaFin) {
+        validarFechas(fechaInicio, fechaFin);
+
         return repo.findByBloqueHorarioAsignacionCursoDocenteIdAndFechaBetween(docenteId, fechaInicio, fechaFin)
                 .stream().map(this::mapear).toList();
     }
@@ -185,6 +189,8 @@ public class SesionClaseServiceImpl implements SesionClaseService {
     @Override
     @Transactional(readOnly = true)
     public List<SesionClaseResponse> listarMiHorarioEstudiante(LocalDate fechaInicio, LocalDate fechaFin) {
+        validarFechas(fechaInicio, fechaFin);
+
         Usuario usuario = obtenerUsuarioAutenticado();
         if (!(usuario instanceof Estudiante estudiante)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN,
@@ -201,6 +207,8 @@ public class SesionClaseServiceImpl implements SesionClaseService {
     @Override
     @Transactional(readOnly = true)
     public List<SesionClaseResponse> listarPorApoderado(Long estudianteId, LocalDate fechaInicio, LocalDate fechaFin) {
+        validarFechas(fechaInicio, fechaFin);
+
         Usuario usuario = obtenerUsuarioAutenticado();
         if (!(usuario instanceof Apoderado apoderado)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN,
