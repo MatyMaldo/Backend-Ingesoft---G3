@@ -93,6 +93,12 @@
             <artifactId>pdfbox</artifactId>
             <version>3.0.8</version>
         </dependency>
+        <!-- Lectura y validación de archivos CSV - HU-GEMAP-02 -->
+        <dependency>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-csv</artifactId>
+            <version>1.14.1</version>
+        </dependency>
     </dependencies>
 
     <build>
