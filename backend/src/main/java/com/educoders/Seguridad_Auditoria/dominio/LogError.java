@@ -1,5 +1,6 @@
 package com.educoders.Seguridad_Auditoria.dominio;
 
+import com.educoders.Infraestructura_Servicios.enums.Modulo;
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
 
@@ -17,6 +18,10 @@ public class LogError {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "usuario_id")
     private Usuario usuario;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "modulo", nullable = false, length = 60)
+    private Modulo modulo;
 
     @Column(name = "tipo_error", nullable = false, length = 160)
     private String tipoError;
@@ -38,10 +43,11 @@ public class LogError {
 
     public LogError() {}
 
-    public LogError(LocalDateTime fechaHora, Usuario usuario, String tipoError,
+    public LogError(LocalDateTime fechaHora, Usuario usuario, Modulo modulo, String tipoError,
                     String mensaje, String detalle, String endpoint, String metodoHttp, Short codigoEstado) {
         this.fechaHora = fechaHora;
         this.usuario = usuario;
+        this.modulo = modulo;
         this.tipoError = tipoError;
         this.mensaje = mensaje;
         this.detalle = detalle;
@@ -58,6 +64,9 @@ public class LogError {
 
     public Usuario getUsuario() { return usuario; }
     public void setUsuario(Usuario usuario) { this.usuario = usuario; }
+
+    public Modulo getModulo() { return modulo; }
+    public void setModulo(Modulo modulo) { this.modulo = modulo; }
 
     public String getTipoError() { return tipoError; }
     public void setTipoError(String tipoError) { this.tipoError = tipoError; }

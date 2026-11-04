@@ -15,7 +15,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/compromisos-pago")
+@RequestMapping("/api/v1/compromisos-pago")
 public class CompromisoPagoController {
 
     private final CompromisoPagoService compromisoPagoService;

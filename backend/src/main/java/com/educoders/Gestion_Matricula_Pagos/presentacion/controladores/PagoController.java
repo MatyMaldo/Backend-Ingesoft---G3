@@ -19,7 +19,7 @@ import org.springframework.data.domain.Sort;
 import org.springframework.data.domain.PageRequest;
 
 @RestController
-@RequestMapping("/api/pagos")
+@RequestMapping("/api/v1/pagos")
 public class PagoController {
 
     private final PagoService pagoService;
