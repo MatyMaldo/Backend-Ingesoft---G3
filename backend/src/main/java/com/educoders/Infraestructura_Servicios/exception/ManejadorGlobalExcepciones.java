@@ -11,6 +11,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.server.ResponseStatusException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 
 /**
@@ -103,6 +104,27 @@ public class ManejadorGlobalExcepciones {
     public ResponseEntity<RespuestaApiResponse<Void>> manejarNoEncontrado(RecursoNoEncontradoException ex) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
                 .body(RespuestaApiResponse.crearError(ex.getMessage()));
+    }
+
+    /** Endpoint inexistente: se registra como 404 y no como error interno 500. */
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<RespuestaApiResponse<Void>> manejarRutaNoEncontrada(
+            NoResourceFoundException ex, HttpServletRequest request) {
+
+        logErrorService.registrarError(
+                ex.getClass().getName(),
+                "Recurso no encontrado",
+                ex.getMessage(),
+                null,
+                request.getRequestURI(),
+                request.getMethod(),
+                (short) HttpStatus.NOT_FOUND.value(),
+                null
+        );
+
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(RespuestaApiResponse.crearError(
+                        "Recurso no encontrado: " + ex.getResourcePath()));
     }
     @ExceptionHandler(ResponseStatusException.class)
     public ResponseEntity<RespuestaApiResponse<Void>> manejarEstadoHttp(

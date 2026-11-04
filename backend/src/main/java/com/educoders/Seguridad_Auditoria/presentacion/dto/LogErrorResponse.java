@@ -1,5 +1,6 @@
 package com.educoders.Seguridad_Auditoria.presentacion.dto;
 
+import com.educoders.Infraestructura_Servicios.enums.Modulo;
 import com.educoders.Seguridad_Auditoria.dominio.LogError;
 import java.time.LocalDateTime;
 
@@ -8,6 +9,8 @@ public record LogErrorResponse(
         LocalDateTime fechaHora,
         Long usuarioId,
         String nombreUsuario,
+        Modulo modulo,
+        String moduloEtiqueta,
         String tipoError,
         String mensaje,
         String detalle,
@@ -24,11 +27,15 @@ public record LogErrorResponse(
             nombreUsr = entidad.getUsuario().getNombre() + " " + entidad.getUsuario().getApellidoPaterno();
         }
 
+        Modulo modulo = entidad.getModulo();
+
         return new LogErrorResponse(
                 entidad.getId(),
                 entidad.getFechaHora(),
                 usrId,
                 nombreUsr,
+                modulo,
+                modulo != null ? modulo.getEtiqueta() : null,
                 entidad.getTipoError(),
                 entidad.getMensaje(),
                 entidad.getDetalle(),

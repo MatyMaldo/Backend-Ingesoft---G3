@@ -13,5 +13,7 @@ public interface LogErrorService {
                         Short codigoEstado, Long usuarioId);
 
     Page<LogErrorResponse> listarErrores(LocalDateTime fechaInicio,
-                                         LocalDateTime fechaFin, Pageable pageable);
+                                         LocalDateTime fechaFin,
+                                         String modulo,
+                                         Pageable pageable);
 }
