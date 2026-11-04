@@ -30,10 +30,9 @@ public class PagoController {
 
     @GetMapping("/apoderado/compromiso/{compromisoId}")
     public ResponseEntity<RespuestaApiResponse<List<PagoApoderadoResponse>>> listarPagosPorCompromiso(
-            @PathVariable Long compromisoId,
-            @RequestParam Long apoderadoId) {
+            @PathVariable Long compromisoId) {
 
-        List<PagoApoderadoResponse> pagos = pagoService.listarPagosPorCompromisoYApoderado(apoderadoId, compromisoId);
+        List<PagoApoderadoResponse> pagos = pagoService.listarPagosPorCompromisoYApoderado(compromisoId);
         return ResponseEntity.ok(RespuestaApiResponse.crearExito(pagos));
     }
 

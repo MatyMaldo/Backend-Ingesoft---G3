@@ -10,7 +10,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
 public interface PagoService {
-    List<PagoApoderadoResponse> listarPagosPorCompromisoYApoderado(Long apoderadoId, Long compromisoId);
+    List<PagoApoderadoResponse> listarPagosPorCompromisoYApoderado(Long compromisoId);
 
     PagoApoderadoResponse registrarPagoApoderado(RegistrarPagoRequest request);
 

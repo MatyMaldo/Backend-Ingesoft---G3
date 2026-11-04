@@ -23,7 +23,6 @@ public interface CompromisoPagoService {
      * HU-GEMAP-07: Listado de compromisos de pago
      */
     List<CompromisoApoderadoResponse> listarCompromisosPorEstudianteYAnio(
-            Long apoderadoId,
             Long estudianteId,
             Integer anio
     );

@@ -47,11 +47,10 @@ public class CompromisoPagoController {
     @GetMapping("/apoderado/estudiante/{estudianteId}")
     public ResponseEntity<RespuestaApiResponse<List<CompromisoApoderadoResponse>>> listarCompromisosApoderado(
             @PathVariable Long estudianteId,
-            @RequestParam(required = false) Integer anio,
-            @RequestParam Long apoderadoId) { // Puede extraerse del token de autenticación
+            @RequestParam(required = false) Integer anio) {
 
         List<CompromisoApoderadoResponse> compromisos = compromisoPagoService
-                .listarCompromisosPorEstudianteYAnio(apoderadoId, estudianteId, anio);
+                .listarCompromisosPorEstudianteYAnio(estudianteId, anio);
 
         return ResponseEntity.ok(RespuestaApiResponse.crearExito(compromisos));
     }
