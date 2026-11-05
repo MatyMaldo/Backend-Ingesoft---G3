@@ -34,6 +34,15 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
+import com.educoders.Gestion_Academica_Motor_Evaluacion.dominio.AsignacionCurso;
+import com.educoders.Gestion_Academica_Motor_Evaluacion.dominio.Curso;
+import com.educoders.Gestion_Academica_Motor_Evaluacion.dominio.Grado;
+import com.educoders.Gestion_Matriz_Horarios.dominio.Aula;
+import com.educoders.Gestion_Matriz_Horarios.dominio.BloqueHorario;
+import com.educoders.Infraestructura_Servicios.enums.DiaSemana;
+import java.time.LocalTime;
+
+
 @ExtendWith(MockitoExtension.class)
 class VisualizadorHorarioServiceImplTest {
     @Mock AnioAcademicoRepository anioRepo;
@@ -167,4 +176,72 @@ class VisualizadorHorarioServiceImplTest {
         var e = assertThrows(ResponseStatusException.class, service::miHorarioDocente);
         assertEquals(HttpStatus.UNAUTHORIZED,e.getStatusCode());
     }
+
+
+    @Test
+    void adminConsultaSeccionConBloqueHorario() {
+        Administrador admin = new Administrador();
+        admin.setId(1L);
+        autenticar(admin);
+
+        AnioAcademico anio = anioActivo();
+
+        Grado grado = new Grado();
+        grado.setId(1L);
+        grado.setNombre("Primero");
+
+        Seccion seccion = new Seccion();
+        seccion.setId(14L);
+        seccion.setNombre("A");
+        seccion.setGrado(grado);
+        seccion.setAnioAcademico(anio);
+
+        Curso curso = new Curso();
+        curso.setId(1L);
+        curso.setNombre("Matemáticas");
+
+        Docente docente = new Docente();
+        docente.setId(9L);
+        docente.setNombre("Juan");
+        docente.setApellidoPaterno("Perez");
+
+        AsignacionCurso asignacion = new AsignacionCurso();
+        asignacion.setId(20L);
+        asignacion.setCurso(curso);
+        asignacion.setDocente(docente);
+        asignacion.setSeccion(seccion);
+
+        Aula aula = new Aula();
+        aula.setId(1L);
+        aula.setNombre("Aula 101");
+
+        BloqueHorario bloque = new BloqueHorario();
+        bloque.setId(100L);
+        bloque.setDiaSemana(DiaSemana.LUNES);
+        bloque.setHoraInicio(LocalTime.of(8, 0));
+        bloque.setHoraFin(LocalTime.of(10, 0));
+        bloque.setAula(aula);
+        bloque.setAsignacionCurso(asignacion);
+
+        when(seccionRepo.findById(14L))
+                .thenReturn(Optional.of(seccion));
+
+        when(bloqueRepo.findByAsignacionCursoSeccionId(14L))
+                .thenReturn(List.of(bloque));
+
+        var respuesta = service.porSeccion(14L);
+
+        assertEquals("OK", respuesta.estado());
+        assertEquals(1, respuesta.bloques().size());
+
+        var resultado = respuesta.bloques().get(0);
+
+        assertEquals("Matemáticas", resultado.getCursoNombre());
+        assertEquals("Juan Perez", resultado.getDocenteNombre());
+        assertEquals("Aula 101", resultado.getAulaNombre());
+        assertEquals(DiaSemana.LUNES, resultado.getDiaSemana());
+        assertEquals(LocalTime.of(8, 0), resultado.getHoraInicio());
+        assertEquals(LocalTime.of(10, 0), resultado.getHoraFin());
+    }
+
 }

@@ -9,13 +9,29 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.educoders.Seguridad_Auditoria.dominio.Apoderado;
+import com.educoders.Seguridad_Auditoria.dominio.Usuario;
+import com.educoders.Seguridad_Auditoria.persistencia.EstudianteRepository;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
+import java.util.List;
+
+
 @RestController
 @RequestMapping("/api/v1/visualizadores-horario")
 public class VisualizadorHorarioController {
     private final VisualizadorHorarioService service;
 
-    public VisualizadorHorarioController(VisualizadorHorarioService service) {
+    private final EstudianteRepository estudianteRepo;
+
+
+
+    public VisualizadorHorarioController(
+            VisualizadorHorarioService service,
+            EstudianteRepository estudianteRepo) {
         this.service = service;
+        this.estudianteRepo = estudianteRepo;
     }
 
     @GetMapping("/secciones/{seccionId}")
@@ -42,4 +58,37 @@ public class VisualizadorHorarioController {
     public ResponseEntity<RespuestaApiResponse<HorarioSemanalResponse>> porApoderado(@PathVariable Long estudianteId) {
         return ResponseEntity.ok(RespuestaApiResponse.crearExito(service.porApoderado(estudianteId)));
     }
+
+
+    public record EstudianteHorarioOpcion(Long id, String nombreCompleto) {}
+
+    @GetMapping("/apoderado/mis-estudiantes")
+    public ResponseEntity<RespuestaApiResponse<List<EstudianteHorarioOpcion>>>
+    misEstudiantes() {
+
+        var auth = SecurityContextHolder.getContext().getAuthentication();
+
+        if (auth == null || !auth.isAuthenticated()
+                || !(auth.getPrincipal() instanceof Usuario)) {
+            throw new ResponseStatusException(
+                    HttpStatus.UNAUTHORIZED, "No autenticado");
+        }
+
+        if (!(auth.getPrincipal() instanceof Apoderado apoderado)) {
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN, "Acceso exclusivo para apoderados");
+        }
+
+        var estudiantes = estudianteRepo
+                .findByApoderadoIdOrderByIdAsc(apoderado.getId())
+                .stream()
+                .map(e -> new EstudianteHorarioOpcion(
+                        e.getId(),
+                        e.getNombre() + " " + e.getApellidoPaterno()))
+                .toList();
+
+        return ResponseEntity.ok(
+                RespuestaApiResponse.crearExito(estudiantes));
+    }
+
 }
