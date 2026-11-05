@@ -291,7 +291,7 @@ public class SesionClaseServiceImpl implements SesionClaseService {
     private Long obtenerSeccionDelEstudiante(Long estudianteId, Integer anio) {
         List<Matricula> matriculas = matriculaRepo.buscarMatriculasConSeccionYAnio(estudianteId);
         return matriculas.stream()
-                .filter(m -> m.getEstado() != EstadoMatricula.CANCELADA)
+                .filter(m -> m.getEstado() == EstadoMatricula.CONFIRMADA)
                 .filter(m -> m.getSeccion() != null
                         && m.getSeccion().getAnioAcademico() != null
                         && anio.equals(m.getSeccion().getAnioAcademico().getAnio()))

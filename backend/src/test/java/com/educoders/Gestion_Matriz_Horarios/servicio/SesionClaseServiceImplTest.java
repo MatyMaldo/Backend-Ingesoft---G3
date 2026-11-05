@@ -678,4 +678,52 @@ class SesionClaseServiceImplTest {
                 () -> sesionService.listarPorApoderado(5L, null, LUNES_1));
     }
 
+    @Test
+    void listarMiHorarioEstudiante_matriculaPendiente() {
+        Estudiante estudiante = new Estudiante();
+        estudiante.setId(5L);
+        autenticarComo(estudiante);
+
+        when(matriculaRepo.buscarMatriculasConSeccionYAnio(5L))
+                .thenReturn(List.of(
+                        crearMatricula(1L, 1L, 2027, EstadoMatricula.PENDIENTE)
+                ));
+
+        List<SesionClaseResponse> resultado =
+                sesionService.listarMiHorarioEstudiante(LUNES_1, LUNES_1);
+
+        assertTrue(resultado.isEmpty());
+
+        verify(repo, never())
+                .findByBloqueHorarioAsignacionCursoSeccionIdAndFechaBetween(
+                        any(), any(), any()
+                );
+    }
+
+    @Test
+    void listarPorApoderado_matriculaPendiente() {
+        Apoderado apoderado = new Apoderado();
+        apoderado.setId(4L);
+        autenticarComo(apoderado);
+
+        when(estudianteRepo.findById(5L))
+                .thenReturn(Optional.of(crearEstudiante(5L, 4L)));
+
+        when(matriculaRepo.buscarMatriculasConSeccionYAnio(5L))
+                .thenReturn(List.of(
+                        crearMatricula(1L, 1L, 2027, EstadoMatricula.PENDIENTE)
+                ));
+
+        List<SesionClaseResponse> resultado =
+                sesionService.listarPorApoderado(5L, LUNES_1, LUNES_1);
+
+        assertTrue(resultado.isEmpty());
+
+        verify(repo, never())
+                .findByBloqueHorarioAsignacionCursoSeccionIdAndFechaBetween(
+                        any(), any(), any()
+                );
+    }
+
+
 }

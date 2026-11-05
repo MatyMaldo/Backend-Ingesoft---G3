@@ -172,7 +172,30 @@ public class SeguridadConfig {
                                         "/api/v1/sesiones-clase/apoderado/*"
                                 ).hasRole("APODERADO")
 
-                        .anyRequest().authenticated()
+
+                                .requestMatchers(
+                                        HttpMethod.GET,
+                                        "/api/v1/visualizadores-horario/secciones/*",
+                                        "/api/v1/visualizadores-horario/docentes/*"
+                                ).hasRole("ADMINISTRADOR")
+
+                                .requestMatchers(
+                                        HttpMethod.GET,
+                                        "/api/v1/visualizadores-horario/mi-horario/docente"
+                                ).hasRole("DOCENTE")
+
+                                .requestMatchers(
+                                        HttpMethod.GET,
+                                        "/api/v1/visualizadores-horario/mi-horario/estudiante"
+                                ).hasRole("ESTUDIANTE")
+
+                                .requestMatchers(
+                                        HttpMethod.GET,
+                                        "/api/v1/visualizadores-horario/apoderado/*"
+                                ).hasRole("APODERADO")
+
+
+                                .anyRequest().authenticated()
                 )
 
                 .addFilterBefore(
