@@ -244,4 +244,208 @@ class VisualizadorHorarioServiceImplTest {
         assertEquals(LocalTime.of(10, 0), resultado.getHoraFin());
     }
 
+
+    @Test
+    void adminConsultaDocenteSinFiltrarEstadoActivo() {
+        Administrador admin = new Administrador();
+        admin.setId(1L);
+        autenticar(admin);
+
+        anioActivo();
+
+        when(bloqueRepo.findByAsignacionCursoDocenteIdAndAsignacionCursoSeccionAnioAcademicoId(25L, 8L))
+                .thenReturn(List.of());
+
+        var respuesta = service.porDocente(25L);
+
+        assertEquals("SIN_BLOQUES", respuesta.estado());
+        assertEquals("No tiene carga horaria asignada", respuesta.mensaje());
+
+        verify(bloqueRepo)
+                .findByAsignacionCursoDocenteIdAndAsignacionCursoSeccionAnioAcademicoId(25L, 8L);
+    }
+
+    @Test
+    void adminConsultaDocenteInactivoConBloques() {
+        Administrador admin = new Administrador();
+        admin.setId(1L);
+        autenticar(admin);
+
+        AnioAcademico anio = anioActivo();
+
+        Docente docente = new Docente();
+        docente.setId(25L);
+        docente.setNombre("Maria");
+        docente.setApellidoPaterno("Perez");
+        docente.setActivo(false);
+
+        Grado grado = new Grado();
+        grado.setId(1L);
+        grado.setNombre("Primero");
+
+        Seccion seccion = new Seccion();
+        seccion.setId(14L);
+        seccion.setNombre("A");
+        seccion.setGrado(grado);
+        seccion.setAnioAcademico(anio);
+
+        Curso curso = new Curso();
+        curso.setId(1L);
+        curso.setNombre("Matematicas");
+
+        AsignacionCurso asignacion = new AsignacionCurso();
+        asignacion.setId(20L);
+        asignacion.setDocente(docente);
+        asignacion.setSeccion(seccion);
+        asignacion.setCurso(curso);
+
+        Aula aula = new Aula();
+        aula.setId(1L);
+        aula.setNombre("Aula 101");
+
+        BloqueHorario bloque = new BloqueHorario();
+        bloque.setId(100L);
+        bloque.setDiaSemana(DiaSemana.LUNES);
+        bloque.setHoraInicio(LocalTime.of(8, 0));
+        bloque.setHoraFin(LocalTime.of(10, 0));
+        bloque.setAula(aula);
+        bloque.setAsignacionCurso(asignacion);
+
+        when(bloqueRepo.findByAsignacionCursoDocenteIdAndAsignacionCursoSeccionAnioAcademicoId(25L, 8L))
+                .thenReturn(List.of(bloque));
+
+        var respuesta = service.porDocente(25L);
+
+        assertFalse(docente.isActivo());
+        assertEquals("OK", respuesta.estado());
+        assertEquals(1, respuesta.bloques().size());
+        assertEquals("Maria Perez",
+                respuesta.bloques().get(0).getDocenteNombre());
+
+        verify(bloqueRepo)
+                .findByAsignacionCursoDocenteIdAndAsignacionCursoSeccionAnioAcademicoId(25L, 8L);
+    }
+
+    private BloqueHorario bloqueDePrueba(AnioAcademico anio) {
+        Docente docente = new Docente();
+        docente.setId(9L);
+        docente.setNombre("Juan");
+        docente.setApellidoPaterno("Perez");
+
+        Grado grado = new Grado();
+        grado.setId(1L);
+        grado.setNombre("Primero");
+
+        Seccion seccion = new Seccion();
+        seccion.setId(14L);
+        seccion.setNombre("A");
+        seccion.setGrado(grado);
+        seccion.setAnioAcademico(anio);
+
+        Curso curso = new Curso();
+        curso.setId(1L);
+        curso.setNombre("Matematicas");
+
+        AsignacionCurso asignacion = new AsignacionCurso();
+        asignacion.setId(20L);
+        asignacion.setDocente(docente);
+        asignacion.setCurso(curso);
+        asignacion.setSeccion(seccion);
+
+        Aula aula = new Aula();
+        aula.setId(1L);
+        aula.setNombre("Aula 101");
+
+        BloqueHorario bloque = new BloqueHorario();
+        bloque.setId(100L);
+        bloque.setDiaSemana(DiaSemana.LUNES);
+        bloque.setHoraInicio(LocalTime.of(8, 0));
+        bloque.setHoraFin(LocalTime.of(10, 0));
+        bloque.setAsignacionCurso(asignacion);
+        bloque.setAula(aula);
+
+        return bloque;
+    }
+
+    @Test
+    void docenteConsultaHorarioConBloques() {
+        Docente docente = new Docente();
+        docente.setId(9L);
+        autenticar(docente);
+
+        AnioAcademico anio = anioActivo();
+
+        when(bloqueRepo.findByAsignacionCursoDocenteIdAndAsignacionCursoSeccionAnioAcademicoId(9L, 8L))
+            .thenReturn(List.of(bloqueDePrueba(anio)));
+
+        var respuesta = service.miHorarioDocente();
+
+        assertEquals("OK", respuesta.estado());
+        assertEquals(1, respuesta.bloques().size());
+        assertEquals("Matematicas",
+            respuesta.bloques().get(0).getCursoNombre());
+        assertEquals("Primero",
+            respuesta.bloques().get(0).getGradoNombre());
+        assertEquals("A",
+            respuesta.bloques().get(0).getSeccionNombre());
+    }
+
+    @Test
+    void estudianteConsultaHorarioConBloques() {
+        Estudiante estudiante = new Estudiante();
+        estudiante.setId(5L);
+        autenticar(estudiante);
+
+        AnioAcademico anio = anioActivo();
+
+        when(matriculaRepo.buscarMatriculasConSeccionYAnio(5L))
+            .thenReturn(List.of(
+                matricula(anio, EstadoMatricula.CONFIRMADA)
+            ));
+
+        when(bloqueRepo.findByAsignacionCursoSeccionId(14L))
+            .thenReturn(List.of(bloqueDePrueba(anio)));
+
+        var respuesta = service.miHorarioEstudiante();
+
+        assertEquals("OK", respuesta.estado());
+        assertEquals(1, respuesta.bloques().size());
+        assertEquals("Juan Perez",
+            respuesta.bloques().get(0).getDocenteNombre());
+        assertEquals("Aula 101",
+            respuesta.bloques().get(0).getAulaNombre());
+    }
+
+    @Test
+    void apoderadoConsultaHorarioConBloques() {
+        Apoderado apoderado = new Apoderado();
+        apoderado.setId(3L);
+        autenticar(apoderado);
+
+        Estudiante estudiante = new Estudiante();
+        estudiante.setId(5L);
+        estudiante.setApoderado(apoderado);
+
+        when(estudianteRepo.findById(5L))
+            .thenReturn(Optional.of(estudiante));
+
+        AnioAcademico anio = anioActivo();
+
+        when(matriculaRepo.buscarMatriculasConSeccionYAnio(5L))
+            .thenReturn(List.of(
+                matricula(anio, EstadoMatricula.CONFIRMADA)
+            ));
+
+        when(bloqueRepo.findByAsignacionCursoSeccionId(14L))
+            .thenReturn(List.of(bloqueDePrueba(anio)));
+
+        var respuesta = service.porApoderado(5L);
+
+        assertEquals("OK", respuesta.estado());
+        assertEquals(1, respuesta.bloques().size());
+        assertEquals(DiaSemana.LUNES,
+            respuesta.bloques().get(0).getDiaSemana());
+        assertEquals(LocalTime.of(8, 0),
+            respuesta.bloques().get(0).getHoraInicio());
+    }
 }
