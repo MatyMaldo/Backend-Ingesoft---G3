@@ -189,6 +189,13 @@ public class SeguridadConfig {
                                         "/api/v1/visualizadores-horario/mi-horario/estudiante"
                                 ).hasRole("ESTUDIANTE")
 
+
+                                .requestMatchers(
+                                        HttpMethod.GET,
+                                        "/api/v1/visualizadores-horario/apoderado/mis-estudiantes"
+                                ).hasRole("APODERADO")
+
+
                                 .requestMatchers(
                                         HttpMethod.GET,
                                         "/api/v1/visualizadores-horario/apoderado/*"

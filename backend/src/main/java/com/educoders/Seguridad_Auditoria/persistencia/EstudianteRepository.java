@@ -11,5 +11,10 @@ public interface EstudianteRepository extends JpaRepository<Estudiante, Long> {
     boolean existsByIdAndApoderadoId(Long estudianteId, Long apoderadoId);
 
     Optional<Estudiante> findByEmail(String email);
+
     Optional<Estudiante> findByDni(String dni);
+
+
+    java.util.List<Estudiante> findByApoderadoIdOrderByIdAsc(Long apoderadoId);
+
 }
