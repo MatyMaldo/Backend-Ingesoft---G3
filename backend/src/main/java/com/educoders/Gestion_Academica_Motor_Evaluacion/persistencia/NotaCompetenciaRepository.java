@@ -4,7 +4,7 @@ import com.educoders.Gestion_Academica_Motor_Evaluacion.dominio.NotaCompetencia;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
-
+import java.util.Optional;
 import java.util.List;
 
 public interface NotaCompetenciaRepository extends JpaRepository<NotaCompetencia, Long> {
@@ -44,6 +44,29 @@ public interface NotaCompetenciaRepository extends JpaRepository<NotaCompetencia
     List<NotaCompetencia> buscarNotasParaLibreta(
             @Param("idEstudiante") Long idEstudiante,
             @Param("idBimestre") Long idBimestre
+    );
+
+
+    /**
+     * Busca una nota final de competencia para
+     * actualizarla cuando ya exista.
+     */
+    Optional<NotaCompetencia>
+    findByEstudianteIdAndBimestreIdAndCompetenciaId(
+            Long idEstudiante,
+            Long idBimestre,
+            Long idCompetencia
+    );
+
+    /**
+     * Consulta las notas de un estudiante en un
+     * curso y bimestre específicos.
+     */
+    List<NotaCompetencia>
+    findByEstudianteIdAndBimestreIdAndCompetenciaCursoId(
+            Long idEstudiante,
+            Long idBimestre,
+            Long idCurso
     );
 
 

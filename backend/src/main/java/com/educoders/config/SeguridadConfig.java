@@ -98,6 +98,14 @@ public class SeguridadConfig {
                                 "/api/v1/evaluaciones/*/notas"
                         ).hasAnyRole("ADMINISTRADOR", "DOCENTE")
 
+
+                        // --- HU-EVAL-07 ---
+                        // Registrar calificaciones finales por competencia.
+                        .requestMatchers(
+                                HttpMethod.POST,
+                                "/api/v1/notas-competencias"
+                        ).hasRole("DOCENTE")
+
                         // --- HU-EVAL-03 ---
                         // Permite que estudiantes y apoderados consulten las notas
                         .requestMatchers(

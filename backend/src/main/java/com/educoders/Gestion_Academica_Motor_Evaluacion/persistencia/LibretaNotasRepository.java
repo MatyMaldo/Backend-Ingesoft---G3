@@ -18,4 +18,17 @@ public interface LibretaNotasRepository extends JpaRepository<LibretaNotas, Long
             Long anioAcademicoId,
             EstadoLibreta estado
     );
+
+
+
+    /**
+     * Comprueba si la libreta de un estudiante
+     * ya fue generada para un bimestre.
+     */
+    boolean existsByEstudianteIdAndBimestreIdAndEstado(
+            Long idEstudiante,
+            Long idBimestre,
+            EstadoLibreta estado
+    );
+
 }
