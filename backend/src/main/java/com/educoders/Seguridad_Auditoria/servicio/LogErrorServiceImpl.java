@@ -1,6 +1,7 @@
 package com.educoders.Seguridad_Auditoria.servicio;
 
 import com.educoders.Infraestructura_Servicios.enums.Modulo;
+import com.educoders.Infraestructura_Servicios.exception.ReglaNegocioException;
 import com.educoders.Infraestructura_Servicios.servicio.ModuloResolver;
 import com.educoders.Seguridad_Auditoria.dominio.LogError;
 import com.educoders.Seguridad_Auditoria.dominio.Usuario;
@@ -78,10 +79,26 @@ public class LogErrorServiceImpl implements LogErrorService {
     @Override
     @Transactional(readOnly = true)
     public Page<LogErrorResponse> listarErrores(LocalDateTime fechaInicio, LocalDateTime fechaFin,
-                                                String modulo, Pageable pageable) {
+                                                String modulo, String busqueda, Pageable pageable) {
         Modulo moduloEnum = parsearModulo(modulo);
-        return logErrorRepository.buscarConFiltros(fechaInicio, fechaFin, moduloEnum, pageable)
+        if (modulo != null && !modulo.isBlank() && moduloEnum == null) {
+            throw new ReglaNegocioException("Módulo no válido: " + modulo);
+        }
+        return logErrorRepository.buscarConFiltros(fechaInicio, fechaFin, moduloEnum,
+                        construirPatron(busqueda), pageable)
                 .map(LogErrorResponse::desdeEntidad);
+    }
+
+    /** Convierte el texto libre en un patrón LIKE en minúsculas, escapando los comodines. */
+    private String construirPatron(String busqueda) {
+        if (busqueda == null || busqueda.isBlank()) {
+            return "%";
+        }
+        String escapado = busqueda.trim().toLowerCase()
+                .replace("!", "!!")
+                .replace("%", "!%")
+                .replace("_", "!_");
+        return "%" + escapado + "%";
     }
 
     /** Si no llega un id explícito, toma el usuario autenticado del SecurityContext. */

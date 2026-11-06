@@ -1,6 +1,7 @@
 package com.educoders.Seguridad_Auditoria.servicio;
 
 import com.educoders.Infraestructura_Servicios.enums.Modulo;
+import com.educoders.Infraestructura_Servicios.exception.ReglaNegocioException;
 import com.educoders.Infraestructura_Servicios.servicio.ModuloResolver;
 import com.educoders.Seguridad_Auditoria.dominio.Docente;
 import com.educoders.Seguridad_Auditoria.dominio.LogError;
@@ -28,9 +29,11 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -75,42 +78,59 @@ class LogErrorServiceImplTest {
 
     @Test
     void listarErrores_filtraPorEtiqueta() {
-        when(logErrorRepository.buscarConFiltros(null, null, Modulo.NOTAS, pageable))
+        when(logErrorRepository.buscarConFiltros(null, null, Modulo.NOTAS, "%", pageable))
                 .thenReturn(Page.empty(pageable));
 
-        service.listarErrores(null, null, "Notas", pageable);
+        service.listarErrores(null, null, "Notas", null, pageable);
 
-        verify(logErrorRepository).buscarConFiltros(null, null, Modulo.NOTAS, pageable);
+        verify(logErrorRepository).buscarConFiltros(null, null, Modulo.NOTAS, "%", pageable);
     }
 
     @Test
     void listarErrores_filtraPorNombreEnum() {
-        when(logErrorRepository.buscarConFiltros(null, null, Modulo.PAGOS, pageable))
+        when(logErrorRepository.buscarConFiltros(null, null, Modulo.PAGOS, "%", pageable))
                 .thenReturn(Page.empty(pageable));
 
-        service.listarErrores(null, null, "pagos", pageable);
+        service.listarErrores(null, null, "pagos", null, pageable);
 
-        verify(logErrorRepository).buscarConFiltros(null, null, Modulo.PAGOS, pageable);
+        verify(logErrorRepository).buscarConFiltros(null, null, Modulo.PAGOS, "%", pageable);
     }
 
     @Test
-    void listarErrores_moduloInvalidoNoFiltra() {
-        when(logErrorRepository.buscarConFiltros(null, null, null, pageable))
-                .thenReturn(Page.empty(pageable));
-
-        service.listarErrores(null, null, "xyz", pageable);
-
-        verify(logErrorRepository).buscarConFiltros(null, null, null, pageable);
+    void listarErrores_moduloInvalidoLanzaReglaNegocio() {
+        assertThrows(ReglaNegocioException.class,
+                () -> service.listarErrores(null, null, "xyz", null, pageable));
+        verifyNoInteractions(logErrorRepository);
     }
 
     @Test
     void listarErrores_sinModuloNoFiltra() {
-        when(logErrorRepository.buscarConFiltros(null, null, null, pageable))
+        when(logErrorRepository.buscarConFiltros(null, null, null, "%", pageable))
                 .thenReturn(Page.empty(pageable));
 
-        service.listarErrores(null, null, null, pageable);
+        service.listarErrores(null, null, null, null, pageable);
 
-        verify(logErrorRepository).buscarConFiltros(null, null, null, pageable);
+        verify(logErrorRepository).buscarConFiltros(null, null, null, "%", pageable);
+    }
+
+    @Test
+    void listarErrores_busquedaSeConvierteEnPatronEnMinusculas() {
+        when(logErrorRepository.buscarConFiltros(null, null, null, "%timeout%", pageable))
+                .thenReturn(Page.empty(pageable));
+
+        service.listarErrores(null, null, null, "  TimeOut ", pageable);
+
+        verify(logErrorRepository).buscarConFiltros(null, null, null, "%timeout%", pageable);
+    }
+
+    @Test
+    void listarErrores_busquedaEscapaComodines() {
+        when(logErrorRepository.buscarConFiltros(null, null, null, "%100!%!_x%", pageable))
+                .thenReturn(Page.empty(pageable));
+
+        service.listarErrores(null, null, null, "100%_x", pageable);
+
+        verify(logErrorRepository).buscarConFiltros(null, null, null, "%100!%!_x%", pageable);
     }
 
     @Test
