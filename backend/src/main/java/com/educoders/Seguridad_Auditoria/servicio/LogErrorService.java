@@ -15,5 +15,6 @@ public interface LogErrorService {
     Page<LogErrorResponse> listarErrores(LocalDateTime fechaInicio,
                                          LocalDateTime fechaFin,
                                          String modulo,
+                                         String busqueda,
                                          Pageable pageable);
 }
