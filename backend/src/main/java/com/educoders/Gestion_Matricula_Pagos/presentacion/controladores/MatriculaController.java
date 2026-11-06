@@ -2,6 +2,7 @@ package com.educoders.Gestion_Matricula_Pagos.presentacion.controladores;
 
 import com.educoders.Gestion_Matricula_Pagos.presentacion.dto.MatriculaResponse;
 import com.educoders.Gestion_Matricula_Pagos.presentacion.dto.RegistrarMatriculaRequest;
+import com.educoders.Gestion_Matricula_Pagos.presentacion.dto.SeccionEstudianteResponse;
 import com.educoders.Gestion_Matricula_Pagos.servicio.MatriculaService;
 import com.educoders.Infraestructura_Servicios.dto.RespuestaApiResponse;
 
@@ -28,5 +29,16 @@ public class MatriculaController {
         return ResponseEntity
                 .status(HttpStatus.CREATED)
                 .body(RespuestaApiResponse.crearExito(respuesta));
+    }
+
+    @GetMapping("/estudiante/{estudianteId}/seccion")
+    public ResponseEntity<RespuestaApiResponse<SeccionEstudianteResponse>> obtenerSeccionEstudiante(
+            @PathVariable Long estudianteId,
+            @RequestParam Long anioId) {
+
+        SeccionEstudianteResponse respuesta =
+                matriculaService.obtenerSeccionEstudiante(estudianteId, anioId);
+
+        return ResponseEntity.ok(RespuestaApiResponse.crearExito(respuesta));
     }
 }

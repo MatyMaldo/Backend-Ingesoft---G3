@@ -16,6 +16,12 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDate;
 
+/**
+ * @deprecated Usar {@code AnioAcademicoController#obtenerPeriodoMatricula(Long)}
+ * para obtener el estado del periodo de matrícula y las ventanas habilitadas.
+ * Se mantiene temporalmente por compatibilidad con el frontend.
+ */
+@Deprecated(since = "2026-11", forRemoval = false)
 @RestController
 @RequestMapping("/api/v1/visualizadores-horario")
 public class EstadoProgramacionController {

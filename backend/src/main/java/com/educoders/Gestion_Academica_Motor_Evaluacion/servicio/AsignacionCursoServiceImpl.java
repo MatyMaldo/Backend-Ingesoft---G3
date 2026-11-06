@@ -8,6 +8,7 @@ import com.educoders.Gestion_Academica_Motor_Evaluacion.persistencia.AsignacionC
 import com.educoders.Gestion_Academica_Motor_Evaluacion.persistencia.CursoRepository;
 import com.educoders.Seguridad_Auditoria.persistencia.DocenteRepository;
 import com.educoders.Gestion_Academica_Motor_Evaluacion.persistencia.SeccionRepository;
+import com.educoders.Gestion_Matricula_Pagos.dominio.VentanaMatricula;
 import com.educoders.Gestion_Matricula_Pagos.persistencia.PeriodoMatriculaRepository;
 import com.educoders.Gestion_Academica_Motor_Evaluacion.presentacion.dto.*;
 import com.educoders.Infraestructura_Servicios.exception.ConflictoException;
@@ -57,7 +58,7 @@ public class AsignacionCursoServiceImpl implements AsignacionCursoService {
                 .orElseThrow(() -> RecursoNoEncontradoException.de("sección", request.getSeccionId()));
 
         if (!esProgramacionAbierta(seccion.getAnioAcademico().getId())) {
-            throw new ReglaNegocioException("La programación de horarios está cerrada: solo se habilita mientras el año académico está en preparación.");
+            throw new ReglaNegocioException("La asignación de cursos está cerrada: solo se habilita antes del inicio del periodo de matrícula.");
         }
 
         if (asignacionRepo.existsByCursoIdAndSeccionId(request.getCursoId(), request.getSeccionId())) {
@@ -111,7 +112,7 @@ public class AsignacionCursoServiceImpl implements AsignacionCursoService {
                 .orElseThrow(() -> RecursoNoEncontradoException.de("asignación", id));
 
         if (!esProgramacionAbierta(asignacion.getSeccion().getAnioAcademico().getId())) {
-            throw new ReglaNegocioException("La programación de horarios está cerrada: solo se habilita mientras el año académico está en preparación.");
+            throw new ReglaNegocioException("La asignación de cursos está cerrada: solo se habilita antes del inicio del periodo de matrícula.");
         }
 
         boolean cambioCurso = !asignacion.getCurso().getId().equals(request.getCursoId());
@@ -158,7 +159,7 @@ public class AsignacionCursoServiceImpl implements AsignacionCursoService {
                 .orElseThrow(() -> RecursoNoEncontradoException.de("asignación", id));
 
         if (!esProgramacionAbierta(asignacion.getSeccion().getAnioAcademico().getId())) {
-            throw new ReglaNegocioException("La programación de horarios está cerrada: solo se habilita mientras el año académico está en preparación.");
+            throw new ReglaNegocioException("La asignación de cursos está cerrada: solo se habilita antes del inicio del periodo de matrícula.");
         }
         // TODO: cuando exista BloqueHorario, verificar que no tenga bloques asociados
         // (o eliminar los bloques con confirmación desde el frontend).
@@ -172,11 +173,10 @@ public class AsignacionCursoServiceImpl implements AsignacionCursoService {
     }
 
     private boolean esProgramacionAbierta(Long anioAcademicoId) {
-        var periodo = periodoRepo.findByAnioAcademicoId(anioAcademicoId);
-        if (periodo.isPresent()) {
-            return !java.time.LocalDate.now().isAfter(periodo.get().getFechaFin());
-        }
-        return false;
+        return periodoRepo.findByAnioAcademicoId(anioAcademicoId)
+                .map(periodo -> VentanaMatricula.asignacionCursoDocenteAbierta(
+                        periodo, java.time.LocalDate.now()))
+                .orElse(false);
     }
 
     private AsignacionCursoResponse mapear(AsignacionCurso a) {

@@ -56,8 +56,11 @@ public class BloqueHorarioController {
     @PostMapping(value = "/carga-masiva", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<RespuestaApiResponse<CargaMasivaResponse>> cargaMasiva(
             @RequestParam("file") MultipartFile archivo,
-            @RequestParam(required = false) Long anioAcademicoId) {
-        CargaMasivaResponse resultado = csvService.cargarMasivo(archivo, anioAcademicoId);
+            @RequestParam(required = false) Long anioAcademicoId,
+            @RequestParam(required = false) Long gradoId,
+            @RequestParam(required = false) Long seccionId) {
+        CargaMasivaResponse resultado = csvService.cargarMasivo(
+                archivo, anioAcademicoId, gradoId, seccionId);
         HttpStatus estado = resultado.getErrores().isEmpty()
                 ? HttpStatus.CREATED
                 : HttpStatus.BAD_REQUEST;

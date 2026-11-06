@@ -5,12 +5,15 @@ import com.educoders.Gestion_Academica_Motor_Evaluacion.dominio.Seccion;
 import com.educoders.Gestion_Academica_Motor_Evaluacion.persistencia.AnioAcademicoRepository;
 import com.educoders.Gestion_Academica_Motor_Evaluacion.persistencia.SeccionRepository;
 import com.educoders.Gestion_Matricula_Pagos.dominio.Matricula;
+import com.educoders.Gestion_Matricula_Pagos.dominio.VentanaMatricula;
 import com.educoders.Gestion_Matricula_Pagos.persistencia.MatriculaRepository;
+import com.educoders.Gestion_Matricula_Pagos.persistencia.PeriodoMatriculaRepository;
 import com.educoders.Gestion_Matriz_Horarios.dominio.BloqueHorario;
 import com.educoders.Gestion_Matriz_Horarios.persistencia.BloqueHorarioRepository;
 import com.educoders.Gestion_Matriz_Horarios.presentacion.dto.BloqueHorarioResponse;
 import com.educoders.Gestion_Matriz_Horarios.presentacion.dto.HorarioSemanalResponse;
 import com.educoders.Infraestructura_Servicios.enums.EstadoMatricula;
+import com.educoders.Infraestructura_Servicios.enums.EstadoPeriodoMatricula;
 import com.educoders.Infraestructura_Servicios.exception.RecursoNoEncontradoException;
 import com.educoders.Infraestructura_Servicios.exception.ReglaNegocioException;
 import com.educoders.Seguridad_Auditoria.dominio.Administrador;
@@ -30,6 +33,10 @@ import java.time.LocalDate;
 import java.util.Comparator;
 import java.util.List;
 
+/**
+ * @deprecated Usar {@link SesionClaseServiceImpl} para consultar sesiones.
+ */
+@Deprecated(since = "2026-11", forRemoval = false)
 @Service
 @Transactional(readOnly = true)
 public class VisualizadorHorarioServiceImpl implements VisualizadorHorarioService {
@@ -38,17 +45,20 @@ public class VisualizadorHorarioServiceImpl implements VisualizadorHorarioServic
     private final BloqueHorarioRepository bloqueRepo;
     private final MatriculaRepository matriculaRepo;
     private final EstudianteRepository estudianteRepo;
+    private final PeriodoMatriculaRepository periodoRepo;
 
     public VisualizadorHorarioServiceImpl(AnioAcademicoRepository anioRepo,
                                           SeccionRepository seccionRepo,
                                           BloqueHorarioRepository bloqueRepo,
                                           MatriculaRepository matriculaRepo,
-                                          EstudianteRepository estudianteRepo) {
+                                          EstudianteRepository estudianteRepo,
+                                          PeriodoMatriculaRepository periodoRepo) {
         this.anioRepo = anioRepo;
         this.seccionRepo = seccionRepo;
         this.bloqueRepo = bloqueRepo;
         this.matriculaRepo = matriculaRepo;
         this.estudianteRepo = estudianteRepo;
+        this.periodoRepo = periodoRepo;
     }
 
     @Override
@@ -62,7 +72,8 @@ public class VisualizadorHorarioServiceImpl implements VisualizadorHorarioServic
             throw new ReglaNegocioException("La sección no pertenece al año académico activo.");
         }
         return respuesta(bloqueRepo.findByAsignacionCursoSeccionId(seccionId),
-                "Aún no se ha registrado un horario para esta sección");
+                "Aún no se ha registrado un horario para esta sección",
+                estadoPeriodo(activo));
     }
 
     @Override
@@ -71,7 +82,8 @@ public class VisualizadorHorarioServiceImpl implements VisualizadorHorarioServic
         AnioAcademico activo = anioActivo();
         // La consulta es intencionalmente válida aunque el docente esté inactivo.
         return respuesta(bloqueRepo.findByAsignacionCursoDocenteIdAndAsignacionCursoSeccionAnioAcademicoId(
-                docenteId, activo.getId()), "No tiene carga horaria asignada");
+                docenteId, activo.getId()), "No tiene carga horaria asignada",
+                estadoPeriodo(activo));
     }
 
     @Override
@@ -79,7 +91,8 @@ public class VisualizadorHorarioServiceImpl implements VisualizadorHorarioServic
         Docente docente = exigirRol(Docente.class);
         AnioAcademico activo = anioActivo();
         return respuesta(bloqueRepo.findByAsignacionCursoDocenteIdAndAsignacionCursoSeccionAnioAcademicoId(
-                docente.getId(), activo.getId()), "Aún no se le ha asignado un horario programado");
+                docente.getId(), activo.getId()), "Aún no se le ha asignado un horario programado",
+                estadoPeriodo(activo));
     }
 
     @Override
@@ -111,10 +124,12 @@ public class VisualizadorHorarioServiceImpl implements VisualizadorHorarioServic
                 .findFirst().orElse(null);
         if (seccionId == null) {
             return new HorarioSemanalResponse("SIN_MATRICULA",
-                    "No tiene una matrícula confirmada en el año académico activo", List.of());
+                    "No tiene una matrícula confirmada en el año académico activo",
+                    estadoPeriodo(activo), List.of());
         }
         return respuesta(bloqueRepo.findByAsignacionCursoSeccionId(seccionId),
-                "Aún no se le ha asignado un horario programado");
+                "Aún no se le ha asignado un horario programado",
+                estadoPeriodo(activo));
     }
 
     private AnioAcademico anioActivo() {
@@ -136,14 +151,21 @@ public class VisualizadorHorarioServiceImpl implements VisualizadorHorarioServic
         return tipo.cast(usuario);
     }
 
-    private HorarioSemanalResponse respuesta(List<BloqueHorario> bloques, String mensajeVacio) {
+    private HorarioSemanalResponse respuesta(List<BloqueHorario> bloques, String mensajeVacio,
+                                             EstadoPeriodoMatricula estadoPeriodo) {
         List<BloqueHorarioResponse> datos = bloques.stream()
                 .sorted(Comparator.comparing((BloqueHorario b) -> b.getDiaSemana().ordinal())
                         .thenComparing(BloqueHorario::getHoraInicio))
                 .map(this::mapear)
                 .toList();
         return new HorarioSemanalResponse(datos.isEmpty() ? "SIN_BLOQUES" : "OK",
-                datos.isEmpty() ? mensajeVacio : "", datos);
+                datos.isEmpty() ? mensajeVacio : "", estadoPeriodo, datos);
+    }
+
+    private EstadoPeriodoMatricula estadoPeriodo(AnioAcademico anio) {
+        return periodoRepo.findByAnioAcademicoId(anio.getId())
+                .map(periodo -> VentanaMatricula.estado(periodo, LocalDate.now()))
+                .orElse(null);
     }
 
     private BloqueHorarioResponse mapear(BloqueHorario b) {

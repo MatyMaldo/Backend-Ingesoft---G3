@@ -17,6 +17,7 @@ import com.educoders.Gestion_Matriz_Horarios.persistencia.BloqueHorarioRepositor
 import com.educoders.Gestion_Matriz_Horarios.presentacion.dto.CargaMasivaResponse;
 import com.educoders.Gestion_Matriz_Horarios.presentacion.dto.ErrorFila;
 import com.educoders.Gestion_Matricula_Pagos.dominio.PeriodoMatricula;
+import com.educoders.Gestion_Matricula_Pagos.dominio.VentanaMatricula;
 import com.educoders.Gestion_Matricula_Pagos.persistencia.PeriodoMatriculaRepository;
 import com.educoders.Infraestructura_Servicios.enums.CategoriaAuditoria;
 import com.educoders.Infraestructura_Servicios.enums.DiaSemana;
@@ -113,6 +114,13 @@ public class HorarioCsvServiceImpl implements HorarioCsvService {
     @Override
     @Transactional
     public CargaMasivaResponse cargarMasivo(MultipartFile archivo, Long anioAcademicoId) {
+        return cargarMasivo(archivo, anioAcademicoId, null, null);
+    }
+
+    @Override
+    @Transactional
+    public CargaMasivaResponse cargarMasivo(MultipartFile archivo, Long anioAcademicoId,
+                                            Long gradoId, Long seccionId) {
         validarArchivo(archivo);
 
         String contenido = leerContenido(archivo);
@@ -141,6 +149,7 @@ public class HorarioCsvServiceImpl implements HorarioCsvService {
 
         AnioAcademico anio = resolverAnio(anioAcademicoId);
         validarProgramacionAbierta(anio.getId());
+        FiltroCarga filtro = resolverFiltro(anio, gradoId, seccionId);
 
         CargaMasivaResponse respuesta = new CargaMasivaResponse();
         respuesta.setFilasProcesadas(filasDatos);
@@ -158,7 +167,7 @@ public class HorarioCsvServiceImpl implements HorarioCsvService {
             }
             int numeroFila = i + 1; // 1-based, incluyendo el encabezado
             try {
-                FilaPlanificada fila = parsearFila(linea, separador, anio,
+                FilaPlanificada fila = parsearFila(linea, separador, anio, filtro,
                         porDocente, porSeccion, porAula, docentePorCursoSeccion);
                 planificadas.add(fila);
                 registrarIntervalos(fila, porDocente, porSeccion, porAula);
@@ -256,10 +265,46 @@ public class HorarioCsvServiceImpl implements HorarioCsvService {
         PeriodoMatricula periodo = periodoRepo.findByAnioAcademicoId(anioAcademicoId)
                 .orElseThrow(() -> new ReglaNegocioException(
                         "No existe un periodo de matrícula registrado para el año académico indicado."));
-        if (LocalDate.now().isAfter(periodo.getFechaFin())) {
+        if (!VentanaMatricula.crudBloquesHorarioAbierta(periodo, LocalDate.now())) {
             throw new ReglaNegocioException(
-                    "La programación de horarios está cerrada: solo se habilita mientras el año académico está en preparación.");
+                    "La programación de horarios está cerrada: solo se habilita durante el periodo de matrícula.");
         }
+    }
+
+    /**
+     * Resuelve los filtros opcionales de la carga. Si vienen ambos, la sección
+     * debe pertenecer al grado y al año académico indicado.
+     */
+    private FiltroCarga resolverFiltro(AnioAcademico anio, Long gradoId, Long seccionId) {
+        Grado grado = null;
+        if (gradoId != null) {
+            grado = gradoRepo.findById(gradoId)
+                    .orElseThrow(() -> new ReglaNegocioException(
+                            "No existe el grado con id " + gradoId + "."));
+        }
+
+        Seccion seccion = null;
+        if (seccionId != null) {
+            seccion = seccionRepo.findById(seccionId)
+                    .orElseThrow(() -> new ReglaNegocioException(
+                            "No existe la sección con id " + seccionId + "."));
+
+            if (seccion.getAnioAcademico() == null
+                    || !anio.getId().equals(seccion.getAnioAcademico().getId())) {
+                throw new ReglaNegocioException(
+                        "La sección indicada no pertenece al año académico seleccionado.");
+            }
+            if (grado != null
+                    && (seccion.getGrado() == null || !grado.getId().equals(seccion.getGrado().getId()))) {
+                throw new ReglaNegocioException(
+                        "La sección indicada no pertenece al grado seleccionado.");
+            }
+            if (grado == null) {
+                grado = seccion.getGrado();
+            }
+        }
+
+        return new FiltroCarga(grado, seccion);
     }
 
     // ------------------------------------------------------------------
@@ -267,6 +312,7 @@ public class HorarioCsvServiceImpl implements HorarioCsvService {
     // ------------------------------------------------------------------
 
     private FilaPlanificada parsearFila(String linea, char separador, AnioAcademico anio,
+                                        FiltroCarga filtro,
                                         Map<Long, List<Intervalo>> porDocente,
                                         Map<Long, List<Intervalo>> porSeccion,
                                         Map<Long, List<Intervalo>> porAula,
@@ -291,14 +337,8 @@ public class HorarioCsvServiceImpl implements HorarioCsvService {
                     "Elimine la fila de ejemplo (EJEMPLO) antes de cargar el archivo.");
         }
 
-        Grado grado = gradoRepo.findByNombre(gradoNombre)
-                .orElseThrow(() -> new ErrorFilaException("No existe el grado '" + gradoNombre + "'."));
-
-        Seccion seccion = seccionRepo
-                .findByGradoIdAndAnioAcademicoIdAndNombre(grado.getId(), anio.getId(), seccionNombre)
-                .orElseThrow(() -> new ErrorFilaException(
-                        "No existe la sección '" + seccionNombre + "' para el grado '"
-                                + gradoNombre + "' en el año " + anio.getAnio() + "."));
+        Grado grado = resolverGrado(gradoNombre, filtro);
+        Seccion seccion = resolverSeccion(seccionNombre, grado, anio, filtro);
 
         Curso curso = cursoRepo.findByNombre(cursoNombre)
                 .orElseThrow(() -> new ErrorFilaException("No existe el curso '" + cursoNombre + "'."));
@@ -350,6 +390,47 @@ public class HorarioCsvServiceImpl implements HorarioCsvService {
         }
 
         return new FilaPlanificada(curso, seccion, docente, aula, dia, inicio, fin);
+    }
+
+    private Grado resolverGrado(String gradoNombre, FiltroCarga filtro) {
+        if (gradoNombre.isBlank()) {
+            if (filtro.grado() == null) {
+                throw new ErrorFilaException("El grado es obligatorio cuando no se envía el filtro gradoId.");
+            }
+            return filtro.grado();
+        }
+
+        Grado grado = gradoRepo.findByNombre(gradoNombre)
+                .orElseThrow(() -> new ErrorFilaException("No existe el grado '" + gradoNombre + "'."));
+
+        if (filtro.grado() != null && !filtro.grado().getId().equals(grado.getId())) {
+            throw new ErrorFilaException(
+                    "La fila pertenece a un grado distinto al filtro gradoId indicado.");
+        }
+        return grado;
+    }
+
+    private Seccion resolverSeccion(String seccionNombre, Grado grado, AnioAcademico anio,
+                                    FiltroCarga filtro) {
+        if (seccionNombre.isBlank()) {
+            if (filtro.seccion() == null) {
+                throw new ErrorFilaException(
+                        "La sección es obligatoria cuando no se envía el filtro seccionId.");
+            }
+            return filtro.seccion();
+        }
+
+        Seccion seccion = seccionRepo
+                .findByGradoIdAndAnioAcademicoIdAndNombre(grado.getId(), anio.getId(), seccionNombre)
+                .orElseThrow(() -> new ErrorFilaException(
+                        "No existe la sección '" + seccionNombre + "' para el grado '"
+                                + grado.getNombre() + "' en el año " + anio.getAnio() + "."));
+
+        if (filtro.seccion() != null && !filtro.seccion().getId().equals(seccion.getId())) {
+            throw new ErrorFilaException(
+                    "La fila pertenece a una sección distinta al filtro seccionId indicado.");
+        }
+        return seccion;
     }
 
     private void validarDocenteDeCursoSeccion(Curso curso, Seccion seccion, Docente docente,
@@ -467,6 +548,9 @@ public class HorarioCsvServiceImpl implements HorarioCsvService {
     // ------------------------------------------------------------------
     // Tipos internos
     // ------------------------------------------------------------------
+
+    private record FiltroCarga(Grado grado, Seccion seccion) {
+    }
 
     private static class ErrorFilaException extends RuntimeException {
         ErrorFilaException(String mensaje) {

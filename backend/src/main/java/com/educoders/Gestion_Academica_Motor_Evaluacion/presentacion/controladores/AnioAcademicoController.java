@@ -1,6 +1,7 @@
 package com.educoders.Gestion_Academica_Motor_Evaluacion.presentacion.controladores;
 
 import com.educoders.Gestion_Academica_Motor_Evaluacion.presentacion.dto.AnioAcademicoResponse;
+import com.educoders.Gestion_Academica_Motor_Evaluacion.presentacion.dto.PeriodoMatriculaEstadoResponse;
 import com.educoders.Infraestructura_Servicios.dto.RespuestaApiResponse;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -44,6 +45,18 @@ public class AnioAcademicoController {
         }
     }
 
+
+    @GetMapping("/{anioId}/periodo-matricula")
+    public ResponseEntity<RespuestaApiResponse<PeriodoMatriculaEstadoResponse>>
+    obtenerPeriodoMatricula(@PathVariable Long anioId) {
+
+        PeriodoMatriculaEstadoResponse response =
+                anioAcademicoService.obtenerPeriodoMatricula(anioId);
+
+        return ResponseEntity.ok(
+                RespuestaApiResponse.crearExito(response)
+        );
+    }
 
     @GetMapping("/{anioId}/vacantes")
     public ResponseEntity<RespuestaApiResponse<VacantesAnioResponse>>

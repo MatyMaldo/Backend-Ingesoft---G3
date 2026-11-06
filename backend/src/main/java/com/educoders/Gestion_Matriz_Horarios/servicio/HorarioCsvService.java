@@ -9,4 +9,11 @@ public interface HorarioCsvService {
 
     /** Carga masiva de bloques horarios. Todo o nada; devuelve la lista completa de errores. */
     CargaMasivaResponse cargarMasivo(MultipartFile archivo, Long anioAcademicoId);
+
+    /**
+     * Carga masiva con filtros opcionales por grado y/o sección.
+     * Si ambos son nulos se comporta como una carga global.
+     */
+    CargaMasivaResponse cargarMasivo(MultipartFile archivo, Long anioAcademicoId,
+                                     Long gradoId, Long seccionId);
 }

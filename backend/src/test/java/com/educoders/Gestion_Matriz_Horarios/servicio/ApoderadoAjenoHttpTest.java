@@ -5,6 +5,7 @@ import com.educoders.Gestion_Academica_Motor_Evaluacion.persistencia.AnioAcademi
 import com.educoders.Gestion_Academica_Motor_Evaluacion.persistencia.SeccionRepository;
 import com.educoders.Gestion_Matriz_Horarios.persistencia.BloqueHorarioRepository;
 import com.educoders.Gestion_Matricula_Pagos.persistencia.MatriculaRepository;
+import com.educoders.Gestion_Matricula_Pagos.persistencia.PeriodoMatriculaRepository;
 import com.educoders.Seguridad_Auditoria.persistencia.EstudianteRepository;
 import com.educoders.Seguridad_Auditoria.dominio.Apoderado;
 import com.educoders.Seguridad_Auditoria.dominio.Estudiante;
@@ -34,6 +35,7 @@ class ApoderadoAjenoHttpTest {
     @Mock BloqueHorarioRepository bloqueRepo;
     @Mock MatriculaRepository matriculaRepo;
     @Mock EstudianteRepository estudianteRepo;
+    @Mock PeriodoMatriculaRepository periodoRepo;
 
     @AfterEach
     void limpiar() {
@@ -63,7 +65,7 @@ class ApoderadoAjenoHttpTest {
 
         var service = new VisualizadorHorarioServiceImpl(
             anioRepo, seccionRepo, bloqueRepo,
-            matriculaRepo, estudianteRepo
+            matriculaRepo, estudianteRepo, periodoRepo
         );
 
         var controller = new VisualizadorHorarioController(

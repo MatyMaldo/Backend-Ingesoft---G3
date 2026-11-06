@@ -7,6 +7,7 @@ import com.educoders.Gestion_Matriz_Horarios.persistencia.SesionClaseRepository;
 import com.educoders.Gestion_Matriz_Horarios.presentacion.dto.*;
 import com.educoders.Gestion_Matricula_Pagos.dominio.Matricula;
 import com.educoders.Gestion_Matricula_Pagos.dominio.PeriodoMatricula;
+import com.educoders.Gestion_Matricula_Pagos.dominio.VentanaMatricula;
 import com.educoders.Gestion_Matricula_Pagos.persistencia.MatriculaRepository;
 import com.educoders.Gestion_Matricula_Pagos.persistencia.PeriodoMatriculaRepository;
 import com.educoders.Infraestructura_Servicios.enums.DiaSemana;
@@ -256,7 +257,7 @@ public class SesionClaseServiceImpl implements SesionClaseService {
         PeriodoMatricula periodo = periodoRepo.findByAnioAcademicoId(anioAcademicoId)
                 .orElseThrow(() -> new ReglaNegocioException(
                         "No existe un periodo de matrícula registrado para este año académico."));
-        if (!LocalDate.now().isAfter(periodo.getFechaFin())) {
+        if (!VentanaMatricula.generacionSesionesAbierta(periodo, LocalDate.now())) {
             throw new ReglaNegocioException(
                     "La generación de sesiones solo se habilita después de que termine el periodo de matrícula.");
         }

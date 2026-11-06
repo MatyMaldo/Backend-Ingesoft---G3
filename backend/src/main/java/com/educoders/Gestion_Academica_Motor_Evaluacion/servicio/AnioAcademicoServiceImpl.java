@@ -3,7 +3,12 @@ package com.educoders.Gestion_Academica_Motor_Evaluacion.servicio;
 import com.educoders.Gestion_Academica_Motor_Evaluacion.dominio.AnioAcademico;
 import com.educoders.Gestion_Academica_Motor_Evaluacion.persistencia.AnioAcademicoRepository;
 import com.educoders.Gestion_Academica_Motor_Evaluacion.presentacion.dto.AnioAcademicoResponse;
+import com.educoders.Gestion_Academica_Motor_Evaluacion.presentacion.dto.PeriodoMatriculaEstadoResponse;
+import com.educoders.Gestion_Matricula_Pagos.dominio.PeriodoMatricula;
+import com.educoders.Gestion_Matricula_Pagos.dominio.VentanaMatricula;
 import com.educoders.Gestion_Matricula_Pagos.persistencia.PeriodoMatriculaRepository;
+import com.educoders.Infraestructura_Servicios.enums.EstadoPeriodoMatricula;
+import com.educoders.Infraestructura_Servicios.exception.RecursoNoEncontradoException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -61,5 +66,32 @@ public class AnioAcademicoServiceImpl implements AnioAcademicoService {
         }
 
         return Optional.empty();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public PeriodoMatriculaEstadoResponse obtenerPeriodoMatricula(Long anioId) {
+        AnioAcademico anio = anioAcademicoRepository.findById(anioId)
+                .orElseThrow(() -> RecursoNoEncontradoException.de("Año académico", anioId));
+
+        PeriodoMatricula periodo = periodoMatriculaRepository.findByAnioAcademicoId(anioId)
+                .orElseThrow(() -> new RecursoNoEncontradoException(
+                        "No se encontró un periodo de matrícula para el año académico "
+                                + anio.getAnio() + "."));
+
+        LocalDate hoy = LocalDate.now();
+        EstadoPeriodoMatricula estado = VentanaMatricula.estado(periodo, hoy);
+
+        return new PeriodoMatriculaEstadoResponse(
+                periodo.getId(),
+                anio.getId(),
+                anio.getAnio(),
+                periodo.getFechaInicio(),
+                periodo.getFechaFin(),
+                estado,
+                VentanaMatricula.asignacionCursoDocenteAbierta(periodo, hoy),
+                VentanaMatricula.crudBloquesHorarioAbierta(periodo, hoy),
+                VentanaMatricula.generacionSesionesAbierta(periodo, hoy)
+        );
     }
 }

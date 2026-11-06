@@ -234,7 +234,7 @@ class BloqueHorarioServiceImplTest {
 
         ReglaNegocioException ex = assertThrows(ReglaNegocioException.class,
                 () -> bloqueService.crear(request));
-        assertEquals("La programación de horarios está cerrada: solo se habilita mientras el año académico está en preparación.", ex.getMessage());
+        assertEquals("La programación de horarios está cerrada: solo se habilita durante el periodo de matrícula.", ex.getMessage());
 
         verify(bloqueRepo, never()).save(any(BloqueHorario.class));
     }
@@ -257,7 +257,34 @@ class BloqueHorarioServiceImplTest {
 
         ReglaNegocioException ex = assertThrows(ReglaNegocioException.class,
                 () -> bloqueService.crear(request));
-        assertEquals("La programación de horarios está cerrada: solo se habilita mientras el año académico está en preparación.", ex.getMessage());
+        assertEquals("La programación de horarios está cerrada: solo se habilita durante el periodo de matrícula.", ex.getMessage());
+
+        verify(bloqueRepo, never()).save(any(BloqueHorario.class));
+    }
+
+    @Test
+    void crearBloque_periodoNoIniciado_rechaza() {
+        AsignacionCurso asignacion = crearAsignacion(1L, 1L, "Matematicas", 2L, "Juan Perez", true, 1L);
+        Aula aula = crearAula(1L, "Aula 101", 30);
+
+        PeriodoMatricula periodoNoIniciado = new PeriodoMatricula();
+        periodoNoIniciado.setId(3L);
+        periodoNoIniciado.setFechaInicio(LocalDate.now().plusDays(10));
+        periodoNoIniciado.setFechaFin(LocalDate.now().plusMonths(3));
+
+        when(asignacionRepo.findById(1L)).thenReturn(Optional.of(asignacion));
+        when(aulaRepo.findById(1L)).thenReturn(Optional.of(aula));
+        when(periodoRepo.findByAnioAcademicoId(1L)).thenReturn(Optional.of(periodoNoIniciado));
+
+        CrearBloqueRequest request = new CrearBloqueRequest();
+        request.setAsignacionCursoId(1L);
+        request.setAulaId(1L);
+        request.setDiaSemana(DiaSemana.LUNES);
+        request.setHoraInicio(LocalTime.of(8, 0));
+        request.setHoraFin(LocalTime.of(10, 0));
+
+        assertThrows(ReglaNegocioException.class,
+                () -> bloqueService.crear(request));
 
         verify(bloqueRepo, never()).save(any(BloqueHorario.class));
     }
@@ -431,7 +458,7 @@ class BloqueHorarioServiceImplTest {
 
         ReglaNegocioException ex = assertThrows(ReglaNegocioException.class,
                 () -> bloqueService.eliminar(5L));
-        assertEquals("La programación de horarios está cerrada: solo se habilita mientras el año académico está en preparación.", ex.getMessage());
+        assertEquals("La programación de horarios está cerrada: solo se habilita durante el periodo de matrícula.", ex.getMessage());
 
         verify(bloqueRepo, never()).delete(any(BloqueHorario.class));
     }
