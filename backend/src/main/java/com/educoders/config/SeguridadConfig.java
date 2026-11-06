@@ -50,24 +50,17 @@ public class SeguridadConfig {
                         )
                 )
                 .exceptionHandling(exceptions -> exceptions
-                        .authenticationEntryPoint((request, response, authException) ->
-                        {
-
-
-                            response.sendError(
-                                    HttpServletResponse.SC_UNAUTHORIZED,
-                                    "No autenticado"
-
-
-                            );
+                        .authenticationEntryPoint((request, response, authException) -> {
+                            Object codigo = request.getAttribute(JwtAuthenticationFilter.CODIGO_RECHAZO);
+                            if (codigo == null) {
+                                response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "No autenticado");
+                                return;
+                            }
+                            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                            response.setContentType("application/json");
+                            response.getWriter().write("{\"codigo\":\"" + codigo + "\"}");
                         })
-                                /*
-                                response.sendError(
-                                        HttpServletResponse.SC_UNAUTHORIZED,
-                                        "No autenticado"
-                                )
-                        )*/
-                       .accessDeniedHandler((request, response, accessDeniedException) ->
+                        .accessDeniedHandler((request, response, accessDeniedException) ->
                                 response.sendError(
                                         HttpServletResponse.SC_FORBIDDEN,
                                         "No tiene permisos para acceder a este recurso"
