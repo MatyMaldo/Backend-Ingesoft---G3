@@ -29,6 +29,8 @@ import java.util.List;
 @Component
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
+    public static final String CODIGO_RECHAZO = JwtAuthenticationFilter.class.getName() + ".codigoRechazo";
+
     private final JwtService jwtService;
     private final UsuarioRepository usuarioRepository;
 
@@ -67,9 +69,18 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     Long id = Long.valueOf(usuarioId);
 
                     usuarioRepository.findById(id).ifPresent(usuario -> {
+                        if (!usuario.isActivo()) {
+                            request.setAttribute(CODIGO_RECHAZO, "SESION_CUENTA_INACTIVA");
+                        } else if (rolCoincide(usuario, rol)) {
+                            String credencial = claims.get("credencial", String.class);
+                            if (credencial == null) {
+                                return;
+                            }
+                            if (!credencial.equals(jwtService.huellaCredencial(usuario))) {
+                                request.setAttribute(CODIGO_RECHAZO, "SESION_CONTRASENA_RESTABLECIDA");
+                                return;
+                            }
 
-
-                        if (usuario.isActivo() && rolCoincide(usuario, rol)) {
 
                             var authorities = List.of(
                                     new SimpleGrantedAuthority("ROLE_" + rol)

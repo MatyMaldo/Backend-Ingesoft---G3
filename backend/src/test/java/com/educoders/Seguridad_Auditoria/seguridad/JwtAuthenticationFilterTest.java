@@ -59,7 +59,7 @@ class JwtAuthenticationFilterTest {
         SecurityContextHolder.clearContext();
     }
 
-    private void configurarToken(String token, String rol) {
+    private Claims configurarToken(String token, String rol) {
         Claims claims = mock(Claims.class);
 
         when(jwtService.validarToken(token)).thenReturn(claims);
@@ -67,11 +67,13 @@ class JwtAuthenticationFilterTest {
         when(claims.get("rol", String.class)).thenReturn(rol);
 
         request.addHeader("Authorization", "Bearer " + token);
+        return claims;
     }
 
     @Test
     void autenticarDocenteConTokenValido() throws Exception {
-        configurarToken("token-valido", "DOCENTE");
+        Claims claims = configurarToken("token-valido", "DOCENTE");
+        when(claims.get("credencial", String.class)).thenReturn("huella");
 
         Docente docente = mock(Docente.class);
 
@@ -79,6 +81,8 @@ class JwtAuthenticationFilterTest {
                 .thenReturn(Optional.of(docente));
 
         when(docente.isActivo()).thenReturn(true);
+
+        when(jwtService.huellaCredencial(docente)).thenReturn("huella");
 
         jwtFilter.doFilter(request, response, filterChain);
 
@@ -131,6 +135,26 @@ class JwtAuthenticationFilterTest {
                 SecurityContextHolder.getContext().getAuthentication()
         );
 
+        assertEquals("SESION_CUENTA_INACTIVA",
+                request.getAttribute(JwtAuthenticationFilter.CODIGO_RECHAZO));
+        verify(filterChain).doFilter(request, response);
+    }
+
+    @Test
+    void rechazarSesionTrasRestablecerContrasena() throws Exception {
+        Claims claims = configurarToken("token-anterior", "DOCENTE");
+        when(claims.get("credencial", String.class)).thenReturn("huella-anterior");
+
+        Docente docente = mock(Docente.class);
+        when(usuarioRepository.findById(1L)).thenReturn(Optional.of(docente));
+        when(docente.isActivo()).thenReturn(true);
+        when(jwtService.huellaCredencial(docente)).thenReturn("huella-nueva");
+
+        jwtFilter.doFilter(request, response, filterChain);
+
+        assertNull(SecurityContextHolder.getContext().getAuthentication());
+        assertEquals("SESION_CONTRASENA_RESTABLECIDA",
+                request.getAttribute(JwtAuthenticationFilter.CODIGO_RECHAZO));
         verify(filterChain).doFilter(request, response);
     }
 
