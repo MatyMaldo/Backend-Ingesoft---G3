@@ -11,6 +11,10 @@ spring.jpa.show-sql=true
 spring.jpa.properties.hibernate.format_sql=true
 spring.jpa.open-in-view=false
 
+# Tarifas de los compromisos de pago (configurables)
+app.pagos.monto-matricula=350.00
+app.pagos.monto-pension=450.00
+
 # Cloudinary Credentials
 cloudinary.cloud-name=tu_cloud_name
 cloudinary.api-key=tu_api_key

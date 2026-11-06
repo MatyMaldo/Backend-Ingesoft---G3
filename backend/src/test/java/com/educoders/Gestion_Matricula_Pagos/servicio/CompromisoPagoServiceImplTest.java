@@ -16,6 +16,7 @@ import com.educoders.Infraestructura_Servicios.enums.EstadoCompromisoPago;
 import com.educoders.Infraestructura_Servicios.enums.EstadoMatricula;
 import com.educoders.Infraestructura_Servicios.enums.Mes;
 import com.educoders.Infraestructura_Servicios.enums.TipoCompromiso;
+import com.educoders.Infraestructura_Servicios.exception.RecursoNoEncontradoException;
 import com.educoders.Infraestructura_Servicios.exception.ReglaNegocioException;
 import com.educoders.Infraestructura_Servicios.servicio.ServicioNotificacionEmail;
 import com.educoders.Seguridad_Auditoria.dominio.Administrador;
@@ -35,6 +36,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
@@ -45,7 +47,6 @@ import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -132,25 +133,29 @@ class CompromisoPagoServiceImplTest {
                 new UsernamePasswordAuthenticationToken(usuario, null, List.of()));
     }
 
+    private void stubGuardadoMatricula(Long id) {
+        when(compromisoPagoRepository.existsByMatriculaIdAndTipoCompromiso(1L, TipoCompromiso.MATRICULA))
+                .thenReturn(false);
+        when(compromisoPagoRepository.save(any(CompromisoPago.class))).thenAnswer(inv -> {
+            CompromisoPago c = inv.getArgument(0);
+            c.setId(id);
+            return c;
+        });
+    }
+
     // --- matrícula ---
 
     @Test
-    void emitirCompromisoMatricula_exitoso() {
+    void emitirCompromisoMatricula_porMatriculaId_exitoso() {
         autenticar(crearAdmin());
         Matricula matricula = crearMatricula(EstadoMatricula.PENDIENTE, true);
 
         when(matriculaRepository.findById(1L)).thenReturn(Optional.of(matricula));
         when(periodoMatriculaRepository.findByAnioAcademicoId(1L)).thenReturn(Optional.of(crearPeriodo(true)));
-        when(compromisoPagoRepository.existsByMatriculaIdAndTipoCompromiso(1L, TipoCompromiso.MATRICULA))
-                .thenReturn(false);
-        when(compromisoPagoRepository.save(any(CompromisoPago.class))).thenAnswer(inv -> {
-            CompromisoPago c = inv.getArgument(0);
-            c.setId(20L);
-            return c;
-        });
+        stubGuardadoMatricula(20L);
 
         CompromisoPagoResponse r = service.emitirCompromisoMatricula(
-                new EmitirCompromisoMatriculaRequest(1L, new BigDecimal("500.00")));
+                new EmitirCompromisoMatriculaRequest(1L, null, null));
 
         assertEquals(20L, r.id());
         assertEquals(TipoCompromiso.MATRICULA, r.tipoCompromiso());
@@ -159,48 +164,93 @@ class CompromisoPagoServiceImplTest {
     }
 
     @Test
+    void emitirCompromisoMatricula_porEstudianteYAnio_exitoso() {
+        autenticar(crearAdmin());
+        Matricula matricula = crearMatricula(EstadoMatricula.PENDIENTE, true);
+
+        when(estudianteRepository.existsById(5L)).thenReturn(true);
+        when(matriculaRepository.buscarPorEstudianteYAnioId(5L, 1L, EstadoMatricula.PENDIENTE))
+                .thenReturn(List.of(matricula));
+        when(periodoMatriculaRepository.findByAnioAcademicoId(1L)).thenReturn(Optional.of(crearPeriodo(true)));
+        stubGuardadoMatricula(20L);
+
+        CompromisoPagoResponse r = service.emitirCompromisoMatricula(
+                new EmitirCompromisoMatriculaRequest(null, 5L, 1L));
+
+        assertEquals(20L, r.id());
+        assertEquals(1L, r.matriculaId());
+        assertEquals(EstadoCompromisoPago.PENDIENTE, r.estado());
+        verify(auditoriaService).registrarAuditoria(any());
+    }
+
+    @Test
+    void emitirCompromisoMatricula_sinIdentificadores_rechaza() {
+        autenticar(crearAdmin());
+
+        assertThrows(ReglaNegocioException.class,
+                () -> service.emitirCompromisoMatricula(
+                        new EmitirCompromisoMatriculaRequest(null, null, null)));
+
+        verify(compromisoPagoRepository, never()).save(any(CompromisoPago.class));
+    }
+
+    @Test
+    void emitirCompromisoMatricula_estudianteNoExiste_rechaza() {
+        autenticar(crearAdmin());
+        when(estudianteRepository.existsById(99L)).thenReturn(false);
+
+        assertThrows(RecursoNoEncontradoException.class,
+                () -> service.emitirCompromisoMatricula(
+                        new EmitirCompromisoMatriculaRequest(null, 99L, 1L)));
+
+        verify(compromisoPagoRepository, never()).save(any(CompromisoPago.class));
+    }
+
+    @Test
+    void emitirCompromisoMatricula_sinMatriculaPendiente_rechaza() {
+        autenticar(crearAdmin());
+        when(estudianteRepository.existsById(5L)).thenReturn(true);
+        when(matriculaRepository.buscarPorEstudianteYAnioId(5L, 1L, EstadoMatricula.PENDIENTE))
+                .thenReturn(List.of());
+
+        assertThrows(ReglaNegocioException.class,
+                () -> service.emitirCompromisoMatricula(
+                        new EmitirCompromisoMatriculaRequest(null, 5L, 1L)));
+
+        verify(compromisoPagoRepository, never()).save(any(CompromisoPago.class));
+    }
+
+    @Test
+    void emitirCompromisoMatricula_usaMontoConfigurado() {
+        autenticar(crearAdmin());
+        Matricula matricula = crearMatricula(EstadoMatricula.PENDIENTE, true);
+        ReflectionTestUtils.setField(service, "montoMatriculaPredeterminado", new BigDecimal("999.00"));
+
+        when(matriculaRepository.findById(1L)).thenReturn(Optional.of(matricula));
+        when(periodoMatriculaRepository.findByAnioAcademicoId(1L)).thenReturn(Optional.of(crearPeriodo(true)));
+        stubGuardadoMatricula(20L);
+
+        CompromisoPagoResponse r = service.emitirCompromisoMatricula(
+                new EmitirCompromisoMatriculaRequest(1L, null, null));
+
+        assertEquals(new BigDecimal("999.00"), r.montoOriginal());
+        assertEquals(new BigDecimal("999.00"), r.montoTotal());
+    }
+
+    @Test
     void emitirCompromisoMatricula_rolNoAdmin_rechaza() {
         autenticar(crearApoderado());
 
         ResponseStatusException ex = assertThrows(ResponseStatusException.class,
                 () -> service.emitirCompromisoMatricula(
-                        new EmitirCompromisoMatriculaRequest(1L, null)));
+                        new EmitirCompromisoMatriculaRequest(1L, null, null)));
         assertEquals(HttpStatus.FORBIDDEN, ex.getStatusCode());
     }
 
     // --- pensión ---
 
     @Test
-    void emitirCompromisoPension_matriculaNoConfirmada_rechaza() {
-        autenticar(crearAdmin());
-        Matricula matricula = crearMatricula(EstadoMatricula.PENDIENTE, true);
-        when(matriculaRepository.findById(1L)).thenReturn(Optional.of(matricula));
-
-        assertThrows(ReglaNegocioException.class,
-                () -> service.emitirCompromisoPension(
-                        new EmitirCompromisoPensionRequest(1L, Mes.MARZO, null)));
-
-        verify(compromisoPagoRepository, never()).save(any(CompromisoPago.class));
-    }
-
-    @Test
-    void emitirCompromisoPension_mesFuturo_rechaza() {
-        Assumptions.assumeTrue(LocalDate.now().getMonthValue() < 12,
-                "En diciembre no existe un mes futuro dentro del año académico");
-
-        autenticar(crearAdmin());
-        Matricula matricula = crearMatricula(EstadoMatricula.CONFIRMADA, true);
-        when(matriculaRepository.findById(1L)).thenReturn(Optional.of(matricula));
-
-        assertThrows(ReglaNegocioException.class,
-                () -> service.emitirCompromisoPension(
-                        new EmitirCompromisoPensionRequest(1L, Mes.DICIEMBRE, null)));
-
-        verify(compromisoPagoRepository, never()).save(any(CompromisoPago.class));
-    }
-
-    @Test
-    void emitirCompromisoPension_exitoso() {
+    void emitirCompromisoPension_porMatriculaId_exitoso() {
         autenticar(crearAdmin());
         Matricula matricula = crearMatricula(EstadoMatricula.CONFIRMADA, true);
 
@@ -217,11 +267,82 @@ class CompromisoPagoServiceImplTest {
         });
 
         CompromisoPagoResponse r = service.emitirCompromisoPension(
-                new EmitirCompromisoPensionRequest(1L, mesActual, new BigDecimal("450.00")));
+                new EmitirCompromisoPensionRequest(1L, null, null, mesActual));
 
         assertEquals(21L, r.id());
         assertEquals(TipoCompromiso.PENSION, r.tipoCompromiso());
         assertEquals(mesActual, r.mes());
         verify(auditoriaService).registrarAuditoria(any());
+    }
+
+    @Test
+    void emitirCompromisoPension_porEstudianteYAnio_exitoso() {
+        autenticar(crearAdmin());
+        Matricula matricula = crearMatricula(EstadoMatricula.CONFIRMADA, true);
+
+        int indice = Math.max(0, Math.min(LocalDate.now().getMonthValue() - 3, Mes.values().length - 1));
+        Mes mesActual = Mes.values()[indice];
+
+        when(estudianteRepository.existsById(5L)).thenReturn(true);
+        when(matriculaRepository.buscarPorEstudianteYAnioId(5L, 1L, EstadoMatricula.CONFIRMADA))
+                .thenReturn(List.of(matricula));
+        when(compromisoPagoRepository.existsByMatriculaIdAndTipoCompromisoAndMes(1L, TipoCompromiso.PENSION, mesActual))
+                .thenReturn(false);
+        when(compromisoPagoRepository.save(any(CompromisoPago.class))).thenAnswer(inv -> {
+            CompromisoPago c = inv.getArgument(0);
+            c.setId(21L);
+            return c;
+        });
+
+        CompromisoPagoResponse r = service.emitirCompromisoPension(
+                new EmitirCompromisoPensionRequest(null, 5L, 1L, mesActual));
+
+        assertEquals(21L, r.id());
+        assertEquals(1L, r.matriculaId());
+        assertEquals(mesActual, r.mes());
+        verify(auditoriaService).registrarAuditoria(any());
+    }
+
+    @Test
+    void emitirCompromisoPension_matriculaNoConfirmada_rechaza() {
+        autenticar(crearAdmin());
+        Matricula matricula = crearMatricula(EstadoMatricula.PENDIENTE, true);
+        when(matriculaRepository.findById(1L)).thenReturn(Optional.of(matricula));
+
+        assertThrows(ReglaNegocioException.class,
+                () -> service.emitirCompromisoPension(
+                        new EmitirCompromisoPensionRequest(1L, null, null, Mes.MARZO)));
+
+        verify(compromisoPagoRepository, never()).save(any(CompromisoPago.class));
+    }
+
+    @Test
+    void emitirCompromisoPension_sinMatriculaConfirmada_rechaza() {
+        autenticar(crearAdmin());
+        when(estudianteRepository.existsById(5L)).thenReturn(true);
+        when(matriculaRepository.buscarPorEstudianteYAnioId(5L, 1L, EstadoMatricula.CONFIRMADA))
+                .thenReturn(List.of());
+
+        assertThrows(ReglaNegocioException.class,
+                () -> service.emitirCompromisoPension(
+                        new EmitirCompromisoPensionRequest(null, 5L, 1L, Mes.MARZO)));
+
+        verify(compromisoPagoRepository, never()).save(any(CompromisoPago.class));
+    }
+
+    @Test
+    void emitirCompromisoPension_mesFuturo_rechaza() {
+        Assumptions.assumeTrue(LocalDate.now().getMonthValue() < 12,
+                "En diciembre no existe un mes futuro dentro del año académico");
+
+        autenticar(crearAdmin());
+        Matricula matricula = crearMatricula(EstadoMatricula.CONFIRMADA, true);
+        when(matriculaRepository.findById(1L)).thenReturn(Optional.of(matricula));
+
+        assertThrows(ReglaNegocioException.class,
+                () -> service.emitirCompromisoPension(
+                        new EmitirCompromisoPensionRequest(1L, null, null, Mes.DICIEMBRE)));
+
+        verify(compromisoPagoRepository, never()).save(any(CompromisoPago.class));
     }
 }

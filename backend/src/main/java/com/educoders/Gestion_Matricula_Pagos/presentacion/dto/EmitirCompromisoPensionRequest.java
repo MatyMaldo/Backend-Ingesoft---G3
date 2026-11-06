@@ -1,16 +1,29 @@
 package com.educoders.Gestion_Matricula_Pagos.presentacion.dto;
 
 import com.educoders.Infraestructura_Servicios.enums.Mes;
+import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.NotNull;
 
-import java.math.BigDecimal;
-
+/**
+ * Emisión de compromiso de pago de pensión.
+ *
+ * Se puede identificar la matrícula de dos formas:
+ * - Directamente con {@code matriculaId} (compatibilidad con el contrato anterior).
+ * - Indirectamente con {@code estudianteId} + {@code anioId}; el backend resuelve
+ *   la matrícula CONFIRMADA del estudiante para ese año académico.
+ *
+ * El monto ya no se recibe desde el cliente: se toma de la configuración del backend.
+ */
 public record EmitirCompromisoPensionRequest(
-        @NotNull(message = "El identificador de la matrícula es obligatorio.")
         Long matriculaId,
-
+        Long estudianteId,
+        Long anioId,
         @NotNull(message = "El mes correspondiente a la pensión es obligatorio.")
-        Mes mes,
+        Mes mes
+) {
 
-        BigDecimal montoPersonalizado // Opcional: Si es null, el backend usa la tarifa predeterminada
-) {}
+    @AssertTrue(message = "Debe indicar matriculaId o, en su defecto, estudianteId junto con anioId.")
+    public boolean isIdentificacionValida() {
+        return matriculaId != null || (estudianteId != null && anioId != null);
+    }
+}
