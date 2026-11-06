@@ -42,4 +42,22 @@ public interface MatriculaRepository extends JpaRepository<Matricula, Long> {
             "WHERE m.estudiante.id = :idEstudiante " +
             "ORDER BY a.anio DESC")
     List<Matricula> buscarMatriculasConSeccionYAnio(@Param("idEstudiante") Long idEstudiante);
+
+    /**
+     * Busca las matrículas de un estudiante para un año académico (por su id) y estado.
+     * La más reciente queda primero, por si existiera más de una.
+     */
+    @Query("SELECT m FROM Matricula m " +
+            "JOIN FETCH m.seccion s " +
+            "JOIN FETCH s.anioAcademico a " +
+            "JOIN FETCH s.grado g " +
+            "WHERE m.estudiante.id = :estudianteId " +
+            "AND a.id = :anioId " +
+            "AND m.estado = :estado " +
+            "ORDER BY m.id DESC")
+    List<Matricula> buscarPorEstudianteYAnioId(
+            @Param("estudianteId") Long estudianteId,
+            @Param("anioId") Long anioId,
+            @Param("estado") EstadoMatricula estado
+    );
 }

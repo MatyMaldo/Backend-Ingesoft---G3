@@ -28,6 +28,7 @@ import com.educoders.Seguridad_Auditoria.persistencia.EstudianteRepository;
 import com.educoders.Seguridad_Auditoria.presentacion.dto.DetalleAuditoriaDTO;
 import com.educoders.Seguridad_Auditoria.presentacion.dto.RegistrarAuditoriaRequestDTO;
 import com.educoders.Seguridad_Auditoria.servicio.AuditoriaService;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -42,8 +43,11 @@ import java.util.List;
 @Service
 public class CompromisoPagoServiceImpl implements CompromisoPagoService {
 
-    private static final BigDecimal MONTO_MATRICULA_PREDETERMINADO = new BigDecimal("350.00");
-    private static final BigDecimal MONTO_PENSION_PREDETERMINADO = new BigDecimal("450.00");
+    @Value("${app.pagos.monto-matricula:350.00}")
+    private BigDecimal montoMatriculaPredeterminado = new BigDecimal("350.00");
+
+    @Value("${app.pagos.monto-pension:450.00}")
+    private BigDecimal montoPensionPredeterminado = new BigDecimal("450.00");
 
     private final CompromisoPagoRepository compromisoPagoRepository;
     private final MatriculaRepository matriculaRepository;
@@ -72,12 +76,12 @@ public class CompromisoPagoServiceImpl implements CompromisoPagoService {
         exigirAdministrador();
         LocalDate hoy = LocalDate.now();
 
-        Matricula matricula = matriculaRepository.findById(request.matriculaId())
-                .orElseThrow(() -> RecursoNoEncontradoException.de("Matrícula", request.matriculaId()));
-
-        if (!matricula.esPendiente()) {
-            throw new ReglaNegocioException("Solo se pueden emitir compromisos de pago para matrículas en estado Pendiente.");
-        }
+        Matricula matricula = resolverMatricula(
+                request.matriculaId(),
+                request.estudianteId(),
+                request.anioId(),
+                EstadoMatricula.PENDIENTE
+        );
 
         AnioAcademico anioAcademico = matricula.getSeccion().getAnioAcademico();
         PeriodoMatricula periodo = periodoMatriculaRepository.findByAnioAcademicoId(anioAcademico.getId())
@@ -93,9 +97,7 @@ public class CompromisoPagoServiceImpl implements CompromisoPagoService {
             throw new ConflictoException("El compromiso de pago de matrícula ya fue emitido previamente para esta matrícula.");
         }
 
-        BigDecimal montoFinal = (request.montoPersonalizado() != null && request.montoPersonalizado().compareTo(BigDecimal.ZERO) > 0)
-                ? request.montoPersonalizado()
-                : MONTO_MATRICULA_PREDETERMINADO;
+        BigDecimal montoFinal = montoMatriculaPredeterminado;
 
         CompromisoPago compromiso = CompromisoPago.builder()
                 .tipoCompromiso(TipoCompromiso.MATRICULA)
@@ -132,13 +134,12 @@ public class CompromisoPagoServiceImpl implements CompromisoPagoService {
         exigirAdministrador();
         LocalDate hoy = LocalDate.now();
 
-        Matricula matricula = matriculaRepository.findById(request.matriculaId())
-                .orElseThrow(() -> RecursoNoEncontradoException.de("Matrícula", request.matriculaId()));
-
-        if (matricula.getEstado() != EstadoMatricula.CONFIRMADA) {
-            throw new ReglaNegocioException(
-                    "El estudiante no tiene una matrícula confirmada para emitir compromisos de pensión.");
-        }
+        Matricula matricula = resolverMatricula(
+                request.matriculaId(),
+                request.estudianteId(),
+                request.anioId(),
+                EstadoMatricula.CONFIRMADA
+        );
 
         AnioAcademico anio = matricula.getSeccion().getAnioAcademico();
         if (!anioVigente(anio, hoy)) {
@@ -160,9 +161,7 @@ public class CompromisoPagoServiceImpl implements CompromisoPagoService {
                     "Ya existe un compromiso de pago de pensión emitido para el mes de " + request.mes() + " en esta matrícula.");
         }
 
-        BigDecimal montoFinal = (request.montoPersonalizado() != null && request.montoPersonalizado().compareTo(BigDecimal.ZERO) > 0)
-                ? request.montoPersonalizado()
-                : MONTO_PENSION_PREDETERMINADO;
+        BigDecimal montoFinal = montoPensionPredeterminado;
 
         CompromisoPago compromiso = CompromisoPago.builder()
                 .tipoCompromiso(TipoCompromiso.PENSION)
@@ -207,6 +206,53 @@ public class CompromisoPagoServiceImpl implements CompromisoPagoService {
                 .stream()
                 .map(c -> mapToCompromisoApoderadoResponse(c, hoy))
                 .toList();
+    }
+
+    // --- Resolución de la matrícula ---
+
+    /**
+     * Resuelve la matrícula desde {@code matriculaId} (compatibilidad) o desde
+     * {@code estudianteId} + {@code anioId} (nuevo contrato). En el segundo caso
+     * exige que la matrícula esté en el estado esperado.
+     */
+    private Matricula resolverMatricula(Long matriculaId,
+                                        Long estudianteId,
+                                        Long anioId,
+                                        EstadoMatricula estadoEsperado) {
+        if (matriculaId != null) {
+            Matricula matricula = matriculaRepository.findById(matriculaId)
+                    .orElseThrow(() -> RecursoNoEncontradoException.de("Matrícula", matriculaId));
+            validarEstadoMatricula(matricula, estadoEsperado);
+            return matricula;
+        }
+
+        if (estudianteId == null || anioId == null) {
+            throw new ReglaNegocioException(
+                    "Debe indicar matriculaId o, en su defecto, estudianteId junto con anioId.");
+        }
+
+        if (!estudianteRepository.existsById(estudianteId)) {
+            throw RecursoNoEncontradoException.de("Estudiante", estudianteId);
+        }
+
+        return matriculaRepository
+                .buscarPorEstudianteYAnioId(estudianteId, anioId, estadoEsperado)
+                .stream()
+                .findFirst()
+                .orElseThrow(() -> new ReglaNegocioException(
+                        "No se encontró una matrícula en estado " + estadoEsperado
+                                + " para el estudiante en el año académico indicado."));
+    }
+
+    private void validarEstadoMatricula(Matricula matricula, EstadoMatricula estadoEsperado) {
+        if (estadoEsperado == EstadoMatricula.PENDIENTE && !matricula.esPendiente()) {
+            throw new ReglaNegocioException(
+                    "Solo se pueden emitir compromisos de pago para matrículas en estado Pendiente.");
+        }
+        if (estadoEsperado == EstadoMatricula.CONFIRMADA && !matricula.esConfirmada()) {
+            throw new ReglaNegocioException(
+                    "El estudiante no tiene una matrícula confirmada para emitir compromisos de pensión.");
+        }
     }
 
     // --- Auditoría y seguridad ---
