@@ -136,6 +136,8 @@ class HorarioCsvServiceImplTest {
         lenient().when(anioRepo.findById(1L)).thenReturn(Optional.of(anio));
         lenient().when(periodoRepo.findByAnioAcademicoId(1L)).thenReturn(Optional.of(crearPeriodo(true)));
         lenient().when(gradoRepo.findByNombre(GRADO_NOMBRE)).thenReturn(Optional.of(crearGrado()));
+        lenient().when(gradoRepo.findById(1L)).thenReturn(Optional.of(crearGrado()));
+        lenient().when(seccionRepo.findById(1L)).thenReturn(Optional.of(crearSeccion()));
         lenient().when(seccionRepo.findByGradoIdAndAnioAcademicoIdAndNombre(1L, 1L, "A"))
                 .thenReturn(Optional.of(crearSeccion()));
         lenient().when(cursoRepo.findByNombre("Matemática")).thenReturn(Optional.of(crearCurso()));
@@ -209,6 +211,105 @@ class HorarioCsvServiceImplTest {
         assertEquals(2, r.getBloquesCreados());
         assertTrue(r.getErrores().isEmpty());
         verify(bloqueRepo, org.mockito.Mockito.times(2)).save(any(BloqueHorario.class));
+    }
+
+    @Test
+    void cargaMasiva_conFiltroGrado_exitosa() {
+        AnioAcademico anio = crearAnio();
+        Docente docente = crearDocente(2L, "1234567");
+        Aula aula = crearAula();
+        stubsBase(anio, docente, aula);
+
+        String contenido = CABECERA + "\n"
+                + ";A;Matemática;1234567;Aula 101;Lunes;08:00;09:00\n";
+
+        CargaMasivaResponse r = service.cargarMasivo(csv(contenido), 1L, 1L, null);
+
+        assertEquals(1, r.getBloquesCreados());
+        assertTrue(r.getErrores().isEmpty());
+    }
+
+    @Test
+    void cargaMasiva_conFiltroSeccion_exitosa() {
+        AnioAcademico anio = crearAnio();
+        Docente docente = crearDocente(2L, "1234567");
+        Aula aula = crearAula();
+        stubsBase(anio, docente, aula);
+
+        String contenido = CABECERA + "\n"
+                + ";;Matemática;1234567;Aula 101;Lunes;08:00;09:00\n";
+
+        CargaMasivaResponse r = service.cargarMasivo(csv(contenido), 1L, null, 1L);
+
+        assertEquals(1, r.getBloquesCreados());
+        assertTrue(r.getErrores().isEmpty());
+    }
+
+    @Test
+    void cargaMasiva_filtroGradoIncompatible_rechazaFila() {
+        AnioAcademico anio = crearAnio();
+        Docente docente = crearDocente(2L, "1234567");
+        Aula aula = crearAula();
+        stubsBase(anio, docente, aula);
+
+        Grado otroGrado = new Grado();
+        otroGrado.setId(2L);
+        otroGrado.setNombre("2do Grado");
+        lenient().when(gradoRepo.findById(2L)).thenReturn(Optional.of(otroGrado));
+
+        String contenido = CABECERA + "\n"
+                + GRADO_NOMBRE + ";A;Matemática;1234567;Aula 101;Lunes;08:00;09:00\n";
+
+        CargaMasivaResponse r = service.cargarMasivo(csv(contenido), 1L, 2L, null);
+
+        assertEquals(0, r.getBloquesCreados());
+        assertEquals(1, r.getErrores().size());
+        assertTrue(r.getErrores().get(0).getMensaje().contains("grado distinto"));
+    }
+
+    @Test
+    void cargaMasiva_filtrosInconsistentes_rechaza() {
+        AnioAcademico anio = crearAnio();
+        Docente docente = crearDocente(2L, "1234567");
+        Aula aula = crearAula();
+        stubsBase(anio, docente, aula);
+
+        Grado otroGrado = new Grado();
+        otroGrado.setId(2L);
+        otroGrado.setNombre("2do Grado");
+
+        Seccion otraSeccion = new Seccion();
+        otraSeccion.setId(2L);
+        otraSeccion.setNombre("B");
+        otraSeccion.setGrado(otroGrado);
+        otraSeccion.setAnioAcademico(anio);
+        lenient().when(seccionRepo.findById(2L)).thenReturn(Optional.of(otraSeccion));
+
+        String contenido = CABECERA + "\n"
+                + GRADO_NOMBRE + ";A;Matemática;1234567;Aula 101;Lunes;08:00;09:00\n";
+
+        assertThrows(ReglaNegocioException.class,
+                () -> service.cargarMasivo(csv(contenido), 1L, 1L, 2L));
+    }
+
+    @Test
+    void cargaMasiva_periodoNoIniciado_rechaza() {
+        AnioAcademico anio = crearAnio();
+        Docente docente = crearDocente(2L, "1234567");
+        Aula aula = crearAula();
+        stubsBase(anio, docente, aula);
+
+        PeriodoMatricula periodoNoIniciado = new PeriodoMatricula();
+        periodoNoIniciado.setId(3L);
+        periodoNoIniciado.setFechaInicio(LocalDate.now().plusDays(10));
+        periodoNoIniciado.setFechaFin(LocalDate.now().plusMonths(3));
+        when(periodoRepo.findByAnioAcademicoId(1L)).thenReturn(Optional.of(periodoNoIniciado));
+
+        String contenido = CABECERA + "\n"
+                + GRADO_NOMBRE + ";A;Matemática;1234567;Aula 101;Lunes;08:00;09:00\n";
+
+        assertThrows(ReglaNegocioException.class,
+                () -> service.cargarMasivo(csv(contenido), 1L));
     }
 
     @Test

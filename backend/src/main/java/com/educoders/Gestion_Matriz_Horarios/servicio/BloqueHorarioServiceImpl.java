@@ -9,6 +9,7 @@ import com.educoders.Gestion_Matriz_Horarios.dominio.BloqueHorario;
 import com.educoders.Gestion_Matriz_Horarios.persistencia.AulaRepository;
 import com.educoders.Gestion_Matriz_Horarios.persistencia.BloqueHorarioRepository;
 import com.educoders.Gestion_Matriz_Horarios.presentacion.dto.*;
+import com.educoders.Gestion_Matricula_Pagos.dominio.VentanaMatricula;
 import com.educoders.Gestion_Matricula_Pagos.persistencia.PeriodoMatriculaRepository;
 import com.educoders.Infraestructura_Servicios.enums.DiaSemana;
 import com.educoders.Infraestructura_Servicios.exception.ConflictoException;
@@ -58,7 +59,7 @@ public class BloqueHorarioServiceImpl implements BloqueHorarioService {
         Long anioId = seccion.getAnioAcademico().getId();
 
         if (!esProgramacionAbierta(anioId)) {
-            throw new ReglaNegocioException("La programación de horarios está cerrada: solo se habilita mientras el año académico está en preparación.");
+            throw new ReglaNegocioException("La programación de horarios está cerrada: solo se habilita durante el periodo de matrícula.");
         }
 
         if (!request.getHoraFin().isAfter(request.getHoraInicio())) {
@@ -120,7 +121,7 @@ public class BloqueHorarioServiceImpl implements BloqueHorarioService {
         Long anioId = seccion.getAnioAcademico().getId();
 
         if (!esProgramacionAbierta(anioId)) {
-            throw new ReglaNegocioException("La programación de horarios está cerrada: solo se habilita mientras el año académico está en preparación.");
+            throw new ReglaNegocioException("La programación de horarios está cerrada: solo se habilita durante el periodo de matrícula.");
         }
 
         if (!request.getHoraFin().isAfter(request.getHoraInicio())) {
@@ -193,7 +194,7 @@ public class BloqueHorarioServiceImpl implements BloqueHorarioService {
 
         Long anioId = bloque.getAsignacionCurso().getSeccion().getAnioAcademico().getId();
         if (!esProgramacionAbierta(anioId)) {
-            throw new ReglaNegocioException("La programación de horarios está cerrada: solo se habilita mientras el año académico está en preparación.");
+            throw new ReglaNegocioException("La programación de horarios está cerrada: solo se habilita durante el periodo de matrícula.");
         }
 
         bloqueRepo.delete(bloque);
@@ -230,11 +231,10 @@ public class BloqueHorarioServiceImpl implements BloqueHorarioService {
     }
 
     private boolean esProgramacionAbierta(Long anioAcademicoId) {
-        var periodo = periodoRepo.findByAnioAcademicoId(anioAcademicoId);
-        if (periodo.isPresent()) {
-            return !java.time.LocalDate.now().isAfter(periodo.get().getFechaFin());
-        }
-        return false;
+        return periodoRepo.findByAnioAcademicoId(anioAcademicoId)
+                .map(periodo -> VentanaMatricula.crudBloquesHorarioAbierta(
+                        periodo, java.time.LocalDate.now()))
+                .orElse(false);
     }
 
     private BloqueHorarioResponse mapear(BloqueHorario b) {

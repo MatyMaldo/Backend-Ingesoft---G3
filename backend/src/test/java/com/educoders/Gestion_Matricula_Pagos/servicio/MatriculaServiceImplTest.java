@@ -10,7 +10,9 @@ import com.educoders.Gestion_Matricula_Pagos.persistencia.MatriculaRepository;
 import com.educoders.Gestion_Matricula_Pagos.persistencia.PeriodoMatriculaRepository;
 import com.educoders.Gestion_Matricula_Pagos.presentacion.dto.MatriculaResponse;
 import com.educoders.Gestion_Matricula_Pagos.presentacion.dto.RegistrarMatriculaRequest;
+import com.educoders.Gestion_Matricula_Pagos.presentacion.dto.SeccionEstudianteResponse;
 import com.educoders.Infraestructura_Servicios.enums.EstadoMatricula;
+import com.educoders.Infraestructura_Servicios.exception.RecursoNoEncontradoException;
 import com.educoders.Infraestructura_Servicios.exception.ReglaNegocioException;
 import com.educoders.Seguridad_Auditoria.dominio.Administrador;
 import com.educoders.Seguridad_Auditoria.dominio.Apoderado;
@@ -146,6 +148,43 @@ class MatriculaServiceImplTest {
                 () -> service.registrarMatricula(new RegistrarMatriculaRequest(5L, 1L)));
 
         verify(matriculaRepository, never()).save(any(Matricula.class));
+    }
+
+    @Test
+    void obtenerSeccionEstudiante_exitoso() {
+        autenticar(crearAdmin());
+        Matricula matricula = new Matricula();
+        matricula.setId(100L);
+        matricula.setEstado(EstadoMatricula.CONFIRMADA);
+        matricula.setEstudiante(crearEstudiante());
+        matricula.setSeccion(crearSeccion());
+
+        when(matriculaRepository.buscarPorEstudianteYAnioIdYEstados(
+                5L, 1L, List.of(EstadoMatricula.PENDIENTE, EstadoMatricula.CONFIRMADA)))
+                .thenReturn(List.of(matricula));
+
+        SeccionEstudianteResponse r = service.obtenerSeccionEstudiante(5L, 1L);
+
+        assertEquals(100L, r.matriculaId());
+        assertEquals(5L, r.estudianteId());
+        assertEquals(1L, r.anioAcademicoId());
+        assertEquals(2027, r.anio());
+        assertEquals(EstadoMatricula.CONFIRMADA, r.estado());
+        assertEquals(1L, r.gradoId());
+        assertEquals("1er Grado", r.gradoNombre());
+        assertEquals(1L, r.seccionId());
+        assertEquals("A", r.seccionNombre());
+    }
+
+    @Test
+    void obtenerSeccionEstudiante_sinMatricula_rechaza() {
+        autenticar(crearAdmin());
+        when(matriculaRepository.buscarPorEstudianteYAnioIdYEstados(
+                5L, 1L, List.of(EstadoMatricula.PENDIENTE, EstadoMatricula.CONFIRMADA)))
+                .thenReturn(List.of());
+
+        assertThrows(RecursoNoEncontradoException.class,
+                () -> service.obtenerSeccionEstudiante(5L, 1L));
     }
 
     @Test

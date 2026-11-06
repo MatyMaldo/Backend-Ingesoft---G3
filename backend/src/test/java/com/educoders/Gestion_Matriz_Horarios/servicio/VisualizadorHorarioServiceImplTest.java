@@ -5,7 +5,9 @@ import com.educoders.Gestion_Academica_Motor_Evaluacion.dominio.Seccion;
 import com.educoders.Gestion_Academica_Motor_Evaluacion.persistencia.AnioAcademicoRepository;
 import com.educoders.Gestion_Academica_Motor_Evaluacion.persistencia.SeccionRepository;
 import com.educoders.Gestion_Matricula_Pagos.dominio.Matricula;
+import com.educoders.Gestion_Matricula_Pagos.dominio.PeriodoMatricula;
 import com.educoders.Gestion_Matricula_Pagos.persistencia.MatriculaRepository;
+import com.educoders.Gestion_Matricula_Pagos.persistencia.PeriodoMatriculaRepository;
 import com.educoders.Gestion_Matriz_Horarios.persistencia.BloqueHorarioRepository;
 import com.educoders.Infraestructura_Servicios.enums.EstadoMatricula;
 import com.educoders.Infraestructura_Servicios.exception.ReglaNegocioException;
@@ -50,6 +52,7 @@ class VisualizadorHorarioServiceImplTest {
     @Mock BloqueHorarioRepository bloqueRepo;
     @Mock MatriculaRepository matriculaRepo;
     @Mock EstudianteRepository estudianteRepo;
+    @Mock PeriodoMatriculaRepository periodoRepo;
     @InjectMocks VisualizadorHorarioServiceImpl service;
 
     @AfterEach void limpiar() { SecurityContextHolder.clearContext(); }
@@ -65,6 +68,13 @@ class VisualizadorHorarioServiceImplTest {
         a.setAnio(LocalDate.now().getYear());
         when(anioRepo.findByFechaInicioLessThanEqualAndFechaFinGreaterThanEqual(any(), any()))
                 .thenReturn(Optional.of(a));
+
+        PeriodoMatricula periodo = new PeriodoMatricula();
+        periodo.setId(1L);
+        periodo.setFechaInicio(LocalDate.now().minusDays(10));
+        periodo.setFechaFin(LocalDate.now().plusDays(10));
+        lenient().when(periodoRepo.findByAnioAcademicoId(8L)).thenReturn(Optional.of(periodo));
+
         return a;
     }
 

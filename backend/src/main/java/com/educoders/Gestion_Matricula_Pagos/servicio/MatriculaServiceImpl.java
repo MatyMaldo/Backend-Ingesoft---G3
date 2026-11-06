@@ -9,6 +9,7 @@ import com.educoders.Gestion_Matricula_Pagos.persistencia.MatriculaRepository;
 import com.educoders.Gestion_Matricula_Pagos.persistencia.PeriodoMatriculaRepository;
 import com.educoders.Gestion_Matricula_Pagos.presentacion.dto.MatriculaResponse;
 import com.educoders.Gestion_Matricula_Pagos.presentacion.dto.RegistrarMatriculaRequest;
+import com.educoders.Gestion_Matricula_Pagos.presentacion.dto.SeccionEstudianteResponse;
 import com.educoders.Infraestructura_Servicios.enums.CategoriaAuditoria;
 import com.educoders.Infraestructura_Servicios.enums.EstadoMatricula;
 import com.educoders.Infraestructura_Servicios.enums.TipoAccionAuditoria;
@@ -130,6 +131,40 @@ public class MatriculaServiceImpl implements MatriculaService {
         ));
 
         return mapToResponse(guardada);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public SeccionEstudianteResponse obtenerSeccionEstudiante(Long estudianteId, Long anioId) {
+        obtenerUsuarioAutenticado();
+
+        if (estudianteId == null || anioId == null) {
+            throw new ReglaNegocioException(
+                    "El estudiante y el año académico son obligatorios.");
+        }
+
+        Matricula matricula = matriculaRepository
+                .buscarPorEstudianteYAnioIdYEstados(
+                        estudianteId,
+                        anioId,
+                        List.of(EstadoMatricula.PENDIENTE, EstadoMatricula.CONFIRMADA))
+                .stream()
+                .findFirst()
+                .orElseThrow(() -> new RecursoNoEncontradoException(
+                        "No se encontró una matrícula vigente para el estudiante " + estudianteId
+                                + " en el año académico indicado."));
+
+        return new SeccionEstudianteResponse(
+                matricula.getId(),
+                matricula.getEstudiante().getId(),
+                matricula.getSeccion().getAnioAcademico().getId(),
+                matricula.getSeccion().getAnioAcademico().getAnio(),
+                matricula.getEstado(),
+                matricula.getSeccion().getGrado().getId(),
+                matricula.getSeccion().getGrado().getNombre(),
+                matricula.getSeccion().getId(),
+                matricula.getSeccion().getNombre()
+        );
     }
 
     private void exigirAdministrador() {

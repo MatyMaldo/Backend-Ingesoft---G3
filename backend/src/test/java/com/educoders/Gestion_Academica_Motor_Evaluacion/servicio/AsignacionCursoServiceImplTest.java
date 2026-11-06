@@ -104,16 +104,16 @@ class AsignacionCursoServiceImplTest {
 
     @BeforeEach
     void setUp() {
-        PeriodoMatricula periodoVigente = new PeriodoMatricula();
-        periodoVigente.setId(1L);
-        periodoVigente.setFechaInicio(java.time.LocalDate.now().minusMonths(1));
-        periodoVigente.setFechaFin(java.time.LocalDate.now().plusMonths(3));
+        PeriodoMatricula periodoEnPreparacion = new PeriodoMatricula();
+        periodoEnPreparacion.setId(1L);
+        periodoEnPreparacion.setFechaInicio(java.time.LocalDate.now().plusDays(10));
+        periodoEnPreparacion.setFechaFin(java.time.LocalDate.now().plusMonths(3));
         com.educoders.Gestion_Academica_Motor_Evaluacion.dominio.AnioAcademico anio =
                 new com.educoders.Gestion_Academica_Motor_Evaluacion.dominio.AnioAcademico();
         anio.setId(1L);
-        periodoVigente.setAnioAcademico(anio);
+        periodoEnPreparacion.setAnioAcademico(anio);
 
-        lenient().when(periodoRepo.findByAnioAcademicoId(1L)).thenReturn(Optional.of(periodoVigente));
+        lenient().when(periodoRepo.findByAnioAcademicoId(1L)).thenReturn(Optional.of(periodoEnPreparacion));
     }
 
     @Test
@@ -175,7 +175,34 @@ class AsignacionCursoServiceImplTest {
 
         ReglaNegocioException ex = assertThrows(ReglaNegocioException.class,
                 () -> asignacionService.crear(request));
-        assertEquals("La programación de horarios está cerrada: solo se habilita mientras el año académico está en preparación.", ex.getMessage());
+        assertEquals("La asignación de cursos está cerrada: solo se habilita antes del inicio del periodo de matrícula.", ex.getMessage());
+
+        verify(asignacionRepo, never()).save(any(AsignacionCurso.class));
+    }
+
+    @Test
+    void crearAsignacion_periodoVigente_rechaza() {
+        Curso curso = crearCurso(3L, "Ciencias Sociales");
+        Docente docente = crearDocente(2L, "Juan", "Perez", true);
+        Seccion seccion = crearSeccion(1L, "A", 1L, "1er Grado", 2027);
+
+        PeriodoMatricula periodoVigente = new PeriodoMatricula();
+        periodoVigente.setId(1L);
+        periodoVigente.setFechaInicio(java.time.LocalDate.now().minusDays(5));
+        periodoVigente.setFechaFin(java.time.LocalDate.now().plusDays(30));
+
+        when(cursoRepo.findById(3L)).thenReturn(Optional.of(curso));
+        when(docenteRepo.findById(2L)).thenReturn(Optional.of(docente));
+        when(seccionRepo.findById(1L)).thenReturn(Optional.of(seccion));
+        when(periodoRepo.findByAnioAcademicoId(1L)).thenReturn(Optional.of(periodoVigente));
+
+        CrearAsignacionCursoRequest request = new CrearAsignacionCursoRequest();
+        request.setCursoId(3L);
+        request.setDocenteId(2L);
+        request.setSeccionId(1L);
+
+        assertThrows(ReglaNegocioException.class,
+                () -> asignacionService.crear(request));
 
         verify(asignacionRepo, never()).save(any(AsignacionCurso.class));
     }

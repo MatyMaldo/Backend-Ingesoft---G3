@@ -18,6 +18,12 @@ import org.springframework.web.server.ResponseStatusException;
 import java.util.List;
 
 
+/**
+ * @deprecated Usar {@link SesionClaseController} para consultar sesiones y
+ * {@code AnioAcademicoController} para el estado del periodo de matrícula.
+ * Se mantiene temporalmente por compatibilidad con el frontend.
+ */
+@Deprecated(since = "2026-11", forRemoval = false)
 @RestController
 @RequestMapping("/api/v1/visualizadores-horario")
 public class VisualizadorHorarioController {
