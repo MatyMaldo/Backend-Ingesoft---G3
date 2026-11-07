@@ -65,4 +65,21 @@ public interface BloqueHorarioRepository extends JpaRepository<BloqueHorario, Lo
             @Param("anioId") Long anioId,
             @Param("excludeId") Long excludeId,
             @Param("aulaId") Long aulaId);
+
+    /**
+     * Bloques del mismo año académico que pertenecen a otras secciones.
+     * Se usan para validar choques al reemplazar el horario completo de una sección.
+     */
+    @Query("""
+        SELECT b FROM BloqueHorario b
+        JOIN FETCH b.asignacionCurso a
+        JOIN FETCH a.docente d
+        JOIN FETCH a.seccion s
+        JOIN FETCH b.aula au
+        WHERE s.anioAcademico.id = :anioId
+          AND s.id <> :seccionId
+        """)
+    List<BloqueHorario> findEnOtrasSecciones(
+            @Param("anioId") Long anioId,
+            @Param("seccionId") Long seccionId);
 }

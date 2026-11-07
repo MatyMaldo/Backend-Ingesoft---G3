@@ -23,6 +23,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest({
@@ -97,6 +98,28 @@ class SeguridadEscrituraHorariosTest {
         mvc.perform(post("/api/v1/bloques-horario")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(BLOQUE))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @WithMockUser(roles = "ADMINISTRADOR")
+    void adminPuedeGuardarBloquesMasivamente() throws Exception {
+        mvc.perform(put("/api/v1/bloques-horario/seccion/1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"anioAcademicoId":1,"bloques":[]}
+                                """))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    @WithMockUser(roles = "DOCENTE")
+    void docenteNoPuedeGuardarBloquesMasivamente() throws Exception {
+        mvc.perform(put("/api/v1/bloques-horario/seccion/1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"anioAcademicoId":1,"bloques":[]}
+                                """))
                 .andExpect(status().isForbidden());
     }
 

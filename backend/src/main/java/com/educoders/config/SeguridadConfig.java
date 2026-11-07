@@ -174,34 +174,6 @@ public class SeguridadConfig {
                                 ).hasRole("APODERADO")
 
 
-                                .requestMatchers(
-                                        HttpMethod.GET,
-                                        "/api/v1/visualizadores-horario/secciones/*",
-                                        "/api/v1/visualizadores-horario/docentes/*"
-                                ).hasRole("ADMINISTRADOR")
-
-                                .requestMatchers(
-                                        HttpMethod.GET,
-                                        "/api/v1/visualizadores-horario/mi-horario/docente"
-                                ).hasRole("DOCENTE")
-
-                                .requestMatchers(
-                                        HttpMethod.GET,
-                                        "/api/v1/visualizadores-horario/mi-horario/estudiante"
-                                ).hasRole("ESTUDIANTE")
-
-
-                                .requestMatchers(
-                                        HttpMethod.GET,
-                                        "/api/v1/visualizadores-horario/apoderado/mis-estudiantes"
-                                ).hasRole("APODERADO")
-
-
-                                .requestMatchers(
-                                        HttpMethod.GET,
-                                        "/api/v1/visualizadores-horario/apoderado/*"
-                                ).hasRole("APODERADO")
-
                                 // HU-GEMIH-02: solo el administrador gestiona la
                                 // configuración de horarios (asignaciones, bloques y aulas).
                                 .requestMatchers(
