@@ -6,11 +6,15 @@ import com.educoders.Gestion_Academica_Motor_Evaluacion.dominio.Grado;
 import com.educoders.Gestion_Academica_Motor_Evaluacion.dominio.Seccion;
 import com.educoders.Gestion_Academica_Motor_Evaluacion.persistencia.AsignacionCursoRepository;
 import com.educoders.Gestion_Academica_Motor_Evaluacion.persistencia.SeccionRepository;
+import com.educoders.Gestion_Matriz_Horarios.config.HorarioProperties;
 import com.educoders.Gestion_Matriz_Horarios.dominio.Aula;
 import com.educoders.Gestion_Matriz_Horarios.dominio.BloqueHorario;
 import com.educoders.Gestion_Matriz_Horarios.persistencia.AulaRepository;
 import com.educoders.Gestion_Matriz_Horarios.persistencia.BloqueHorarioRepository;
+import com.educoders.Gestion_Matriz_Horarios.presentacion.dto.BloqueMasivoItemRequest;
 import com.educoders.Gestion_Matriz_Horarios.presentacion.dto.CrearBloqueRequest;
+import com.educoders.Gestion_Matriz_Horarios.presentacion.dto.GuardarBloquesSeccionRequest;
+import com.educoders.Gestion_Matriz_Horarios.presentacion.dto.GuardadoMasivoBloquesResponse;
 import com.educoders.Gestion_Matriz_Horarios.presentacion.dto.ActualizarBloqueRequest;
 import com.educoders.Gestion_Matriz_Horarios.presentacion.dto.BloqueHorarioResponse;
 import com.educoders.Gestion_Matricula_Pagos.dominio.PeriodoMatricula;
@@ -28,6 +32,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.LocalDate;
@@ -38,6 +43,7 @@ import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
@@ -73,6 +79,9 @@ class BloqueHorarioServiceImplTest {
 
     @Mock
     private AuditoriaService auditoriaService;
+
+    @Spy
+    private HorarioProperties horarioProperties = new HorarioProperties();
 
     @InjectMocks
     private BloqueHorarioServiceImpl bloqueService;
@@ -169,6 +178,9 @@ class BloqueHorarioServiceImplTest {
     void setUp() {
         PeriodoMatricula periodoVigente = crearPeriodoVigente(1L);
         lenient().when(periodoRepo.findByAnioAcademicoId(1L)).thenReturn(Optional.of(periodoVigente));
+
+        Seccion seccion = crearSeccion(1L, "A", 1L, "1er Grado", 1L, 2027);
+        lenient().when(seccionRepo.findById(1L)).thenReturn(Optional.of(seccion));
     }
 
     // --- Tests ---
@@ -461,6 +473,301 @@ class BloqueHorarioServiceImplTest {
         assertEquals("La programación de horarios está cerrada: solo se habilita durante el periodo de matrícula.", ex.getMessage());
 
         verify(bloqueRepo, never()).delete(any(BloqueHorario.class));
+    }
+
+    private BloqueHorario bloque(Long id, AsignacionCurso asignacion, Aula aula,
+                                 DiaSemana dia, int horaInicio, int minutoInicio,
+                                 int horaFin, int minutoFin) {
+        BloqueHorario bloque = new BloqueHorario();
+        bloque.setId(id);
+        bloque.setAsignacionCurso(asignacion);
+        bloque.setAula(aula);
+        bloque.setDiaSemana(dia);
+        bloque.setHoraInicio(LocalTime.of(horaInicio, minutoInicio));
+        bloque.setHoraFin(LocalTime.of(horaFin, minutoFin));
+        return bloque;
+    }
+
+    @Test
+    void guardarMasivo_creaActualizaElimina() {
+        AsignacionCurso asignacion1 = crearAsignacion(1L, 1L, "Matematicas", 2L, "Juan Perez", true, 1L);
+        AsignacionCurso asignacion2 = crearAsignacion(2L, 2L, "Comunicacion", 3L, "Maria Gomez", true, 1L);
+        Aula aula1 = crearAula(1L, "Aula 101", 30);
+        Aula aula2 = crearAula(2L, "Aula 102", 30);
+
+        BloqueHorario existente100 = bloque(100L, asignacion1, aula1, DiaSemana.LUNES, 8, 0, 10, 0);
+        BloqueHorario existente101 = bloque(101L, asignacion2, aula2, DiaSemana.MARTES, 8, 0, 9, 0);
+
+        when(bloqueRepo.findByAsignacionCursoSeccionId(1L))
+                .thenReturn(List.of(existente100, existente101));
+        when(asignacionRepo.findBySeccionId(1L))
+                .thenReturn(List.of(asignacion1, asignacion2));
+        when(aulaRepo.findAllById(any())).thenReturn(List.of(aula1, aula2));
+        when(bloqueRepo.findEnOtrasSecciones(1L, 1L)).thenReturn(List.of());
+        when(bloqueRepo.save(any(BloqueHorario.class))).thenAnswer(inv -> {
+            BloqueHorario b = inv.getArgument(0);
+            if (b.getId() == null) {
+                b.setId(200L);
+            }
+            return b;
+        });
+
+        GuardarBloquesSeccionRequest request = new GuardarBloquesSeccionRequest(1L, List.of(
+                new BloqueMasivoItemRequest(100L, 1L, 1L, DiaSemana.LUNES,
+                        LocalTime.of(9, 0), LocalTime.of(10, 0)),
+                new BloqueMasivoItemRequest(null, 2L, 2L, DiaSemana.MARTES,
+                        LocalTime.of(9, 0), LocalTime.of(10, 0))
+        ));
+
+        GuardadoMasivoBloquesResponse respuesta = bloqueService.guardarMasivo(1L, request);
+
+        assertEquals(1, respuesta.creados());
+        assertEquals(1, respuesta.actualizados());
+        assertEquals(1, respuesta.eliminados());
+        assertEquals(2, respuesta.bloques().size());
+        assertEquals(LocalTime.of(9, 0), existente100.getHoraInicio());
+        verify(bloqueRepo).deleteAll(List.of(existente101));
+    }
+
+    @Test
+    void guardarMasivo_listaVacia_eliminaTodos() {
+        AsignacionCurso asignacion = crearAsignacion(1L, 1L, "Matematicas", 2L, "Juan Perez", true, 1L);
+        Aula aula = crearAula(1L, "Aula 101", 30);
+        BloqueHorario existente = bloque(100L, asignacion, aula, DiaSemana.LUNES, 8, 0, 10, 0);
+
+        when(bloqueRepo.findByAsignacionCursoSeccionId(1L)).thenReturn(List.of(existente));
+        when(asignacionRepo.findBySeccionId(1L)).thenReturn(List.of(asignacion));
+        when(aulaRepo.findAllById(any())).thenReturn(List.of(aula));
+        when(bloqueRepo.findEnOtrasSecciones(1L, 1L)).thenReturn(List.of());
+
+        GuardadoMasivoBloquesResponse respuesta = bloqueService.guardarMasivo(
+                1L, new GuardarBloquesSeccionRequest(1L, List.of()));
+
+        assertEquals(0, respuesta.creados());
+        assertEquals(0, respuesta.actualizados());
+        assertEquals(1, respuesta.eliminados());
+        verify(bloqueRepo).deleteAll(List.of(existente));
+    }
+
+    @Test
+    void guardarMasivo_periodoCerrado_rechaza() {
+        when(periodoRepo.findByAnioAcademicoId(1L))
+                .thenReturn(Optional.of(crearPeriodoCerrado(1L)));
+
+        GuardarBloquesSeccionRequest request = new GuardarBloquesSeccionRequest(1L, List.of());
+
+        assertThrows(ReglaNegocioException.class,
+                () -> bloqueService.guardarMasivo(1L, request));
+    }
+
+    @Test
+    void guardarMasivo_seccionNoPerteneceAnio_rechaza() {
+        Seccion seccion = crearSeccion(1L, "A", 1L, "1er Grado", 2L, 2026);
+        when(seccionRepo.findById(1L)).thenReturn(Optional.of(seccion));
+
+        GuardarBloquesSeccionRequest request = new GuardarBloquesSeccionRequest(1L, List.of());
+
+        assertThrows(ReglaNegocioException.class,
+                () -> bloqueService.guardarMasivo(1L, request));
+    }
+
+    @Test
+    void guardarMasivo_horaInvalida_rechaza() {
+        AsignacionCurso asignacion = crearAsignacion(1L, 1L, "Matematicas", 2L, "Juan Perez", true, 1L);
+        Aula aula = crearAula(1L, "Aula 101", 30);
+
+        when(bloqueRepo.findByAsignacionCursoSeccionId(1L)).thenReturn(List.of());
+        when(asignacionRepo.findBySeccionId(1L)).thenReturn(List.of(asignacion));
+        when(aulaRepo.findAllById(any())).thenReturn(List.of(aula));
+
+        GuardarBloquesSeccionRequest request = new GuardarBloquesSeccionRequest(1L, List.of(
+                new BloqueMasivoItemRequest(null, 1L, 1L, DiaSemana.LUNES,
+                        LocalTime.of(10, 0), LocalTime.of(9, 0))
+        ));
+
+        assertThrows(ReglaNegocioException.class,
+                () -> bloqueService.guardarMasivo(1L, request));
+    }
+
+    @Test
+    void guardarMasivo_respetaConfiguracionDeJornada() {
+        horarioProperties.setJornadaInicio("09:00");
+
+        AsignacionCurso asignacion = crearAsignacion(1L, 1L, "Matematicas", 2L, "Juan Perez", true, 1L);
+        Aula aula = crearAula(1L, "Aula 101", 30);
+
+        when(bloqueRepo.findByAsignacionCursoSeccionId(1L)).thenReturn(List.of());
+        when(asignacionRepo.findBySeccionId(1L)).thenReturn(List.of(asignacion));
+        when(aulaRepo.findAllById(any())).thenReturn(List.of(aula));
+
+        GuardarBloquesSeccionRequest request = new GuardarBloquesSeccionRequest(1L, List.of(
+                new BloqueMasivoItemRequest(null, 1L, 1L, DiaSemana.LUNES,
+                        LocalTime.of(8, 0), LocalTime.of(9, 0))
+        ));
+
+        assertThrows(ReglaNegocioException.class,
+                () -> bloqueService.guardarMasivo(1L, request));
+    }
+
+    @Test
+    void guardarMasivo_cruceReceso_rechaza() {
+        AsignacionCurso asignacion = crearAsignacion(1L, 1L, "Matematicas", 2L, "Juan Perez", true, 1L);
+        Aula aula = crearAula(1L, "Aula 101", 30);
+
+        when(bloqueRepo.findByAsignacionCursoSeccionId(1L)).thenReturn(List.of());
+        when(asignacionRepo.findBySeccionId(1L)).thenReturn(List.of(asignacion));
+        when(aulaRepo.findAllById(any())).thenReturn(List.of(aula));
+
+        GuardarBloquesSeccionRequest request = new GuardarBloquesSeccionRequest(1L, List.of(
+                new BloqueMasivoItemRequest(null, 1L, 1L, DiaSemana.LUNES,
+                        LocalTime.of(10, 30), LocalTime.of(11, 15))
+        ));
+
+        ReglaNegocioException ex = assertThrows(ReglaNegocioException.class,
+                () -> bloqueService.guardarMasivo(1L, request));
+        assertTrue(ex.getMessage().contains("receso"));
+    }
+
+    @Test
+    void guardarMasivo_fueraDeJornada_rechaza() {
+        AsignacionCurso asignacion = crearAsignacion(1L, 1L, "Matematicas", 2L, "Juan Perez", true, 1L);
+        Aula aula = crearAula(1L, "Aula 101", 30);
+
+        when(bloqueRepo.findByAsignacionCursoSeccionId(1L)).thenReturn(List.of());
+        when(asignacionRepo.findBySeccionId(1L)).thenReturn(List.of(asignacion));
+        when(aulaRepo.findAllById(any())).thenReturn(List.of(aula));
+
+        GuardarBloquesSeccionRequest request = new GuardarBloquesSeccionRequest(1L, List.of(
+                new BloqueMasivoItemRequest(null, 1L, 1L, DiaSemana.LUNES,
+                        LocalTime.of(7, 0), LocalTime.of(8, 0))
+        ));
+
+        ReglaNegocioException ex = assertThrows(ReglaNegocioException.class,
+                () -> bloqueService.guardarMasivo(1L, request));
+        assertTrue(ex.getMessage().contains("jornada"));
+    }
+
+    @Test
+    void guardarMasivo_choqueDocenteEnPayload_rechaza() {
+        AsignacionCurso asignacion1 = crearAsignacion(1L, 1L, "Matematicas", 2L, "Juan Perez", true, 1L);
+        AsignacionCurso asignacion2 = crearAsignacion(2L, 2L, "Comunicacion", 2L, "Juan Perez", true, 1L);
+        Aula aula1 = crearAula(1L, "Aula 101", 30);
+        Aula aula2 = crearAula(2L, "Aula 102", 30);
+
+        when(bloqueRepo.findByAsignacionCursoSeccionId(1L)).thenReturn(List.of());
+        when(asignacionRepo.findBySeccionId(1L)).thenReturn(List.of(asignacion1, asignacion2));
+        when(aulaRepo.findAllById(any())).thenReturn(List.of(aula1, aula2));
+
+        GuardarBloquesSeccionRequest request = new GuardarBloquesSeccionRequest(1L, List.of(
+                new BloqueMasivoItemRequest(null, 1L, 1L, DiaSemana.LUNES,
+                        LocalTime.of(8, 0), LocalTime.of(10, 0)),
+                new BloqueMasivoItemRequest(null, 2L, 2L, DiaSemana.LUNES,
+                        LocalTime.of(9, 0), LocalTime.of(10, 0))
+        ));
+
+        ConflictoException ex = assertThrows(ConflictoException.class,
+                () -> bloqueService.guardarMasivo(1L, request));
+        assertTrue(ex.getMessage().contains("docente"));
+    }
+
+    @Test
+    void guardarMasivo_choqueAulaEnPayload_rechaza() {
+        AsignacionCurso asignacion1 = crearAsignacion(1L, 1L, "Matematicas", 2L, "Juan Perez", true, 1L);
+        AsignacionCurso asignacion2 = crearAsignacion(2L, 2L, "Comunicacion", 3L, "Maria Gomez", true, 1L);
+        Aula aula = crearAula(1L, "Aula 101", 30);
+
+        when(bloqueRepo.findByAsignacionCursoSeccionId(1L)).thenReturn(List.of());
+        when(asignacionRepo.findBySeccionId(1L)).thenReturn(List.of(asignacion1, asignacion2));
+        when(aulaRepo.findAllById(any())).thenReturn(List.of(aula));
+
+        GuardarBloquesSeccionRequest request = new GuardarBloquesSeccionRequest(1L, List.of(
+                new BloqueMasivoItemRequest(null, 1L, 1L, DiaSemana.LUNES,
+                        LocalTime.of(8, 0), LocalTime.of(10, 0)),
+                new BloqueMasivoItemRequest(null, 2L, 1L, DiaSemana.LUNES,
+                        LocalTime.of(9, 0), LocalTime.of(10, 0))
+        ));
+
+        ConflictoException ex = assertThrows(ConflictoException.class,
+                () -> bloqueService.guardarMasivo(1L, request));
+        assertTrue(ex.getMessage().contains("aula"));
+    }
+
+    @Test
+    void guardarMasivo_choqueSeccionEnPayload_rechaza() {
+        AsignacionCurso asignacion1 = crearAsignacion(1L, 1L, "Matematicas", 2L, "Juan Perez", true, 1L);
+        AsignacionCurso asignacion2 = crearAsignacion(2L, 2L, "Comunicacion", 3L, "Maria Gomez", true, 1L);
+        Aula aula1 = crearAula(1L, "Aula 101", 30);
+        Aula aula2 = crearAula(2L, "Aula 102", 30);
+
+        when(bloqueRepo.findByAsignacionCursoSeccionId(1L)).thenReturn(List.of());
+        when(asignacionRepo.findBySeccionId(1L)).thenReturn(List.of(asignacion1, asignacion2));
+        when(aulaRepo.findAllById(any())).thenReturn(List.of(aula1, aula2));
+
+        GuardarBloquesSeccionRequest request = new GuardarBloquesSeccionRequest(1L, List.of(
+                new BloqueMasivoItemRequest(null, 1L, 1L, DiaSemana.LUNES,
+                        LocalTime.of(8, 0), LocalTime.of(10, 0)),
+                new BloqueMasivoItemRequest(null, 2L, 2L, DiaSemana.LUNES,
+                        LocalTime.of(9, 0), LocalTime.of(10, 0))
+        ));
+
+        ConflictoException ex = assertThrows(ConflictoException.class,
+                () -> bloqueService.guardarMasivo(1L, request));
+        assertTrue(ex.getMessage().contains("sección"));
+    }
+
+    @Test
+    void guardarMasivo_choqueDocenteOtraSeccion_rechaza() {
+        AsignacionCurso asignacion = crearAsignacion(1L, 1L, "Matematicas", 2L, "Juan Perez", true, 1L);
+        AsignacionCurso asignacionOtra = crearAsignacion(9L, 9L, "Comunicacion", 2L, "Juan Perez", true, 2L);
+        Aula aula = crearAula(1L, "Aula 101", 30);
+
+        when(bloqueRepo.findByAsignacionCursoSeccionId(1L)).thenReturn(List.of());
+        when(asignacionRepo.findBySeccionId(1L)).thenReturn(List.of(asignacion));
+        when(aulaRepo.findAllById(any())).thenReturn(List.of(aula));
+        when(bloqueRepo.findEnOtrasSecciones(1L, 1L)).thenReturn(List.of(
+                bloque(500L, asignacionOtra, aula, DiaSemana.LUNES, 8, 0, 10, 0)
+        ));
+
+        GuardarBloquesSeccionRequest request = new GuardarBloquesSeccionRequest(1L, List.of(
+                new BloqueMasivoItemRequest(null, 1L, 1L, DiaSemana.LUNES,
+                        LocalTime.of(9, 0), LocalTime.of(10, 0))
+        ));
+
+        ConflictoException ex = assertThrows(ConflictoException.class,
+                () -> bloqueService.guardarMasivo(1L, request));
+        assertTrue(ex.getMessage().contains("otra sección"));
+    }
+
+    @Test
+    void guardarMasivo_aulaNoExiste_rechaza() {
+        AsignacionCurso asignacion = crearAsignacion(1L, 1L, "Matematicas", 2L, "Juan Perez", true, 1L);
+        when(bloqueRepo.findByAsignacionCursoSeccionId(1L)).thenReturn(List.of());
+        when(asignacionRepo.findBySeccionId(1L)).thenReturn(List.of(asignacion));
+        when(aulaRepo.findAllById(any())).thenReturn(List.of());
+
+        GuardarBloquesSeccionRequest request = new GuardarBloquesSeccionRequest(1L, List.of(
+                new BloqueMasivoItemRequest(null, 1L, 99L, DiaSemana.LUNES,
+                        LocalTime.of(8, 0), LocalTime.of(10, 0))
+        ));
+
+        assertThrows(RecursoNoEncontradoException.class,
+                () -> bloqueService.guardarMasivo(1L, request));
+    }
+
+    @Test
+    void guardarMasivo_bloqueIdDeOtraSeccion_rechaza() {
+        when(bloqueRepo.findByAsignacionCursoSeccionId(1L)).thenReturn(List.of());
+        when(bloqueRepo.findById(999L)).thenReturn(Optional.of(
+                bloque(999L, crearAsignacion(9L, 9L, "Otra", 3L, "Maria Gomez", true, 2L),
+                        crearAula(9L, "Aula 999", 30), DiaSemana.LUNES, 8, 0, 10, 0)));
+
+        GuardarBloquesSeccionRequest request = new GuardarBloquesSeccionRequest(1L, List.of(
+                new BloqueMasivoItemRequest(999L, 9L, 9L, DiaSemana.LUNES,
+                        LocalTime.of(8, 0), LocalTime.of(10, 0))
+        ));
+
+        assertThrows(ReglaNegocioException.class,
+                () -> bloqueService.guardarMasivo(1L, request));
     }
 
     @Test

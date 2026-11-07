@@ -68,6 +68,15 @@ public class BloqueHorarioController {
                 .body(RespuestaApiResponse.crearExito(resultado));
     }
 
+    /** Guardado masivo: reemplaza el estado completo de bloques de una sección. */
+    @PutMapping("/seccion/{seccionId}")
+    public ResponseEntity<RespuestaApiResponse<GuardadoMasivoBloquesResponse>> guardarMasivo(
+            @PathVariable Long seccionId,
+            @Valid @RequestBody GuardarBloquesSeccionRequest request) {
+        return ResponseEntity.ok(RespuestaApiResponse.crearExito(
+                service.guardarMasivo(seccionId, request)));
+    }
+
     @GetMapping("/{id}")
     public ResponseEntity<RespuestaApiResponse<BloqueHorarioResponse>> obtener(@PathVariable Long id) {
         return ResponseEntity.ok(RespuestaApiResponse.crearExito(service.obtener(id)));
