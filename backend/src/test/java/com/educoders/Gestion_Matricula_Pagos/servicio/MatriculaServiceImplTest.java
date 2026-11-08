@@ -8,6 +8,7 @@ import com.educoders.Gestion_Matricula_Pagos.dominio.Matricula;
 import com.educoders.Gestion_Matricula_Pagos.dominio.PeriodoMatricula;
 import com.educoders.Gestion_Matricula_Pagos.persistencia.MatriculaRepository;
 import com.educoders.Gestion_Matricula_Pagos.persistencia.PeriodoMatriculaRepository;
+import com.educoders.Gestion_Matricula_Pagos.presentacion.dto.MatriculaAdminListResponse;
 import com.educoders.Gestion_Matricula_Pagos.presentacion.dto.MatriculaResponse;
 import com.educoders.Gestion_Matricula_Pagos.presentacion.dto.RegistrarMatriculaRequest;
 import com.educoders.Gestion_Matricula_Pagos.presentacion.dto.SeccionEstudianteResponse;
@@ -27,6 +28,10 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -185,6 +190,52 @@ class MatriculaServiceImplTest {
 
         assertThrows(RecursoNoEncontradoException.class,
                 () -> service.obtenerSeccionEstudiante(5L, 1L));
+    }
+
+    @Test
+    void listarMatriculas_admin_exitoso() {
+        autenticar(crearAdmin());
+
+        Matricula matricula = new Matricula();
+        matricula.setId(100L);
+        matricula.setFechaAsignacion(LocalDate.now());
+        matricula.setEstado(EstadoMatricula.CONFIRMADA);
+        matricula.setEstudiante(crearEstudiante());
+        matricula.setSeccion(crearSeccion());
+
+        Pageable pageable = PageRequest.of(0, 15);
+        when(matriculaRepository.listarMatriculas(
+                1L, 1L, 1L, EstadoMatricula.CONFIRMADA, 5L, pageable))
+                .thenReturn(new PageImpl<>(List.of(matricula), pageable, 1));
+
+        Page<MatriculaAdminListResponse> resultado = service.listarMatriculas(
+                1L, 1L, 1L, EstadoMatricula.CONFIRMADA, 5L, pageable);
+
+        assertEquals(1, resultado.getTotalElements());
+        MatriculaAdminListResponse fila = resultado.getContent().get(0);
+        assertEquals(100L, fila.id());
+        assertEquals(5L, fila.estudianteId());
+        assertEquals("Luis Ramirez Torres", fila.nombreCompletoEstudiante());
+        assertEquals(1L, fila.gradoId());
+        assertEquals("1er Grado", fila.gradoNombre());
+        assertEquals(1L, fila.seccionId());
+        assertEquals("A", fila.seccionNombre());
+        assertEquals(1L, fila.anioAcademicoId());
+        assertEquals(2027, fila.anioAcademico());
+    }
+
+    @Test
+    void listarMatriculas_rolNoAdmin_rechaza() {
+        autenticar(crearApoderado());
+
+        Pageable pageable = PageRequest.of(0, 15);
+
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class,
+                () -> service.listarMatriculas(null, null, null, null, null, pageable));
+
+        assertEquals(HttpStatus.FORBIDDEN, ex.getStatusCode());
+        verify(matriculaRepository, never()).listarMatriculas(
+                any(), any(), any(), any(), any(), any());
     }
 
     @Test
