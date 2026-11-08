@@ -2,6 +2,8 @@ package com.educoders.Gestion_Matricula_Pagos.persistencia;
 
 import com.educoders.Gestion_Matricula_Pagos.dominio.Matricula;
 import com.educoders.Infraestructura_Servicios.enums.EstadoMatricula;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -77,5 +79,37 @@ public interface MatriculaRepository extends JpaRepository<Matricula, Long> {
             @Param("estudianteId") Long estudianteId,
             @Param("anioId") Long anioId,
             @Param("estados") Collection<EstadoMatricula> estados
+    );
+
+    /**
+     * Listado administrativo de matrículas con filtros opcionales.
+     */
+    @Query(value = """
+            SELECT m FROM Matricula m
+            JOIN FETCH m.estudiante e
+            JOIN FETCH m.seccion s
+            JOIN FETCH s.grado g
+            JOIN FETCH s.anioAcademico a
+            WHERE (:anioId IS NULL OR a.id = :anioId)
+              AND (:gradoId IS NULL OR g.id = :gradoId)
+              AND (:seccionId IS NULL OR s.id = :seccionId)
+              AND (:estado IS NULL OR m.estado = :estado)
+              AND (:estudianteId IS NULL OR e.id = :estudianteId)
+            """,
+            countQuery = """
+            SELECT COUNT(m) FROM Matricula m
+            WHERE (:anioId IS NULL OR m.seccion.anioAcademico.id = :anioId)
+              AND (:gradoId IS NULL OR m.seccion.grado.id = :gradoId)
+              AND (:seccionId IS NULL OR m.seccion.id = :seccionId)
+              AND (:estado IS NULL OR m.estado = :estado)
+              AND (:estudianteId IS NULL OR m.estudiante.id = :estudianteId)
+            """)
+    Page<Matricula> listarMatriculas(
+            @Param("anioId") Long anioId,
+            @Param("gradoId") Long gradoId,
+            @Param("seccionId") Long seccionId,
+            @Param("estado") EstadoMatricula estado,
+            @Param("estudianteId") Long estudianteId,
+            Pageable pageable
     );
 }

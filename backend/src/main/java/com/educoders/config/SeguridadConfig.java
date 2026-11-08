@@ -174,6 +174,12 @@ public class SeguridadConfig {
                                 ).hasRole("APODERADO")
 
 
+                                // Listado administrativo de matrículas
+                                .requestMatchers(
+                                        HttpMethod.GET,
+                                        "/api/v1/matriculas"
+                                ).hasRole("ADMINISTRADOR")
+
                                 // HU-GEMIH-02: solo el administrador gestiona la
                                 // configuración de horarios (asignaciones, bloques y aulas).
                                 .requestMatchers(

@@ -7,6 +7,7 @@ import com.educoders.Gestion_Matricula_Pagos.dominio.Matricula;
 import com.educoders.Gestion_Matricula_Pagos.dominio.PeriodoMatricula;
 import com.educoders.Gestion_Matricula_Pagos.persistencia.MatriculaRepository;
 import com.educoders.Gestion_Matricula_Pagos.persistencia.PeriodoMatriculaRepository;
+import com.educoders.Gestion_Matricula_Pagos.presentacion.dto.MatriculaAdminListResponse;
 import com.educoders.Gestion_Matricula_Pagos.presentacion.dto.MatriculaResponse;
 import com.educoders.Gestion_Matricula_Pagos.presentacion.dto.RegistrarMatriculaRequest;
 import com.educoders.Gestion_Matricula_Pagos.presentacion.dto.SeccionEstudianteResponse;
@@ -24,6 +25,8 @@ import com.educoders.Seguridad_Auditoria.presentacion.dto.DetalleAuditoriaDTO;
 import com.educoders.Seguridad_Auditoria.presentacion.dto.RegistrarAuditoriaRequestDTO;
 import com.educoders.Seguridad_Auditoria.servicio.AuditoriaService;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -165,6 +168,23 @@ public class MatriculaServiceImpl implements MatriculaService {
                 matricula.getSeccion().getId(),
                 matricula.getSeccion().getNombre()
         );
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Page<MatriculaAdminListResponse> listarMatriculas(
+            Long anioId,
+            Long gradoId,
+            Long seccionId,
+            EstadoMatricula estado,
+            Long estudianteId,
+            Pageable pageable) {
+
+        exigirAdministrador();
+
+        return matriculaRepository.listarMatriculas(
+                        anioId, gradoId, seccionId, estado, estudianteId, pageable)
+                .map(MatriculaAdminListResponse::fromEntity);
     }
 
     private void exigirAdministrador() {

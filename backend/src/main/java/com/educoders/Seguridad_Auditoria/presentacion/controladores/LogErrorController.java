@@ -31,12 +31,11 @@ public class LogErrorController {
             @RequestParam(required = false) String busqueda,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "15") int size,
-            @RequestParam(defaultValue = "fechaHora") String sortBy,
             @RequestParam(defaultValue = "DESC") String sortDirection) {
 
         Sort sort = sortDirection.equalsIgnoreCase("ASC")
-                ? Sort.by(sortBy).ascending()
-                : Sort.by(sortBy).descending();
+                ? Sort.by("fechaHora").ascending()
+                : Sort.by("fechaHora").descending();
 
         Pageable pageable = PageRequest.of(page, size, sort);
 
