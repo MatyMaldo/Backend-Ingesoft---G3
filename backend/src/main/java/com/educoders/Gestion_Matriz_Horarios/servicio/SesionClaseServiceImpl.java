@@ -317,6 +317,8 @@ public class SesionClaseServiceImpl implements SesionClaseService {
         r.setDocenteId(s.getBloqueHorario().getAsignacionCurso().getDocente().getId());
         r.setDocenteNombre(s.getBloqueHorario().getAsignacionCurso().getDocente().getNombre()
                 + " " + s.getBloqueHorario().getAsignacionCurso().getDocente().getApellidoPaterno());
+        r.setGradoId(s.getBloqueHorario().getAsignacionCurso().getSeccion().getGrado().getId());
+        r.setGradoNombre(s.getBloqueHorario().getAsignacionCurso().getSeccion().getGrado().getNombre());
         r.setSeccionId(s.getBloqueHorario().getAsignacionCurso().getSeccion().getId());
         r.setSeccionNombre(s.getBloqueHorario().getAsignacionCurso().getSeccion().getNombre());
         return r;

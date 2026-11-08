@@ -350,6 +350,8 @@ class SesionClaseServiceImplTest {
         assertEquals("Matematicas", r.get(0).getCursoNombre());
         assertEquals("Juan Perez", r.get(0).getDocenteNombre());
         assertEquals("Aula 101", r.get(0).getAulaNombre());
+        assertEquals(1L, r.get(0).getGradoId());
+        assertEquals("1er Grado", r.get(0).getGradoNombre());
         assertEquals(1L, r.get(0).getSeccionId());
         assertEquals(EstadoSesion.PROGRAMADA, r.get(0).getEstado());
     }

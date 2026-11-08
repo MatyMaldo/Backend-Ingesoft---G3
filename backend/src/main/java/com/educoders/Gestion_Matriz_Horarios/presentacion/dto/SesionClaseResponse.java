@@ -20,6 +20,8 @@ public class SesionClaseResponse {
     private String cursoNombre;
     private Long docenteId;
     private String docenteNombre;
+    private Long gradoId;
+    private String gradoNombre;
     private Long seccionId;
     private String seccionNombre;
 
@@ -50,6 +52,10 @@ public class SesionClaseResponse {
     public void setDocenteId(Long docenteId) { this.docenteId = docenteId; }
     public String getDocenteNombre() { return docenteNombre; }
     public void setDocenteNombre(String docenteNombre) { this.docenteNombre = docenteNombre; }
+    public Long getGradoId() { return gradoId; }
+    public void setGradoId(Long gradoId) { this.gradoId = gradoId; }
+    public String getGradoNombre() { return gradoNombre; }
+    public void setGradoNombre(String gradoNombre) { this.gradoNombre = gradoNombre; }
     public Long getSeccionId() { return seccionId; }
     public void setSeccionId(Long seccionId) { this.seccionId = seccionId; }
     public String getSeccionNombre() { return seccionNombre; }
