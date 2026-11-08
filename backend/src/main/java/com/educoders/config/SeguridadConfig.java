@@ -108,7 +108,15 @@ public class SeguridadConfig {
                                 "ADMINISTRADOR",
                                 "ESTUDIANTE",
                                 "APODERADO"
-                        )// HU-SAT-07: Consulta de usuarios solo para administradores
+                        )
+
+                        // HU-GEMIH-07: estudiantes a cargo del apoderado autenticado
+                        .requestMatchers(
+                                HttpMethod.GET,
+                                "/api/v1/usuarios/apoderados/me/estudiantes"
+                        ).hasRole("APODERADO")
+
+                        // HU-SAT-07: Consulta de usuarios solo para administradores
                         .requestMatchers(
                                 HttpMethod.GET,
                                 "/api/v1/usuarios",
