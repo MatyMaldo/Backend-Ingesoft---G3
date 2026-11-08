@@ -1,6 +1,7 @@
 package com.educoders.Gestion_Matricula_Pagos.servicio;
 
 import com.educoders.Gestion_Matricula_Pagos.presentacion.dto.*;
+import com.educoders.Infraestructura_Servicios.enums.EstadoCompromisoPago;
 import com.educoders.Infraestructura_Servicios.enums.EstadoPago;
 import com.educoders.Infraestructura_Servicios.enums.TipoCompromiso;
 
@@ -26,6 +27,18 @@ public interface PagoService {
             TipoCompromiso tipoCompromiso,
             Pageable pageable
     );
+
+    /*
+        HU-GEMAP-08: Listado agrupado por compromiso para el admin
+    */
+    Page<CompromisoPagoAdminResponse> listarPagosAgrupadosAdmin(
+            Long anioAcademicoId,
+            Long gradoId,
+            Long seccionId,
+            Long estudianteId,
+            EstadoCompromisoPago estadoCompromiso,
+            TipoCompromiso tipoCompromiso,
+            Pageable pageable);
 
     /*
         HU-GEMAP-08: Detalle del pago(del listado para el admin) + validacion de pago

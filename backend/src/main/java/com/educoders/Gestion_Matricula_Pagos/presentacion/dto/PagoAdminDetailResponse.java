@@ -1,7 +1,9 @@
 package com.educoders.Gestion_Matricula_Pagos.presentacion.dto;
 
 import com.educoders.Gestion_Matricula_Pagos.dominio.Pago;
+import com.educoders.Infraestructura_Servicios.enums.EstadoCompromisoPago;
 import com.educoders.Infraestructura_Servicios.enums.EstadoPago;
+import com.educoders.Infraestructura_Servicios.enums.Mes;
 import com.educoders.Infraestructura_Servicios.enums.TipoCompromiso;
 
 import java.math.BigDecimal;
@@ -18,6 +20,8 @@ public record PagoAdminDetailResponse(
         // Información del Compromiso
         Long compromisoId,
         TipoCompromiso tipoCompromiso,
+        Mes mes,
+        EstadoCompromisoPago estadoCompromiso,
 
         // Información del Estudiante
         Long estudianteId,
@@ -61,6 +65,8 @@ public record PagoAdminDetailResponse(
                 p.getMotivo(),
                 compromiso.getId(),
                 compromiso.getTipoCompromiso(),
+                compromiso.getMes(),
+                compromiso.getEstado(),
                 estudiante.getId(),
                 nombreEstudiante,
                 gradoSeccionStr,

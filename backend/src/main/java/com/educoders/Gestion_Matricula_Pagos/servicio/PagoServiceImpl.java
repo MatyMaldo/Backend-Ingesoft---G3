@@ -35,6 +35,8 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 @Service
 public class PagoServiceImpl implements PagoService {
@@ -162,6 +164,45 @@ public class PagoServiceImpl implements PagoService {
                 tipoCompromiso,
                 pageable
         ).map(PagoAdminListResponse::fromEntity);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Page<CompromisoPagoAdminResponse> listarPagosAgrupadosAdmin(
+            Long anioAcademicoId,
+            Long gradoId,
+            Long seccionId,
+            Long estudianteId,
+            EstadoCompromisoPago estadoCompromiso,
+            TipoCompromiso tipoCompromiso,
+            Pageable pageable) {
+
+        exigirAdministrador();
+
+        Page<CompromisoPago> compromisos = compromisoPagoRepository.listarAdmin(
+                anioAcademicoId,
+                gradoId,
+                seccionId,
+                estudianteId,
+                estadoCompromiso,
+                tipoCompromiso,
+                pageable
+        );
+
+        List<Long> compromisoIds = compromisos.getContent().stream()
+                .map(CompromisoPago::getId)
+                .toList();
+
+        Map<Long, List<Pago>> pagosPorCompromiso = compromisoIds.isEmpty()
+                ? Map.of()
+                : pagoRepository.findByCompromisoPagoIdIn(compromisoIds).stream()
+                        .collect(Collectors.groupingBy(
+                                pago -> pago.getCompromisoPago().getId()));
+
+        return compromisos.map(compromiso -> CompromisoPagoAdminResponse.fromEntity(
+                compromiso,
+                pagosPorCompromiso.getOrDefault(compromiso.getId(), List.of())
+        ));
     }
 
     @Override

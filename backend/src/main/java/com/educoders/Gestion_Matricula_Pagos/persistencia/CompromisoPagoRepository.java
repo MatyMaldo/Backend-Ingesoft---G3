@@ -1,8 +1,11 @@
 package com.educoders.Gestion_Matricula_Pagos.persistencia;
 
 import com.educoders.Gestion_Matricula_Pagos.dominio.CompromisoPago;
+import com.educoders.Infraestructura_Servicios.enums.EstadoCompromisoPago;
 import com.educoders.Infraestructura_Servicios.enums.Mes;
 import com.educoders.Infraestructura_Servicios.enums.TipoCompromiso;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -41,5 +44,41 @@ public interface CompromisoPagoRepository extends JpaRepository<CompromisoPago, 
     List<CompromisoPago> findByEstudianteAndAnioOpcional(
             @Param("estudianteId") Long estudianteId,
             @Param("anio") Integer anio
+    );
+
+    /**
+     * Listado administrativo de compromisos con filtros opcionales.
+     */
+    @Query(value = """
+            SELECT c FROM CompromisoPago c
+            JOIN FETCH c.matricula m
+            JOIN FETCH m.estudiante e
+            JOIN FETCH m.seccion s
+            JOIN FETCH s.grado g
+            JOIN FETCH s.anioAcademico a
+            WHERE (:anioAcademicoId IS NULL OR a.id = :anioAcademicoId)
+              AND (:gradoId IS NULL OR g.id = :gradoId)
+              AND (:seccionId IS NULL OR s.id = :seccionId)
+              AND (:estudianteId IS NULL OR e.id = :estudianteId)
+              AND (:estadoCompromiso IS NULL OR c.estado = :estadoCompromiso)
+              AND (:tipoCompromiso IS NULL OR c.tipoCompromiso = :tipoCompromiso)
+            """,
+            countQuery = """
+            SELECT COUNT(c) FROM CompromisoPago c
+            WHERE (:anioAcademicoId IS NULL OR c.matricula.seccion.anioAcademico.id = :anioAcademicoId)
+              AND (:gradoId IS NULL OR c.matricula.seccion.grado.id = :gradoId)
+              AND (:seccionId IS NULL OR c.matricula.seccion.id = :seccionId)
+              AND (:estudianteId IS NULL OR c.matricula.estudiante.id = :estudianteId)
+              AND (:estadoCompromiso IS NULL OR c.estado = :estadoCompromiso)
+              AND (:tipoCompromiso IS NULL OR c.tipoCompromiso = :tipoCompromiso)
+            """)
+    Page<CompromisoPago> listarAdmin(
+            @Param("anioAcademicoId") Long anioAcademicoId,
+            @Param("gradoId") Long gradoId,
+            @Param("seccionId") Long seccionId,
+            @Param("estudianteId") Long estudianteId,
+            @Param("estadoCompromiso") EstadoCompromisoPago estadoCompromiso,
+            @Param("tipoCompromiso") TipoCompromiso tipoCompromiso,
+            Pageable pageable
     );
 }
