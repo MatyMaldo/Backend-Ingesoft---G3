@@ -85,6 +85,10 @@ public interface MatriculaRepository extends JpaRepository<Matricula, Long> {
 
     /**
      * Listado administrativo de matrículas con filtros opcionales.
+     * <p>
+     * {@code busqueda} es un patrón LIKE ya en minúsculas (por ejemplo {@code %ana%}) que se compara con el nombre
+     * completo y con el código del estudiante; una cadena vacía desactiva el filtro. Se usa una cadena vacía en vez
+     * de {@code null} para que el motor no tenga que inferir el tipo de un parámetro nulo.
      */
     @Query(value = """
             SELECT m FROM Matricula m
@@ -97,6 +101,9 @@ public interface MatriculaRepository extends JpaRepository<Matricula, Long> {
               AND (:seccionId IS NULL OR s.id = :seccionId)
               AND (:estado IS NULL OR m.estado = :estado)
               AND (:estudianteId IS NULL OR e.id = :estudianteId)
+              AND (:busqueda = ''
+                   OR LOWER(CONCAT(e.nombre, ' ', e.apellidoPaterno, ' ', COALESCE(e.apellidoMaterno, ''))) LIKE :busqueda
+                   OR LOWER(COALESCE(e.codigo, '')) LIKE :busqueda)
             """,
             countQuery = """
             SELECT COUNT(m) FROM Matricula m
@@ -105,6 +112,10 @@ public interface MatriculaRepository extends JpaRepository<Matricula, Long> {
               AND (:seccionId IS NULL OR m.seccion.id = :seccionId)
               AND (:estado IS NULL OR m.estado = :estado)
               AND (:estudianteId IS NULL OR m.estudiante.id = :estudianteId)
+              AND (:busqueda = ''
+                   OR LOWER(CONCAT(m.estudiante.nombre, ' ', m.estudiante.apellidoPaterno, ' ',
+                                   COALESCE(m.estudiante.apellidoMaterno, ''))) LIKE :busqueda
+                   OR LOWER(COALESCE(m.estudiante.codigo, '')) LIKE :busqueda)
             """)
     Page<Matricula> listarMatriculas(
             @Param("anioId") Long anioId,
@@ -112,7 +123,31 @@ public interface MatriculaRepository extends JpaRepository<Matricula, Long> {
             @Param("seccionId") Long seccionId,
             @Param("estado") EstadoMatricula estado,
             @Param("estudianteId") Long estudianteId,
+            @Param("busqueda") String busqueda,
             Pageable pageable
+    );
+
+    /**
+     * Cuenta las matrículas por estado con los mismos filtros del listado administrativo, salvo el estado.
+     * Cada fila es {@code [EstadoMatricula, Long]}; los estados sin matrículas no aparecen.
+     * {@code busqueda} se interpreta igual que en {@link #listarMatriculas}.
+     */
+    @Query("""
+            SELECT m.estado, COUNT(m) FROM Matricula m
+            WHERE (:anioId IS NULL OR m.seccion.anioAcademico.id = :anioId)
+              AND (:gradoId IS NULL OR m.seccion.grado.id = :gradoId)
+              AND (:seccionId IS NULL OR m.seccion.id = :seccionId)
+              AND (:busqueda = ''
+                   OR LOWER(CONCAT(m.estudiante.nombre, ' ', m.estudiante.apellidoPaterno, ' ',
+                                   COALESCE(m.estudiante.apellidoMaterno, ''))) LIKE :busqueda
+                   OR LOWER(COALESCE(m.estudiante.codigo, '')) LIKE :busqueda)
+            GROUP BY m.estado
+            """)
+    List<Object[]> contarPorEstado(
+            @Param("anioId") Long anioId,
+            @Param("gradoId") Long gradoId,
+            @Param("seccionId") Long seccionId,
+            @Param("busqueda") String busqueda
     );
 
     /**
