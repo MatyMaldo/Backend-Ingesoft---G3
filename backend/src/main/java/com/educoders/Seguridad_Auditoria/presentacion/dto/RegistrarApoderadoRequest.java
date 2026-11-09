@@ -10,6 +10,8 @@ import jakarta.validation.constraints.Size;
 /**
  * Datos de entrada para HU-GEMAP-01.
  * El username se autogenera en el servicio a partir del DNI.
+ * No recibe contraseña: la cuenta nace sin ella y el propio usuario la define con el código de verificación
+ * que recibe por correo (HU-SAT-03).
  */
 public record RegistrarApoderadoRequest(
 
@@ -35,10 +37,6 @@ public record RegistrarApoderadoRequest(
 
         @Pattern(regexp = "\\d{9}", message = "El teléfono debe tener 9 dígitos.")
         String telefono,
-
-        @NotBlank(message = "La contraseña es obligatoria.")
-        @Size(min = 8, max = 40, message = "La contraseña debe tener entre 8 y 40 caracteres.")
-        String password,
 
         @NotNull(message = "La edad es obligatoria.")
         @Positive(message = "La edad debe ser mayor que cero.")

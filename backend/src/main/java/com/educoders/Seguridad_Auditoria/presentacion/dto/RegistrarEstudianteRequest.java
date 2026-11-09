@@ -12,6 +12,8 @@ import java.time.LocalDate;
 /**
  * Datos de entrada para registrar un estudiante.
  * El username se autogenera en el servicio a partir del DNI.
+ * No recibe contraseña: la cuenta nace sin ella y el propio usuario la define con el código de verificación
+ * que recibe por correo (HU-SAT-03).
  */
 public record RegistrarEstudianteRequest(
 
@@ -37,10 +39,6 @@ public record RegistrarEstudianteRequest(
 
         @Pattern(regexp = "\\d{9}", message = "El teléfono debe tener 9 dígitos.")
         String telefono,
-
-        @NotBlank(message = "La contraseña es obligatoria.")
-        @Size(min = 8, max = 40, message = "La contraseña debe tener entre 8 y 40 caracteres.")
-        String password,
 
         @NotBlank(message = "El código del estudiante es obligatorio.")
         @Size(max = 30, message = "El código no debe superar 30 caracteres.")

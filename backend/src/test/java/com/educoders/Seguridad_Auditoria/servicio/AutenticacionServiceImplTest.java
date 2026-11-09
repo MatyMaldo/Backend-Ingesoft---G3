@@ -98,6 +98,25 @@ class AutenticacionServiceImplTest {
     }
 
     @Test
+    void rechazarCuentaSinContrasenaDefinida() {
+        // Cuenta recién registrada: aún no definió su contraseña (HU-SAT-03), así que no puede iniciar sesión.
+        when(usuarioRepository.findAllByDni("12345678"))
+                .thenReturn(List.of(docente));
+
+        when(docente.getPasswordHash()).thenReturn(null);
+
+        ResponseStatusException error = assertThrows(
+                ResponseStatusException.class,
+                () -> autenticacionService.iniciarSesion(
+                        new LoginRequest("12345678", "cualquier-cosa")
+                )
+        );
+
+        assertEquals(HttpStatus.UNAUTHORIZED, error.getStatusCode());
+        verifyNoInteractions(passwordEncoder, jwtService);
+    }
+
+    @Test
     void rechazarUsuarioInexistente() {
         when(usuarioRepository.findAllByDni("99999999"))
                 .thenReturn(List.of());

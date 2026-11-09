@@ -14,6 +14,8 @@ import com.educoders.Seguridad_Auditoria.persistencia.ApoderadoRepository;
 import com.educoders.Seguridad_Auditoria.persistencia.EstudianteRepository;
 import com.educoders.Seguridad_Auditoria.persistencia.UsuarioRepository;
 import com.educoders.Seguridad_Auditoria.presentacion.dto.EstudianteApoderadoResponse;
+import com.educoders.Seguridad_Auditoria.presentacion.dto.RegistrarApoderadoRequest;
+import org.mockito.ArgumentCaptor;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -23,7 +25,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
@@ -31,7 +32,9 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -44,7 +47,6 @@ class ApoderadoServiceImplTest {
     @Mock private ApoderadoRepository apoderadoRepository;
     @Mock private EstudianteRepository estudianteRepository;
     @Mock private MatriculaRepository matriculaRepository;
-    @Mock private PasswordEncoder passwordEncoder;
 
     @InjectMocks
     private ApoderadoServiceImpl service;
@@ -178,5 +180,21 @@ class ApoderadoServiceImplTest {
 
         assertEquals(HttpStatus.UNAUTHORIZED, ex.getStatusCode());
         verify(estudianteRepository, never()).findByApoderadoIdOrderByIdAsc(anyLong());
+    }
+
+    @Test
+    void registrarApoderado_creaLaCuentaSinContrasena() {
+        when(usuarioRepository.existsByDniAndTipoUsuario(anyString(), any())).thenReturn(false);
+        when(usuarioRepository.existsByEmail("rosa@example.com")).thenReturn(false);
+        when(apoderadoRepository.save(any(Apoderado.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        service.registrarApoderado(new RegistrarApoderadoRequest(
+                "Rosa", "Apoderado", null, "11000001", "rosa@example.com", "910000001", 36));
+
+        ArgumentCaptor<Apoderado> captor = ArgumentCaptor.forClass(Apoderado.class);
+        verify(apoderadoRepository).save(captor.capture());
+        assertNull(captor.getValue().getPasswordHash());
+        assertEquals("rosa", captor.getValue().getUsername());
+        assertEquals(true, captor.getValue().isActivo());
     }
 }

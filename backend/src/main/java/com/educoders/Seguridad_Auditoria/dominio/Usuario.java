@@ -33,7 +33,8 @@ public abstract class Usuario {
     @Column(name = "username", unique = true, nullable = false)
     private String username;
 
-    @Column(name = "password_hash", nullable = false)
+    /** Nulo mientras el usuario no haya definido su contraseña (HU-SAT-03); mientras tanto no puede iniciar sesión. */
+    @Column(name = "password_hash")
     private String passwordHash;
 
     @Column(name = "email", unique = true, nullable = false)
