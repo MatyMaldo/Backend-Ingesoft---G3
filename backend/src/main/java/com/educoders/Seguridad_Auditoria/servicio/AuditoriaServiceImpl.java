@@ -3,13 +3,19 @@ package com.educoders.Seguridad_Auditoria.servicio;
 import com.educoders.Infraestructura_Servicios.enums.CategoriaAuditoria;
 import com.educoders.Infraestructura_Servicios.enums.TipoAccionAuditoria;
 import com.educoders.Infraestructura_Servicios.exception.RecursoNoEncontradoException;
+import com.educoders.Seguridad_Auditoria.dominio.Administrador;
+import com.educoders.Seguridad_Auditoria.dominio.Apoderado;
 import com.educoders.Seguridad_Auditoria.dominio.Auditoria;
 import com.educoders.Seguridad_Auditoria.dominio.DetalleAuditoria;
+import com.educoders.Seguridad_Auditoria.dominio.Docente;
+import com.educoders.Seguridad_Auditoria.dominio.Estudiante;
 import com.educoders.Seguridad_Auditoria.dominio.Usuario;
 import com.educoders.Seguridad_Auditoria.persistencia.AuditoriaRepository;
+import com.educoders.Seguridad_Auditoria.persistencia.UsuarioRepository;
 import com.educoders.Seguridad_Auditoria.presentacion.dto.AuditoriaResponseDTO;
 import com.educoders.Seguridad_Auditoria.presentacion.dto.DetalleAuditoriaDTO;
 import com.educoders.Seguridad_Auditoria.presentacion.dto.RegistrarAuditoriaRequestDTO;
+import com.educoders.Seguridad_Auditoria.presentacion.dto.UsuarioAuditoriaDTO;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
@@ -22,6 +28,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
@@ -29,9 +38,12 @@ public class AuditoriaServiceImpl implements AuditoriaService {
 
     private static final Logger log = LoggerFactory.getLogger(AuditoriaServiceImpl.class);
     private final AuditoriaRepository auditoriaRepository;
+    private final UsuarioRepository usuarioRepository;
 
-    public AuditoriaServiceImpl(AuditoriaRepository auditoriaRepository) {
+    public AuditoriaServiceImpl(AuditoriaRepository auditoriaRepository,
+                                UsuarioRepository usuarioRepository) {
         this.auditoriaRepository = auditoriaRepository;
+        this.usuarioRepository = usuarioRepository;
     }
 
     @Override
@@ -72,7 +84,8 @@ public class AuditoriaServiceImpl implements AuditoriaService {
                                                        TipoAccionAuditoria accion,
                                                        LocalDateTime fechaInicio, LocalDateTime fechaFin, Pageable pageable) {
         Page<Auditoria> auditorias = auditoriaRepository.buscarConFiltros(categoria, accion, fechaInicio, fechaFin, pageable);
-        return auditorias.map(this::mapearAResponse);
+        Map<Long, Usuario> usuarios = cargarUsuarios(auditorias.getContent());
+        return auditorias.map(auditoria -> mapearAResponse(auditoria, usuarios));
     }
 
     @Override
@@ -80,7 +93,8 @@ public class AuditoriaServiceImpl implements AuditoriaService {
     public Page<AuditoriaResponseDTO> obtenerHistorialPorEntidad(String entidad, Long entidadId, Pageable pageable) {
         Page<Auditoria> historial = auditoriaRepository
                 .findByEntidadAndEntidadIdOrderByFechaHoraAsc(entidad, entidadId, pageable);
-        return historial.map(this::mapearAResponse);
+        Map<Long, Usuario> usuarios = cargarUsuarios(historial.getContent());
+        return historial.map(auditoria -> mapearAResponse(auditoria, usuarios));
     }
 
     @Override
@@ -88,7 +102,13 @@ public class AuditoriaServiceImpl implements AuditoriaService {
     public AuditoriaResponseDTO obtenerPorId(Long id) {
         Auditoria auditoria = auditoriaRepository.findById(id)
                 .orElseThrow(() -> new RecursoNoEncontradoException("Auditoría no encontrada"));
-        return mapearAResponse(auditoria);
+
+        Long usuarioId = auditoria.getUsuarioId();
+        Usuario usuario = usuarioId != null
+                ? usuarioRepository.findById(usuarioId).orElse(null)
+                : null;
+
+        return mapearAResponse(auditoria, construirUsuario(usuarioId, usuario));
     }
 
     private Long obtenerUsuarioIdAutenticado(Long idProporcionado) {
@@ -120,11 +140,34 @@ public class AuditoriaServiceImpl implements AuditoriaService {
         return idProporcionado;
     }
 
-    private AuditoriaResponseDTO mapearAResponse(Auditoria auditoria) {
+    private Map<Long, Usuario> cargarUsuarios(List<Auditoria> auditorias) {
+        Set<Long> ids = auditorias.stream()
+                .map(Auditoria::getUsuarioId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+
+        if (ids.isEmpty()) {
+            return Map.of();
+        }
+
+        return usuarioRepository.findAllById(ids).stream()
+                .collect(Collectors.toMap(Usuario::getId, usuario -> usuario));
+    }
+
+    private AuditoriaResponseDTO mapearAResponse(Auditoria auditoria,
+                                                 Map<Long, Usuario> usuarios) {
+        Long usuarioId = auditoria.getUsuarioId();
+        Usuario usuario = usuarioId != null ? usuarios.get(usuarioId) : null;
+        return mapearAResponse(auditoria, construirUsuario(usuarioId, usuario));
+    }
+
+    private AuditoriaResponseDTO mapearAResponse(Auditoria auditoria,
+                                                 UsuarioAuditoriaDTO usuario) {
         return new AuditoriaResponseDTO(
                 auditoria.getId(),
                 auditoria.getFechaHora(),
                 auditoria.getUsuarioId(),
+                usuario,
                 auditoria.getCategoria(),
                 auditoria.getAccion().name(),
                 auditoria.getEntidad(),
@@ -134,5 +177,29 @@ public class AuditoriaServiceImpl implements AuditoriaService {
                         .map(d -> new DetalleAuditoriaDTO(d.getCampo(), d.getValorAnterior(), d.getValorNuevo()))
                         .collect(Collectors.toList())
         );
+    }
+
+    private UsuarioAuditoriaDTO construirUsuario(Long usuarioId, Usuario usuario) {
+        if (usuarioId == null) {
+            return new UsuarioAuditoriaDTO(null, "Sistema", "SISTEMA");
+        }
+        if (usuario == null) {
+            return new UsuarioAuditoriaDTO(usuarioId, "Usuario #" + usuarioId, null);
+        }
+
+        String nombre = usuario.getNombre() + " " + usuario.getApellidoPaterno();
+        if (usuario.getApellidoMaterno() != null && !usuario.getApellidoMaterno().isBlank()) {
+            nombre += " " + usuario.getApellidoMaterno();
+        }
+
+        return new UsuarioAuditoriaDTO(usuarioId, nombre, obtenerRol(usuario));
+    }
+
+    private String obtenerRol(Usuario usuario) {
+        if (usuario instanceof Administrador) return "ADMINISTRADOR";
+        if (usuario instanceof Docente) return "DOCENTE";
+        if (usuario instanceof Apoderado) return "APODERADO";
+        if (usuario instanceof Estudiante) return "ESTUDIANTE";
+        return null;
     }
 }
