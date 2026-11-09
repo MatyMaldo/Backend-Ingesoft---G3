@@ -30,6 +30,9 @@ public interface PagoRepository extends JpaRepository<Pago, Long> {
     // Verifica si ya existe un pago pendiente de validación para el compromiso
     boolean existsByCompromisoPagoIdAndEstado(Long compromisoId, EstadoPago estado);
 
+    // Verifica si existe otro pago en el estado indicado para el mismo compromiso.
+    boolean existsByCompromisoPagoIdAndEstadoAndIdNot(Long compromisoId, EstadoPago estado, Long id);
+
     /*
         HU-GEMAP-08: Listado de pagos para admin
     */

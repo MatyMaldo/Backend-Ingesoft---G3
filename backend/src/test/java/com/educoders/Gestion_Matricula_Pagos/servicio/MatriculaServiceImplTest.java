@@ -12,7 +12,9 @@ import com.educoders.Gestion_Matricula_Pagos.presentacion.dto.MatriculaAdminList
 import com.educoders.Gestion_Matricula_Pagos.presentacion.dto.MatriculaResponse;
 import com.educoders.Gestion_Matricula_Pagos.presentacion.dto.RegistrarMatriculaRequest;
 import com.educoders.Gestion_Matricula_Pagos.presentacion.dto.SeccionEstudianteResponse;
+import com.educoders.Infraestructura_Servicios.enums.EstadoCompromisoPago;
 import com.educoders.Infraestructura_Servicios.enums.EstadoMatricula;
+import com.educoders.Infraestructura_Servicios.enums.TipoCompromiso;
 import com.educoders.Infraestructura_Servicios.exception.RecursoNoEncontradoException;
 import com.educoders.Infraestructura_Servicios.exception.ReglaNegocioException;
 import com.educoders.Seguridad_Auditoria.dominio.Administrador;
@@ -236,6 +238,50 @@ class MatriculaServiceImplTest {
         assertEquals(HttpStatus.FORBIDDEN, ex.getStatusCode());
         verify(matriculaRepository, never()).listarMatriculas(
                 any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void cancelarPendientesPorPeriodoVencido_cancelaSinCompromisoPagado() {
+        Seccion seccion = crearSeccion();
+        PeriodoMatricula periodo = new PeriodoMatricula();
+        periodo.setFechaInicio(LocalDate.now().minusMonths(3));
+        periodo.setFechaFin(LocalDate.now().minusDays(1));
+        periodo.setAnioAcademico(seccion.getAnioAcademico());
+
+        Matricula matricula = new Matricula();
+        matricula.setId(100L);
+        matricula.setEstado(EstadoMatricula.PENDIENTE);
+        matricula.setEstudiante(crearEstudiante());
+        matricula.setSeccion(seccion);
+
+        when(periodoMatriculaRepository.findAll()).thenReturn(List.of(periodo));
+        when(matriculaRepository.buscarSinCompromisoPagado(
+                1L, EstadoMatricula.PENDIENTE, TipoCompromiso.MATRICULA, EstadoCompromisoPago.PAGADO))
+                .thenReturn(List.of(matricula));
+
+        int canceladas = service.cancelarPendientesPorPeriodoVencido();
+
+        assertEquals(1, canceladas);
+        assertEquals(EstadoMatricula.CANCELADA, matricula.getEstado());
+        verify(matriculaRepository).saveAll(any());
+        verify(auditoriaService).registrarAuditoria(any());
+    }
+
+    @Test
+    void cancelarPendientesPorPeriodoVigente_noCancela() {
+        Seccion seccion = crearSeccion();
+        PeriodoMatricula periodo = new PeriodoMatricula();
+        periodo.setFechaInicio(LocalDate.now().minusMonths(1));
+        periodo.setFechaFin(LocalDate.now().plusMonths(1));
+        periodo.setAnioAcademico(seccion.getAnioAcademico());
+
+        when(periodoMatriculaRepository.findAll()).thenReturn(List.of(periodo));
+
+        int canceladas = service.cancelarPendientesPorPeriodoVencido();
+
+        assertEquals(0, canceladas);
+        verify(matriculaRepository, never()).saveAll(any());
+        verify(auditoriaService, never()).registrarAuditoria(any());
     }
 
     @Test

@@ -20,6 +20,7 @@ import com.educoders.Infraestructura_Servicios.enums.EstadoMatricula;
 import com.educoders.Infraestructura_Servicios.enums.EstadoPago;
 import com.educoders.Infraestructura_Servicios.enums.Mes;
 import com.educoders.Infraestructura_Servicios.enums.TipoCompromiso;
+import com.educoders.Infraestructura_Servicios.exception.ConflictoException;
 import com.educoders.Infraestructura_Servicios.exception.ReglaNegocioException;
 import com.educoders.Infraestructura_Servicios.servicio.ServicioAlmacenamientoArchivo;
 import com.educoders.Infraestructura_Servicios.servicio.ServicioNotificacionEmail;
@@ -340,6 +341,146 @@ class PagoServiceImplTest {
         assertEquals(EstadoMatricula.PENDIENTE, matricula.getEstado());
         verify(servicioNotificacionEmail).enviarCorreoRechazoPago(any(), any(), any(), any(), anyString());
         verify(auditoriaService).registrarAuditoria(any());
+    }
+
+    // --- correcciones de estado ---
+
+    @Test
+    void validarPagoAdmin_desdeRechazado_actualizaEstados() {
+        autenticar(crearAdmin(1L));
+
+        Apoderado apoderado = crearApoderado(4L);
+        AnioAcademico anio = crearAnio(1L);
+        Seccion seccion = crearSeccion(1L, anio);
+        Matricula matricula = crearMatricula(1L, EstadoMatricula.PENDIENTE,
+                crearEstudiante(5L, apoderado), seccion);
+        CompromisoPago compromiso = crearCompromiso(1L, TipoCompromiso.MATRICULA,
+                EstadoCompromisoPago.PENDIENTE, matricula);
+        Pago pago = crearPago(10L, EstadoPago.RECHAZADO, compromiso, apoderado);
+
+        when(pagoRepository.findByIdConDetalle(10L)).thenReturn(Optional.of(pago));
+        when(periodoMatriculaRepository.findByAnioAcademicoId(1L))
+                .thenReturn(Optional.of(crearPeriodo(true)));
+        when(pagoRepository.existsByCompromisoPagoIdAndEstadoAndIdNot(
+                1L, EstadoPago.VALIDADO, 10L)).thenReturn(false);
+        when(pagoRepository.save(any(Pago.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        service.validarPagoAdmin(10L, new ValidarPagoRequest());
+
+        assertEquals(EstadoPago.VALIDADO, pago.getEstado());
+        assertEquals(EstadoCompromisoPago.PAGADO, compromiso.getEstado());
+        assertEquals(EstadoMatricula.CONFIRMADA, matricula.getEstado());
+    }
+
+    @Test
+    void rechazarPagoAdmin_desdeValidado_revierteEstados() {
+        autenticar(crearAdmin(1L));
+
+        Apoderado apoderado = crearApoderado(4L);
+        AnioAcademico anio = crearAnio(1L);
+        Seccion seccion = crearSeccion(1L, anio);
+        Matricula matricula = crearMatricula(1L, EstadoMatricula.CONFIRMADA,
+                crearEstudiante(5L, apoderado), seccion);
+        CompromisoPago compromiso = crearCompromiso(1L, TipoCompromiso.MATRICULA,
+                EstadoCompromisoPago.PAGADO, matricula);
+        Pago pago = crearPago(10L, EstadoPago.VALIDADO, compromiso, apoderado);
+
+        when(pagoRepository.findByIdConDetalle(10L)).thenReturn(Optional.of(pago));
+        when(periodoMatriculaRepository.findByAnioAcademicoId(1L))
+                .thenReturn(Optional.of(crearPeriodo(true)));
+        when(pagoRepository.existsByCompromisoPagoIdAndEstadoAndIdNot(
+                1L, EstadoPago.VALIDADO, 10L)).thenReturn(false);
+        when(pagoRepository.save(any(Pago.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        service.rechazarPagoAdmin(10L, new RechazarPagoRequest("Error de validación"));
+
+        assertEquals(EstadoPago.RECHAZADO, pago.getEstado());
+        assertEquals(EstadoCompromisoPago.PENDIENTE, compromiso.getEstado());
+        assertEquals(EstadoMatricula.PENDIENTE, matricula.getEstado());
+    }
+
+    @Test
+    void validarPagoAdmin_yaValidado_esIdempotente() {
+        autenticar(crearAdmin(1L));
+
+        Apoderado apoderado = crearApoderado(4L);
+        AnioAcademico anio = crearAnio(1L);
+        Seccion seccion = crearSeccion(1L, anio);
+        Matricula matricula = crearMatricula(1L, EstadoMatricula.CONFIRMADA,
+                crearEstudiante(5L, apoderado), seccion);
+        CompromisoPago compromiso = crearCompromiso(1L, TipoCompromiso.MATRICULA,
+                EstadoCompromisoPago.PAGADO, matricula);
+        Pago pago = crearPago(10L, EstadoPago.VALIDADO, compromiso, apoderado);
+
+        when(pagoRepository.findByIdConDetalle(10L)).thenReturn(Optional.of(pago));
+
+        service.validarPagoAdmin(10L, new ValidarPagoRequest());
+
+        assertEquals(EstadoPago.VALIDADO, pago.getEstado());
+        verify(pagoRepository, never()).save(any(Pago.class));
+    }
+
+    @Test
+    void validarPagoAdmin_otroPagoValidado_rechaza() {
+        autenticar(crearAdmin(1L));
+
+        Apoderado apoderado = crearApoderado(4L);
+        AnioAcademico anio = crearAnio(1L);
+        Seccion seccion = crearSeccion(1L, anio);
+        Matricula matricula = crearMatricula(1L, EstadoMatricula.PENDIENTE,
+                crearEstudiante(5L, apoderado), seccion);
+        CompromisoPago compromiso = crearCompromiso(1L, TipoCompromiso.MATRICULA,
+                EstadoCompromisoPago.PENDIENTE, matricula);
+        Pago pago = crearPago(10L, EstadoPago.PENDIENTE, compromiso, apoderado);
+
+        when(pagoRepository.findByIdConDetalle(10L)).thenReturn(Optional.of(pago));
+        when(pagoRepository.existsByCompromisoPagoIdAndEstadoAndIdNot(
+                1L, EstadoPago.VALIDADO, 10L)).thenReturn(true);
+
+        assertThrows(ConflictoException.class,
+                () -> service.validarPagoAdmin(10L, new ValidarPagoRequest()));
+
+        verify(pagoRepository, never()).save(any(Pago.class));
+    }
+
+    @Test
+    void validarPagoAdmin_pensionFueraDelAnioAcademico_rechaza() {
+        autenticar(crearAdmin(1L));
+
+        Apoderado apoderado = crearApoderado(4L);
+        AnioAcademico anio = crearAnio(1L);
+        anio.setFechaInicio(LocalDate.now().minusYears(2));
+        anio.setFechaFin(LocalDate.now().minusYears(1));
+        Seccion seccion = crearSeccion(1L, anio);
+        Matricula matricula = crearMatricula(1L, EstadoMatricula.CONFIRMADA,
+                crearEstudiante(5L, apoderado), seccion);
+        CompromisoPago compromiso = crearCompromiso(1L, TipoCompromiso.PENSION,
+                EstadoCompromisoPago.PENDIENTE, matricula);
+        Pago pago = crearPago(10L, EstadoPago.PENDIENTE, compromiso, apoderado);
+
+        when(pagoRepository.findByIdConDetalle(10L)).thenReturn(Optional.of(pago));
+
+        assertThrows(ReglaNegocioException.class,
+                () -> service.validarPagoAdmin(10L, new ValidarPagoRequest()));
+    }
+
+    @Test
+    void registrarPagoApoderado_compromisoPagado_rechaza() {
+        autenticar(crearApoderado(4L));
+
+        Apoderado apoderado = crearApoderado(4L);
+        AnioAcademico anio = crearAnio(1L);
+        Seccion seccion = crearSeccion(1L, anio);
+        Matricula matricula = crearMatricula(1L, EstadoMatricula.CONFIRMADA,
+                crearEstudiante(5L, apoderado), seccion);
+        CompromisoPago compromiso = crearCompromiso(1L, TipoCompromiso.MATRICULA,
+                EstadoCompromisoPago.PAGADO, matricula);
+
+        when(compromisoPagoRepository.findById(1L)).thenReturn(Optional.of(compromiso));
+
+        assertThrows(ReglaNegocioException.class,
+                () -> service.registrarPagoApoderado(
+                        new RegistrarPagoRequest(1L, new BigDecimal("500.00"), null)));
     }
 
     // --- listado agrupado ---

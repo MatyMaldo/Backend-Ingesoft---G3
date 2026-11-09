@@ -4,6 +4,10 @@ import com.educoders.Gestion_Matricula_Pagos.presentacion.dto.CompromisoApoderad
 import com.educoders.Gestion_Matricula_Pagos.presentacion.dto.CompromisoPagoResponse;
 import com.educoders.Gestion_Matricula_Pagos.presentacion.dto.EmitirCompromisoMatriculaRequest;
 import com.educoders.Gestion_Matricula_Pagos.presentacion.dto.EmitirCompromisoPensionRequest;
+import com.educoders.Gestion_Matricula_Pagos.presentacion.dto.EmitirCompromisosMatriculaLoteRequest;
+import com.educoders.Gestion_Matricula_Pagos.presentacion.dto.EmitirCompromisosMatriculaLoteResponse;
+import com.educoders.Gestion_Matricula_Pagos.presentacion.dto.EmitirCompromisosPensionLoteRequest;
+import com.educoders.Gestion_Matricula_Pagos.presentacion.dto.EmitirCompromisosPensionLoteResponse;
 
 import java.util.List;
 
@@ -13,6 +17,19 @@ public interface CompromisoPagoService {
      * HU-GEMAP-04: Emisión de compromiso de pago de matrícula para una matrícula en estado Pendiente.
      */
     CompromisoPagoResponse emitirCompromisoMatricula(EmitirCompromisoMatriculaRequest request);
+
+    /**
+     * Emisión masiva de compromisos de matrícula para las matrículas
+     * pendientes de un año académico.
+     */
+    EmitirCompromisosMatriculaLoteResponse emitirCompromisosMatriculaLote(
+            EmitirCompromisosMatriculaLoteRequest request);
+
+    /**
+     * Emisión masiva de compromisos de pensión para un año y mes.
+     */
+    EmitirCompromisosPensionLoteResponse emitirCompromisosPensionLote(
+            EmitirCompromisosPensionLoteRequest request);
 
     /**
      * HU-GEMAP-05: Emisión de compromiso de pago de pensión mensual.

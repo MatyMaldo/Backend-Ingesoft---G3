@@ -1,7 +1,9 @@
 package com.educoders.Gestion_Matricula_Pagos.persistencia;
 
 import com.educoders.Gestion_Matricula_Pagos.dominio.Matricula;
+import com.educoders.Infraestructura_Servicios.enums.EstadoCompromisoPago;
 import com.educoders.Infraestructura_Servicios.enums.EstadoMatricula;
+import com.educoders.Infraestructura_Servicios.enums.TipoCompromiso;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -111,5 +113,70 @@ public interface MatriculaRepository extends JpaRepository<Matricula, Long> {
             @Param("estado") EstadoMatricula estado,
             @Param("estudianteId") Long estudianteId,
             Pageable pageable
+    );
+
+    /**
+     * Matrículas en el estado indicado que no tienen un compromiso del tipo
+     * solicitado en estado pagado. Se usa para la cancelación automática.
+     */
+    @Query("""
+            SELECT m FROM Matricula m
+            WHERE m.estado = :estadoMatricula
+              AND m.seccion.anioAcademico.id = :anioId
+              AND NOT EXISTS (
+                  SELECT c FROM CompromisoPago c
+                  WHERE c.matricula = m
+                    AND c.tipoCompromiso = :tipoCompromiso
+                    AND c.estado = :estadoCompromiso
+              )
+            """)
+    List<Matricula> buscarSinCompromisoPagado(
+            @Param("anioId") Long anioId,
+            @Param("estadoMatricula") EstadoMatricula estadoMatricula,
+            @Param("tipoCompromiso") TipoCompromiso tipoCompromiso,
+            @Param("estadoCompromiso") EstadoCompromisoPago estadoCompromiso
+    );
+
+    /**
+     * Matrículas pendientes de un año con los datos necesarios para emitir
+     * compromisos en lote y notificar al apoderado.
+     */
+    @Query("""
+            SELECT m FROM Matricula m
+            JOIN FETCH m.estudiante e
+            LEFT JOIN FETCH e.apoderado
+            JOIN FETCH m.seccion s
+            JOIN FETCH s.anioAcademico a
+            WHERE a.id = :anioId
+              AND m.estado = :estado
+            ORDER BY m.id
+            """)
+    List<Matricula> buscarPendientesPorAnioConDetalle(
+            @Param("anioId") Long anioId,
+            @Param("estado") EstadoMatricula estado
+    );
+
+    /**
+     * Matrículas de un año con un estado concreto y filtros opcionales de
+     * grado/sección, con los datos necesarios para emitir compromisos en lote.
+     */
+    @Query("""
+            SELECT m FROM Matricula m
+            JOIN FETCH m.estudiante e
+            LEFT JOIN FETCH e.apoderado
+            JOIN FETCH m.seccion s
+            JOIN FETCH s.grado g
+            JOIN FETCH s.anioAcademico a
+            WHERE a.id = :anioId
+              AND m.estado = :estado
+              AND (:gradoId IS NULL OR g.id = :gradoId)
+              AND (:seccionId IS NULL OR s.id = :seccionId)
+            ORDER BY m.id
+            """)
+    List<Matricula> buscarPorAnioYEstadoConDetalle(
+            @Param("anioId") Long anioId,
+            @Param("estado") EstadoMatricula estado,
+            @Param("gradoId") Long gradoId,
+            @Param("seccionId") Long seccionId
     );
 }

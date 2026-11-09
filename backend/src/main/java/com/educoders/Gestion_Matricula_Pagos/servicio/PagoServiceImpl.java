@@ -1,5 +1,6 @@
 package com.educoders.Gestion_Matricula_Pagos.servicio;
 
+import com.educoders.Gestion_Academica_Motor_Evaluacion.dominio.AnioAcademico;
 import com.educoders.Gestion_Matricula_Pagos.dominio.CompromisoPago;
 import com.educoders.Gestion_Matricula_Pagos.dominio.Matricula;
 import com.educoders.Gestion_Matricula_Pagos.dominio.Pago;
@@ -14,6 +15,7 @@ import com.educoders.Infraestructura_Servicios.enums.EstadoMatricula;
 import com.educoders.Infraestructura_Servicios.enums.EstadoPago;
 import com.educoders.Infraestructura_Servicios.enums.TipoAccionAuditoria;
 import com.educoders.Infraestructura_Servicios.enums.TipoCompromiso;
+import com.educoders.Infraestructura_Servicios.exception.ConflictoException;
 import com.educoders.Infraestructura_Servicios.exception.RecursoNoEncontradoException;
 import com.educoders.Infraestructura_Servicios.exception.ReglaNegocioException;
 import com.educoders.Infraestructura_Servicios.servicio.ServicioAlmacenamientoArchivo;
@@ -95,14 +97,28 @@ public class PagoServiceImpl implements PagoService {
             throw new ReglaNegocioException("El compromiso de pago no pertenece a ningún estudiante a su cargo.");
         }
 
-        // 3. Reglas de periodo para pagos de matrícula
+        // 3. El compromiso debe seguir pendiente
         Matricula matricula = compromiso.getMatricula();
+        if (compromiso.getEstado() == EstadoCompromisoPago.PAGADO
+                || compromiso.getEstado() == EstadoCompromisoPago.CANCELADO) {
+            throw new ReglaNegocioException(
+                    "El compromiso de pago ya está pagado o cancelado; no admite nuevos pagos.");
+        }
+
+        // 4. Reglas de periodo para pagos de matrícula
         if (compromiso.getTipoCompromiso() == TipoCompromiso.MATRICULA) {
             if (matricula.getEstado() == EstadoMatricula.CANCELADA) {
                 throw new ReglaNegocioException(
                         "No se puede registrar el pago porque la matrícula se encuentra CANCELADA.");
             }
+            if (matricula.getEstado() == EstadoMatricula.CONFIRMADA) {
+                throw new ReglaNegocioException(
+                        "La matrícula ya está confirmada; no se requieren pagos adicionales.");
+            }
             exigirPeriodoVigente(matricula, "No se puede registrar el pago: el período de matrícula ha finalizado.");
+        } else {
+            exigirAnioVigente(matricula,
+                    "No se puede registrar el pago: el año académico ha finalizado.");
         }
 
         // 4. Validar que no exista un pago en revisión (PENDIENTE) para el mismo compromiso
@@ -223,12 +239,13 @@ public class PagoServiceImpl implements PagoService {
         Pago pago = pagoRepository.findByIdConDetalle(pagoId)
                 .orElseThrow(() -> RecursoNoEncontradoException.de("Pago", pagoId));
 
-        if (pago.getEstado() != EstadoPago.PENDIENTE) {
-            throw new ReglaNegocioException("El pago ya ha sido procesado previamente y es inmutable.");
-        }
-
         var compromiso = pago.getCompromisoPago();
         var matricula = compromiso.getMatricula();
+
+        // Si ya está validado, la operación es idempotente.
+        if (pago.getEstado() == EstadoPago.VALIDADO) {
+            return PagoAdminDetailResponse.fromEntity(pago);
+        }
 
         if (matricula.getEstado() == EstadoMatricula.CANCELADA
                 || compromiso.getEstado() == EstadoCompromisoPago.CANCELADO) {
@@ -236,9 +253,18 @@ public class PagoServiceImpl implements PagoService {
                     "No se puede validar el pago porque el compromiso o la matrícula se encuentra CANCELADA.");
         }
 
+        if (pagoRepository.existsByCompromisoPagoIdAndEstadoAndIdNot(
+                compromiso.getId(), EstadoPago.VALIDADO, pago.getId())) {
+            throw new ConflictoException(
+                    "Ya existe otro pago validado para este compromiso.");
+        }
+
         if (compromiso.getTipoCompromiso() == TipoCompromiso.MATRICULA) {
             exigirPeriodoVigente(matricula,
                     "El período de matrícula ha finalizado; ya no se puede validar un pago de matrícula.");
+        } else {
+            exigirAnioVigente(matricula,
+                    "El año académico ha finalizado; ya no se puede validar un pago de pensión.");
         }
 
         String estadoPagoAnt = pago.getEstado().name();
@@ -280,12 +306,13 @@ public class PagoServiceImpl implements PagoService {
         Pago pago = pagoRepository.findByIdConDetalle(pagoId)
                 .orElseThrow(() -> RecursoNoEncontradoException.de("Pago", pagoId));
 
-        if (pago.getEstado() != EstadoPago.PENDIENTE) {
-            throw new ReglaNegocioException("El pago ya ha sido procesado previamente y es inmutable.");
-        }
-
         var compromiso = pago.getCompromisoPago();
         var matricula = compromiso.getMatricula();
+
+        // Si ya está rechazado, la operación es idempotente.
+        if (pago.getEstado() == EstadoPago.RECHAZADO) {
+            return PagoAdminDetailResponse.fromEntity(pago);
+        }
 
         if (matricula.getEstado() == EstadoMatricula.CANCELADA
                 || compromiso.getEstado() == EstadoCompromisoPago.CANCELADO) {
@@ -296,7 +323,13 @@ public class PagoServiceImpl implements PagoService {
         if (compromiso.getTipoCompromiso() == TipoCompromiso.MATRICULA) {
             exigirPeriodoVigente(matricula,
                     "El período de matrícula ha finalizado; ya no se puede rechazar un pago de matrícula.");
+        } else {
+            exigirAnioVigente(matricula,
+                    "El año académico ha finalizado; ya no se puede rechazar un pago de pensión.");
         }
+
+        boolean existeOtroValidado = pagoRepository.existsByCompromisoPagoIdAndEstadoAndIdNot(
+                compromiso.getId(), EstadoPago.VALIDADO, pago.getId());
 
         String estadoPagoAnt = pago.getEstado().name();
         String estadoCompromisoAnt = compromiso.getEstado().name();
@@ -305,10 +338,13 @@ public class PagoServiceImpl implements PagoService {
         pago.setEstado(EstadoPago.RECHAZADO);
         pago.setMotivo(request.motivo());
         pago.setUsuarioValidador(validador);
-        compromiso.setEstado(EstadoCompromisoPago.PENDIENTE);
 
-        if (compromiso.getTipoCompromiso() == TipoCompromiso.MATRICULA) {
-            matricula.setEstado(EstadoMatricula.PENDIENTE);
+        // Si queda otro pago validado, el compromiso y la matrícula siguen pagados.
+        if (!existeOtroValidado) {
+            compromiso.setEstado(EstadoCompromisoPago.PENDIENTE);
+            if (compromiso.getTipoCompromiso() == TipoCompromiso.MATRICULA) {
+                matricula.setEstado(EstadoMatricula.PENDIENTE);
+            }
         }
 
         Pago pagoGuardado = pagoRepository.save(pago);
@@ -337,6 +373,13 @@ public class PagoServiceImpl implements PagoService {
         PeriodoMatricula periodo = periodoMatriculaRepository.findByAnioAcademicoId(anioId)
                 .orElseThrow(() -> new ReglaNegocioException("No se encontró período de matrícula para el año académico."));
         if (!periodo.estaVigente(LocalDate.now())) {
+            throw new ReglaNegocioException(mensaje);
+        }
+    }
+
+    private void exigirAnioVigente(Matricula matricula, String mensaje) {
+        AnioAcademico anio = matricula.getSeccion().getAnioAcademico();
+        if (anio == null || !anio.estaVigente()) {
             throw new ReglaNegocioException(mensaje);
         }
     }

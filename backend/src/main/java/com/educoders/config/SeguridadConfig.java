@@ -182,10 +182,17 @@ public class SeguridadConfig {
                                 ).hasRole("APODERADO")
 
 
-                                // Listado administrativo de matrículas
+                                // Listado administrativo y procesamiento de matrículas
                                 .requestMatchers(
                                         HttpMethod.GET,
                                         "/api/v1/matriculas"
+                                ).hasRole("ADMINISTRADOR")
+
+                                .requestMatchers(
+                                        HttpMethod.POST,
+                                        "/api/v1/matriculas/cancelar-pendientes-por-periodo",
+                                        "/api/v1/compromisos-pago/matricula/lote",
+                                        "/api/v1/compromisos-pago/pension/lote"
                                 ).hasRole("ADMINISTRADOR")
 
                                 // HU-GEMIH-02: solo el administrador gestiona la

@@ -1,5 +1,6 @@
 package com.educoders.Gestion_Matricula_Pagos.presentacion.controladores;
 
+import com.educoders.Gestion_Matricula_Pagos.presentacion.dto.CancelacionMatriculasResponse;
 import com.educoders.Gestion_Matricula_Pagos.presentacion.dto.MatriculaAdminListResponse;
 import com.educoders.Gestion_Matricula_Pagos.presentacion.dto.MatriculaResponse;
 import com.educoders.Gestion_Matricula_Pagos.presentacion.dto.RegistrarMatriculaRequest;
@@ -57,6 +58,16 @@ public class MatriculaController {
                 anioId, gradoId, seccionId, estado, estudianteId, pageable);
 
         return ResponseEntity.ok(RespuestaApiResponse.crearExito(resultado));
+    }
+
+    @PostMapping("/cancelar-pendientes-por-periodo")
+    public ResponseEntity<RespuestaApiResponse<CancelacionMatriculasResponse>>
+    cancelarPendientesPorPeriodo() {
+
+        int canceladas = matriculaService.cancelarPendientesPorPeriodoVencido();
+
+        return ResponseEntity.ok(RespuestaApiResponse.crearExito(
+                new CancelacionMatriculasResponse(canceladas)));
     }
 
     @GetMapping("/estudiante/{estudianteId}/seccion")

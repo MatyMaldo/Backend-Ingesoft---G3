@@ -31,4 +31,12 @@ public interface MatriculaService {
             EstadoMatricula estado,
             Long estudianteId,
             Pageable pageable);
+
+    /**
+     * Cancela matrículas pendientes cuyo periodo de matrícula ya terminó y
+     * que no tienen un compromiso de matrícula pagado.
+     *
+     * @return cantidad de matrículas canceladas
+     */
+    int cancelarPendientesPorPeriodoVencido();
 }
