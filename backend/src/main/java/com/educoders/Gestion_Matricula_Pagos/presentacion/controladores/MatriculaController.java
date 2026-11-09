@@ -3,6 +3,7 @@ package com.educoders.Gestion_Matricula_Pagos.presentacion.controladores;
 import com.educoders.Gestion_Matricula_Pagos.presentacion.dto.CancelacionMatriculasResponse;
 import com.educoders.Gestion_Matricula_Pagos.presentacion.dto.MatriculaAdminListResponse;
 import com.educoders.Gestion_Matricula_Pagos.presentacion.dto.MatriculaResponse;
+import com.educoders.Gestion_Matricula_Pagos.presentacion.dto.MatriculasPorEstadoResponse;
 import com.educoders.Gestion_Matricula_Pagos.presentacion.dto.RegistrarMatriculaRequest;
 import com.educoders.Gestion_Matricula_Pagos.presentacion.dto.SeccionEstudianteResponse;
 import com.educoders.Gestion_Matricula_Pagos.servicio.MatriculaService;
@@ -45,8 +46,9 @@ public class MatriculaController {
             @RequestParam(required = false) Long seccionId,
             @RequestParam(required = false) EstadoMatricula estado,
             @RequestParam(required = false) Long estudianteId,
+            @RequestParam(required = false) String busqueda,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "15") int size) {
+            @RequestParam(defaultValue = "10") int size) {
 
         Sort sort = Sort.by(
                 Sort.Order.desc("fechaAsignacion"),
@@ -55,9 +57,25 @@ public class MatriculaController {
         Pageable pageable = PageRequest.of(page, size, sort);
 
         Page<MatriculaAdminListResponse> resultado = matriculaService.listarMatriculas(
-                anioId, gradoId, seccionId, estado, estudianteId, pageable);
+                anioId, gradoId, seccionId, estado, estudianteId, busqueda, pageable);
 
         return ResponseEntity.ok(RespuestaApiResponse.crearExito(resultado));
+    }
+
+    /**
+     * Cantidad de matrículas por estado con los filtros del listado (sin el estado): contadores de los chips.
+     */
+    @GetMapping("/conteo-por-estado")
+    public ResponseEntity<RespuestaApiResponse<MatriculasPorEstadoResponse>> contarPorEstado(
+            @RequestParam(required = false) Long anioId,
+            @RequestParam(required = false) Long gradoId,
+            @RequestParam(required = false) Long seccionId,
+            @RequestParam(required = false) String busqueda) {
+
+        MatriculasPorEstadoResponse conteo = matriculaService.contarMatriculasPorEstado(
+                anioId, gradoId, seccionId, busqueda);
+
+        return ResponseEntity.ok(RespuestaApiResponse.crearExito(conteo));
     }
 
     @PostMapping("/cancelar-pendientes-por-periodo")

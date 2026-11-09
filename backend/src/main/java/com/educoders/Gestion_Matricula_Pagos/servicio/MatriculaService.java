@@ -1,6 +1,7 @@
 package com.educoders.Gestion_Matricula_Pagos.servicio;
 
 import com.educoders.Gestion_Matricula_Pagos.presentacion.dto.MatriculaAdminListResponse;
+import com.educoders.Gestion_Matricula_Pagos.presentacion.dto.MatriculasPorEstadoResponse;
 import com.educoders.Gestion_Matricula_Pagos.presentacion.dto.MatriculaResponse;
 import com.educoders.Gestion_Matricula_Pagos.presentacion.dto.RegistrarMatriculaRequest;
 import com.educoders.Gestion_Matricula_Pagos.presentacion.dto.SeccionEstudianteResponse;
@@ -23,6 +24,9 @@ public interface MatriculaService {
 
     /**
      * Listado administrativo de matrículas con filtros opcionales.
+     *
+     * @param busqueda texto libre que se busca en el nombre completo o el código del estudiante
+     *                 (sin distinguir mayúsculas); {@code null} o en blanco no filtra
      */
     Page<MatriculaAdminListResponse> listarMatriculas(
             Long anioId,
@@ -30,7 +34,18 @@ public interface MatriculaService {
             Long seccionId,
             EstadoMatricula estado,
             Long estudianteId,
+            String busqueda,
             Pageable pageable);
+
+    /**
+     * Cuenta las matrículas por estado con los filtros del listado (año, grado, sección y búsqueda; no el estado).
+     * Alimenta los contadores de los chips de estado.
+     */
+    MatriculasPorEstadoResponse contarMatriculasPorEstado(
+            Long anioId,
+            Long gradoId,
+            Long seccionId,
+            String busqueda);
 
     /**
      * Cancela matrículas pendientes cuyo periodo de matrícula ya terminó y
