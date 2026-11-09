@@ -23,8 +23,8 @@ public class JwtService {
     private final long expiracionMs;
 
     public JwtService(
-            @Value("${app.jwt.secret}") String secreto,
-            @Value("${app.jwt.expiration-ms:3600000}") long expiracionMs
+            @Value("${JWT_SECRET}") String secreto,
+            @Value("${JWT_EXPIRATION}") long expiracionMs
     ) {
         if (secreto.getBytes(StandardCharsets.UTF_8).length < 32) {
             throw new IllegalArgumentException(
