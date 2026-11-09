@@ -2,6 +2,7 @@ package com.educoders.Seguridad_Auditoria.servicio;
 
 import com.educoders.Seguridad_Auditoria.dominio.Administrador;
 import com.educoders.Seguridad_Auditoria.dominio.Docente;
+import com.educoders.Seguridad_Auditoria.dominio.Estudiante;
 import com.educoders.Seguridad_Auditoria.dominio.Usuario;
 import com.educoders.Seguridad_Auditoria.persistencia.UsuarioRepository;
 import com.educoders.Seguridad_Auditoria.presentacion.dto.ActualizarUsuarioRequest;
@@ -13,6 +14,7 @@ import com.educoders.Gestion_Academica_Motor_Evaluacion.dominio.Seccion;
 import com.educoders.Gestion_Academica_Motor_Evaluacion.persistencia.SeccionRepository;
 import com.educoders.Gestion_Academica_Motor_Evaluacion.persistencia.BimestreRepository;
 import com.educoders.Infraestructura_Servicios.enums.NombreBimestre;
+import org.hibernate.Hibernate;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -202,7 +204,8 @@ public class UsuarioServiceImpl implements UsuarioService {
                     usuario.getClass().getSimpleName().toUpperCase(),
                     false,
                     usuario.getFechaCreacion(),
-                    seccionesInfo.isEmpty() ? null : seccionesInfo
+                    seccionesInfo.isEmpty() ? null : seccionesInfo,
+                    null
                 );
             }
         }
@@ -266,7 +269,17 @@ public class UsuarioServiceImpl implements UsuarioService {
                 usuario.getTelefono(),
                 usuario.getClass().getSimpleName().toUpperCase(),
                 usuario.isActivo(),
-                usuario.getFechaCreacion()
+                usuario.getFechaCreacion(),
+                null,
+                extraerCodigoEstudiante(usuario)
         );
+    }
+
+    /**
+     * Código del estudiante, o null si el usuario no es estudiante. Se desenvuelve el proxy de Hibernate
+     * para que el chequeo de tipo funcione también con entidades cargadas de forma perezosa.
+     */
+    private String extraerCodigoEstudiante(Usuario usuario) {
+        return Hibernate.unproxy(usuario) instanceof Estudiante estudiante ? estudiante.getCodigo() : null;
     }
 }

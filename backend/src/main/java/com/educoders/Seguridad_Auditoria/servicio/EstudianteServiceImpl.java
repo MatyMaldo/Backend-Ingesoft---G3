@@ -10,7 +10,6 @@ import com.educoders.Seguridad_Auditoria.persistencia.UsuarioRepository;
 import com.educoders.Seguridad_Auditoria.presentacion.dto.EstudianteResponse;
 import com.educoders.Seguridad_Auditoria.presentacion.dto.RegistrarEstudianteRequest;
 import java.time.LocalDateTime;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -23,18 +22,15 @@ public class EstudianteServiceImpl implements EstudianteService {
     private final UsuarioRepository usuarioRepository;
     private final EstudianteRepository estudianteRepository;
     private final ApoderadoRepository apoderadoRepository;
-    private final PasswordEncoder passwordEncoder;
 
     public EstudianteServiceImpl(
             UsuarioRepository usuarioRepository,
             EstudianteRepository estudianteRepository,
-            ApoderadoRepository apoderadoRepository,
-            PasswordEncoder passwordEncoder) {
+            ApoderadoRepository apoderadoRepository) {
 
         this.usuarioRepository = usuarioRepository;
         this.estudianteRepository = estudianteRepository;
         this.apoderadoRepository = apoderadoRepository;
-        this.passwordEncoder = passwordEncoder;
     }
 
     @Override
@@ -70,9 +66,10 @@ public class EstudianteServiceImpl implements EstudianteService {
         estudiante.setEmail(solicitud.email());
         estudiante.setTelefono(solicitud.telefono());
 
-        estudiante.setPasswordHash(
-                passwordEncoder.encode(solicitud.password())
-        );
+        // La cuenta nace SIN contraseña (passwordHash nulo): el administrador no la conoce ni la define.
+        // TODO(HU-SAT-03, 2026-11-08): al crear la cuenta, solicitar el envío del código de verificación al correo
+        // para que el usuario defina su contraseña. Pendiente del servicio de restablecimiento (otro integrante);
+        // debe ejecutarse de forma asíncrona y su falla no debe revertir el registro.
 
         estudiante.setCodigo(solicitud.codigo());
         estudiante.setFechaNacimiento(solicitud.fechaNacimiento());

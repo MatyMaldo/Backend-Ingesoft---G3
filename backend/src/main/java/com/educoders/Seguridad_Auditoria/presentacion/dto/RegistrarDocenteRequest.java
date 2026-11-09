@@ -9,6 +9,8 @@ import jakarta.validation.constraints.Size;
  * Datos de entrada para HU-SAT-01.
  * El rol NO se recibe: el sistema siempre asigna DOCENTE.
  * El username se autogenera en el servicio a partir del DNI.
+ * No recibe contraseña: la cuenta nace sin ella y el propio usuario la define con el código de verificación
+ * que recibe por correo (HU-SAT-03). El administrador nunca conoce ni define contraseñas.
  */
 public record RegistrarDocenteRequest(
 
@@ -33,10 +35,6 @@ public record RegistrarDocenteRequest(
         String email,
 
         @Pattern(regexp = "\\d{9}", message = "El teléfono debe tener 9 dígitos.")
-        String telefono,
-
-        @NotBlank(message = "La contraseña es obligatoria.")
-        @Size(min = 8, max = 40, message = "La contraseña debe tener entre 8 y 40 caracteres.")
-        String password
+        String telefono
 ) {
 }

@@ -20,7 +20,6 @@ import java.util.List;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
@@ -36,20 +35,17 @@ public class ApoderadoServiceImpl implements ApoderadoService {
     private final ApoderadoRepository apoderadoRepository;
     private final EstudianteRepository estudianteRepository;
     private final MatriculaRepository matriculaRepository;
-    private final PasswordEncoder passwordEncoder;
 
     public ApoderadoServiceImpl(
             UsuarioRepository usuarioRepository,
             ApoderadoRepository apoderadoRepository,
             EstudianteRepository estudianteRepository,
-            MatriculaRepository matriculaRepository,
-            PasswordEncoder passwordEncoder) {
+            MatriculaRepository matriculaRepository) {
 
         this.usuarioRepository = usuarioRepository;
         this.apoderadoRepository = apoderadoRepository;
         this.estudianteRepository = estudianteRepository;
         this.matriculaRepository = matriculaRepository;
-        this.passwordEncoder = passwordEncoder;
     }
 
     /**
@@ -74,10 +70,10 @@ public class ApoderadoServiceImpl implements ApoderadoService {
         apoderado.setEmail(solicitud.email());
         apoderado.setTelefono(solicitud.telefono());
 
-        // La contraseña no se guarda directamente.
-        apoderado.setPasswordHash(
-                passwordEncoder.encode(solicitud.password())
-        );
+        // La cuenta nace SIN contraseña (passwordHash nulo): el administrador no la conoce ni la define.
+        // TODO(HU-SAT-03, 2026-11-08): al crear la cuenta, solicitar el envío del código de verificación al correo
+        // para que el usuario defina su contraseña. Pendiente del servicio de restablecimiento (otro integrante);
+        // debe ejecutarse de forma asíncrona y su falla no debe revertir el registro.
 
         apoderado.setEdad(solicitud.edad());
         apoderado.setActivo(true);

@@ -73,9 +73,6 @@ public class CargaMasivaEstudiantesService {
             EstudianteCsvParser.FilaEstudianteCsv fila = filas.get(i);
             int numeroFila = i + 2;
 
-            // Contraseña aleatoria desconocida para el administrador.
-            String claveTemporal = UUID.randomUUID().toString();
-
             // Código autogenerado sin exponer el DNI del estudiante.
             String codigo = "EST-" + UUID.randomUUID()
                     .toString()
@@ -91,7 +88,6 @@ public class CargaMasivaEstudiantesService {
                             fila.dni(),
                             fila.email(),
                             normalizarOpcional(fila.telefono()),
-                            claveTemporal,
                             codigo,
                             fila.fechaNacimiento(),
                             fila.apoderadoId()

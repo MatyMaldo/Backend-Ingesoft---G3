@@ -8,7 +8,6 @@ import com.educoders.Seguridad_Auditoria.presentacion.dto.DocenteResponse;
 import com.educoders.Seguridad_Auditoria.presentacion.dto.RegistrarDocenteRequest;
 import com.educoders.Infraestructura_Servicios.exception.ConflictoException;
 import java.time.LocalDateTime;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -21,14 +20,11 @@ public class DocenteServiceImpl implements DocenteService {
 
     private final UsuarioRepository usuarioRepository;
     private final DocenteRepository docenteRepository;
-    private final PasswordEncoder passwordEncoder;
 
     public DocenteServiceImpl(UsuarioRepository usuarioRepository,
-                              DocenteRepository docenteRepository,
-                              PasswordEncoder passwordEncoder) {
+                              DocenteRepository docenteRepository) {
         this.usuarioRepository = usuarioRepository;
         this.docenteRepository = docenteRepository;
-        this.passwordEncoder = passwordEncoder;
     }
 
     /**
@@ -50,7 +46,10 @@ public class DocenteServiceImpl implements DocenteService {
         docente.setUsername(extraerUsernameDeEmail(solicitud.email()));
         docente.setEmail(solicitud.email());
         docente.setTelefono(solicitud.telefono());
-        docente.setPasswordHash(passwordEncoder.encode(solicitud.password()));
+        // La cuenta nace SIN contraseña (passwordHash nulo): el administrador no la conoce ni la define.
+        // TODO(HU-SAT-03, 2026-11-08): al crear la cuenta, solicitar el envío del código de verificación al correo
+        // para que el usuario defina su contraseña. Pendiente del servicio de restablecimiento (otro integrante);
+        // debe ejecutarse de forma asíncrona y su falla no debe revertir el registro.
         docente.setActivo(true);
         docente.setFechaCreacion(LocalDateTime.now());
 

@@ -6,6 +6,8 @@ import java.util.List;
 /**
  * Representación de un usuario del sistema.
  * No expone el hash de la contraseña.
+ * {@code codigo} solo viene informado para estudiantes (es nulo en los demás tipos): permite al cliente
+ * conocer los códigos ya asignados y no proponer uno repetido al registrar o importar estudiantes.
  */
 public record UsuarioResponse(
         Long id,
@@ -20,7 +22,8 @@ public record UsuarioResponse(
         String tipoUsuario,
         boolean activo,
         LocalDateTime fechaCreacion,
-        List<SeccionAfectadaInfo> seccionesAfectadas
+        List<SeccionAfectadaInfo> seccionesAfectadas,
+        String codigo
 ) {
     public record SeccionAfectadaInfo(
             Long seccionId,
@@ -43,6 +46,6 @@ public record UsuarioResponse(
             boolean activo,
             LocalDateTime fechaCreacion
     ) {
-        this(id, nombre, apellidoPaterno, apellidoMaterno, nombreCompleto, dni, username, email, telefono, tipoUsuario, activo, fechaCreacion, null);
+        this(id, nombre, apellidoPaterno, apellidoMaterno, nombreCompleto, dni, username, email, telefono, tipoUsuario, activo, fechaCreacion, null, null);
     }
 }
