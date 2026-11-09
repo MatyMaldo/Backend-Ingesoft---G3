@@ -1,6 +1,7 @@
 package com.educoders.Gestion_Matricula_Pagos.servicio;
 
 import com.educoders.Gestion_Academica_Motor_Evaluacion.dominio.AnioAcademico;
+import com.educoders.Gestion_Academica_Motor_Evaluacion.persistencia.AnioAcademicoRepository;
 import com.educoders.Gestion_Matricula_Pagos.dominio.CompromisoPago;
 import com.educoders.Gestion_Matricula_Pagos.dominio.Matricula;
 import com.educoders.Gestion_Matricula_Pagos.dominio.PeriodoMatricula;
@@ -11,9 +12,15 @@ import com.educoders.Gestion_Matricula_Pagos.presentacion.dto.CompromisoApoderad
 import com.educoders.Gestion_Matricula_Pagos.presentacion.dto.CompromisoPagoResponse;
 import com.educoders.Gestion_Matricula_Pagos.presentacion.dto.EmitirCompromisoMatriculaRequest;
 import com.educoders.Gestion_Matricula_Pagos.presentacion.dto.EmitirCompromisoPensionRequest;
+import com.educoders.Gestion_Matricula_Pagos.presentacion.dto.EmitirCompromisosMatriculaLoteRequest;
+import com.educoders.Gestion_Matricula_Pagos.presentacion.dto.EmitirCompromisosMatriculaLoteResponse;
+import com.educoders.Gestion_Matricula_Pagos.presentacion.dto.EmitirCompromisosPensionLoteRequest;
+import com.educoders.Gestion_Matricula_Pagos.presentacion.dto.EmitirCompromisosPensionLoteResponse;
+import com.educoders.Gestion_Matricula_Pagos.presentacion.dto.EmisionCompromisoLoteError;
 import com.educoders.Infraestructura_Servicios.enums.CategoriaAuditoria;
 import com.educoders.Infraestructura_Servicios.enums.EstadoCompromisoPago;
 import com.educoders.Infraestructura_Servicios.enums.EstadoMatricula;
+import com.educoders.Infraestructura_Servicios.enums.Mes;
 import com.educoders.Infraestructura_Servicios.enums.TipoAccionAuditoria;
 import com.educoders.Infraestructura_Servicios.enums.TipoCompromiso;
 import com.educoders.Infraestructura_Servicios.exception.ConflictoException;
@@ -38,6 +45,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
 
 @Service
@@ -52,6 +60,7 @@ public class CompromisoPagoServiceImpl implements CompromisoPagoService {
     private final CompromisoPagoRepository compromisoPagoRepository;
     private final MatriculaRepository matriculaRepository;
     private final PeriodoMatriculaRepository periodoMatriculaRepository;
+    private final AnioAcademicoRepository anioAcademicoRepository;
     private final ServicioNotificacionEmail servicioNotificacionEmail;
     private final EstudianteRepository estudianteRepository;
     private final AuditoriaService auditoriaService;
@@ -59,12 +68,14 @@ public class CompromisoPagoServiceImpl implements CompromisoPagoService {
     public CompromisoPagoServiceImpl(CompromisoPagoRepository compromisoPagoRepository,
                                      MatriculaRepository matriculaRepository,
                                      PeriodoMatriculaRepository periodoMatriculaRepository,
+                                     AnioAcademicoRepository anioAcademicoRepository,
                                      ServicioNotificacionEmail servicioNotificacionEmail,
                                      EstudianteRepository estudianteRepository,
                                      AuditoriaService auditoriaService) {
         this.compromisoPagoRepository = compromisoPagoRepository;
         this.matriculaRepository = matriculaRepository;
         this.periodoMatriculaRepository = periodoMatriculaRepository;
+        this.anioAcademicoRepository = anioAcademicoRepository;
         this.servicioNotificacionEmail = servicioNotificacionEmail;
         this.estudianteRepository = estudianteRepository;
         this.auditoriaService = auditoriaService;
@@ -126,6 +137,164 @@ public class CompromisoPagoServiceImpl implements CompromisoPagoService {
         auditarCompromiso(guardado, "Emisión de compromiso de matrícula");
 
         return mapToResponse(guardado);
+    }
+
+    @Override
+    public EmitirCompromisosMatriculaLoteResponse emitirCompromisosMatriculaLote(
+            EmitirCompromisosMatriculaLoteRequest request) {
+
+        exigirAdministrador();
+
+        if (request == null || request.anioId() == null) {
+            throw new ReglaNegocioException("El año académico es obligatorio.");
+        }
+
+        PeriodoMatricula periodo = periodoMatriculaRepository
+                .findByAnioAcademicoId(request.anioId())
+                .orElseThrow(() -> RecursoNoEncontradoException.de(
+                        "Período de matrícula del año", request.anioId()));
+
+        if (!periodo.estaVigente(LocalDate.now())) {
+            throw new ReglaNegocioException(
+                    "El período de matrícula ha finalizado o no se encuentra vigente.");
+        }
+
+        List<Matricula> pendientes = matriculaRepository.buscarPendientesPorAnioConDetalle(
+                request.anioId(), EstadoMatricula.PENDIENTE);
+
+        int emitidos = 0;
+        int omitidos = 0;
+        List<EmisionCompromisoLoteError> errores = new ArrayList<>();
+        LocalDate hoy = LocalDate.now();
+
+        for (Matricula matricula : pendientes) {
+            try {
+                boolean yaEmitido = compromisoPagoRepository.existsByMatriculaIdAndTipoCompromiso(
+                        matricula.getId(), TipoCompromiso.MATRICULA);
+                if (yaEmitido) {
+                    omitidos++;
+                    continue;
+                }
+
+                CompromisoPago compromiso = CompromisoPago.builder()
+                        .tipoCompromiso(TipoCompromiso.MATRICULA)
+                        .mes(null)
+                        .fechaEmision(hoy)
+                        .montoOriginal(montoMatriculaPredeterminado)
+                        .montoMora(BigDecimal.ZERO)
+                        .estado(EstadoCompromisoPago.PENDIENTE)
+                        .matricula(matricula)
+                        .build();
+
+                CompromisoPago guardado = compromisoPagoRepository.save(compromiso);
+
+                Estudiante estudiante = matricula.getEstudiante();
+                Apoderado apoderado = estudiante.getApoderado();
+                if (apoderado != null) {
+                    servicioNotificacionEmail.enviarCorreoCompromisoPago(
+                            apoderado.getEmail(),
+                            apoderado.getNombre() + " " + apoderado.getApellidoPaterno(),
+                            estudiante.getNombre() + " " + estudiante.getApellidoPaterno(),
+                            "Matrícula Escolar",
+                            guardado.calcularMontoTotal()
+                    );
+                }
+
+                auditarCompromiso(guardado, "Emisión masiva de compromiso de matrícula");
+                emitidos++;
+            } catch (Exception e) {
+                String mensaje = e.getMessage() != null
+                        ? e.getMessage()
+                        : e.getClass().getSimpleName();
+                errores.add(new EmisionCompromisoLoteError(matricula.getId(), mensaje));
+            }
+        }
+
+        return new EmitirCompromisosMatriculaLoteResponse(emitidos, omitidos, errores);
+    }
+
+    @Override
+    public EmitirCompromisosPensionLoteResponse emitirCompromisosPensionLote(
+            EmitirCompromisosPensionLoteRequest request) {
+
+        exigirAdministrador();
+
+        if (request == null || request.anioId() == null || request.mes() == null) {
+            throw new ReglaNegocioException("El año académico y el mes son obligatorios.");
+        }
+
+        AnioAcademico anio = anioAcademicoRepository.findById(request.anioId())
+                .orElseThrow(() -> RecursoNoEncontradoException.de(
+                        "Año académico", request.anioId()));
+
+        if (!anio.estaVigente()) {
+            throw new ReglaNegocioException(
+                    "No hay un año académico vigente para emitir compromisos de pensión.");
+        }
+
+        int numeroMes = request.mes().ordinal() + 3;
+        if (numeroMes > LocalDate.now().getMonthValue()) {
+            throw new ReglaNegocioException(
+                    "No se pueden emitir compromisos de pensión de meses futuros.");
+        }
+
+        List<Matricula> matriculas = matriculaRepository.buscarPorAnioYEstadoConDetalle(
+                request.anioId(),
+                EstadoMatricula.CONFIRMADA,
+                request.gradoId(),
+                request.seccionId()
+        );
+
+        int emitidos = 0;
+        int omitidos = 0;
+        List<EmisionCompromisoLoteError> errores = new ArrayList<>();
+        LocalDate hoy = LocalDate.now();
+
+        for (Matricula matricula : matriculas) {
+            try {
+                boolean yaEmitido = compromisoPagoRepository
+                        .existsByMatriculaIdAndTipoCompromisoAndMes(
+                                matricula.getId(), TipoCompromiso.PENSION, request.mes());
+                if (yaEmitido) {
+                    omitidos++;
+                    continue;
+                }
+
+                CompromisoPago compromiso = CompromisoPago.builder()
+                        .tipoCompromiso(TipoCompromiso.PENSION)
+                        .mes(request.mes())
+                        .fechaEmision(hoy)
+                        .montoOriginal(montoPensionPredeterminado)
+                        .montoMora(BigDecimal.ZERO)
+                        .estado(EstadoCompromisoPago.PENDIENTE)
+                        .matricula(matricula)
+                        .build();
+
+                CompromisoPago guardado = compromisoPagoRepository.save(compromiso);
+
+                Estudiante estudiante = matricula.getEstudiante();
+                Apoderado apoderado = estudiante.getApoderado();
+                if (apoderado != null) {
+                    servicioNotificacionEmail.enviarCorreoCompromisoPago(
+                            apoderado.getEmail(),
+                            apoderado.getNombre() + " " + apoderado.getApellidoPaterno(),
+                            estudiante.getNombre() + " " + estudiante.getApellidoPaterno(),
+                            "Pensión Mensual - " + request.mes(),
+                            guardado.calcularMontoTotal()
+                    );
+                }
+
+                auditarCompromiso(guardado, "Emisión masiva de compromiso de pensión");
+                emitidos++;
+            } catch (Exception e) {
+                String mensaje = e.getMessage() != null
+                        ? e.getMessage()
+                        : e.getClass().getSimpleName();
+                errores.add(new EmisionCompromisoLoteError(matricula.getId(), mensaje));
+            }
+        }
+
+        return new EmitirCompromisosPensionLoteResponse(emitidos, omitidos, errores);
     }
 
     @Override

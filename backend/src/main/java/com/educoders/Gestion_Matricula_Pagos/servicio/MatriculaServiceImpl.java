@@ -12,8 +12,10 @@ import com.educoders.Gestion_Matricula_Pagos.presentacion.dto.MatriculaResponse;
 import com.educoders.Gestion_Matricula_Pagos.presentacion.dto.RegistrarMatriculaRequest;
 import com.educoders.Gestion_Matricula_Pagos.presentacion.dto.SeccionEstudianteResponse;
 import com.educoders.Infraestructura_Servicios.enums.CategoriaAuditoria;
+import com.educoders.Infraestructura_Servicios.enums.EstadoCompromisoPago;
 import com.educoders.Infraestructura_Servicios.enums.EstadoMatricula;
 import com.educoders.Infraestructura_Servicios.enums.TipoAccionAuditoria;
+import com.educoders.Infraestructura_Servicios.enums.TipoCompromiso;
 import com.educoders.Infraestructura_Servicios.exception.ConflictoException;
 import com.educoders.Infraestructura_Servicios.exception.RecursoNoEncontradoException;
 import com.educoders.Infraestructura_Servicios.exception.ReglaNegocioException;
@@ -185,6 +187,52 @@ public class MatriculaServiceImpl implements MatriculaService {
         return matriculaRepository.listarMatriculas(
                         anioId, gradoId, seccionId, estado, estudianteId, pageable)
                 .map(MatriculaAdminListResponse::fromEntity);
+    }
+
+    @Override
+    @Transactional
+    public int cancelarPendientesPorPeriodoVencido() {
+        LocalDate hoy = LocalDate.now();
+        int canceladas = 0;
+
+        for (PeriodoMatricula periodo : periodoMatriculaRepository.findAll()) {
+            if (periodo.getFechaFin() == null || !hoy.isAfter(periodo.getFechaFin())
+                    || periodo.getAnioAcademico() == null) {
+                continue;
+            }
+
+            List<Matricula> pendientes = matriculaRepository.buscarSinCompromisoPagado(
+                    periodo.getAnioAcademico().getId(),
+                    EstadoMatricula.PENDIENTE,
+                    TipoCompromiso.MATRICULA,
+                    EstadoCompromisoPago.PAGADO
+            );
+
+            if (pendientes.isEmpty()) {
+                continue;
+            }
+
+            for (Matricula matricula : pendientes) {
+                matricula.setEstado(EstadoMatricula.CANCELADA);
+                auditoriaService.registrarAuditoria(new RegistrarAuditoriaRequestDTO(
+                        null,
+                        CategoriaAuditoria.MATRICULA,
+                        TipoAccionAuditoria.CAMBIO_ESTADO,
+                        "Matricula",
+                        matricula.getId(),
+                        "Cancelación automática: periodo de matrícula vencido sin compromiso de matrícula pagado",
+                        List.of(new DetalleAuditoriaDTO(
+                                "estado",
+                                EstadoMatricula.PENDIENTE.name(),
+                                EstadoMatricula.CANCELADA.name()))
+                ));
+            }
+
+            matriculaRepository.saveAll(pendientes);
+            canceladas += pendientes.size();
+        }
+
+        return canceladas;
     }
 
     private void exigirAdministrador() {

@@ -4,6 +4,10 @@ import com.educoders.Gestion_Matricula_Pagos.presentacion.dto.CompromisoApoderad
 import com.educoders.Gestion_Matricula_Pagos.presentacion.dto.CompromisoPagoResponse;
 import com.educoders.Gestion_Matricula_Pagos.presentacion.dto.EmitirCompromisoMatriculaRequest;
 import com.educoders.Gestion_Matricula_Pagos.presentacion.dto.EmitirCompromisoPensionRequest;
+import com.educoders.Gestion_Matricula_Pagos.presentacion.dto.EmitirCompromisosMatriculaLoteRequest;
+import com.educoders.Gestion_Matricula_Pagos.presentacion.dto.EmitirCompromisosMatriculaLoteResponse;
+import com.educoders.Gestion_Matricula_Pagos.presentacion.dto.EmitirCompromisosPensionLoteRequest;
+import com.educoders.Gestion_Matricula_Pagos.presentacion.dto.EmitirCompromisosPensionLoteResponse;
 import com.educoders.Gestion_Matricula_Pagos.servicio.CompromisoPagoService;
 import com.educoders.Infraestructura_Servicios.dto.RespuestaApiResponse;
 
@@ -32,6 +36,28 @@ public class CompromisoPagoController {
         return ResponseEntity
                 .status(HttpStatus.CREATED)
                 .body(RespuestaApiResponse.crearExito(respuesta));
+    }
+
+    @PostMapping("/matricula/lote")
+    public ResponseEntity<RespuestaApiResponse<EmitirCompromisosMatriculaLoteResponse>>
+    emitirCompromisosMatriculaLote(
+            @Valid @RequestBody EmitirCompromisosMatriculaLoteRequest request) {
+
+        EmitirCompromisosMatriculaLoteResponse respuesta =
+                compromisoPagoService.emitirCompromisosMatriculaLote(request);
+
+        return ResponseEntity.ok(RespuestaApiResponse.crearExito(respuesta));
+    }
+
+    @PostMapping("/pension/lote")
+    public ResponseEntity<RespuestaApiResponse<EmitirCompromisosPensionLoteResponse>>
+    emitirCompromisosPensionLote(
+            @Valid @RequestBody EmitirCompromisosPensionLoteRequest request) {
+
+        EmitirCompromisosPensionLoteResponse respuesta =
+                compromisoPagoService.emitirCompromisosPensionLote(request);
+
+        return ResponseEntity.ok(RespuestaApiResponse.crearExito(respuesta));
     }
 
     @PostMapping("/pension")

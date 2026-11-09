@@ -3,6 +3,7 @@ package com.educoders.Gestion_Matricula_Pagos.presentacion.controladores;
 import com.educoders.Gestion_Matricula_Pagos.presentacion.dto.*;
 import com.educoders.Gestion_Matricula_Pagos.servicio.PagoService;
 import com.educoders.Infraestructura_Servicios.dto.RespuestaApiResponse;
+import com.educoders.Infraestructura_Servicios.enums.EstadoCompromisoPago;
 import com.educoders.Infraestructura_Servicios.enums.EstadoPago;
 import com.educoders.Infraestructura_Servicios.enums.TipoCompromiso;
 import jakarta.validation.Valid;
@@ -73,6 +74,37 @@ public class PagoController {
                 tipoCompromiso,
                 pageable
         );
+
+        return ResponseEntity.ok(RespuestaApiResponse.crearExito(resultado));
+    }
+
+    @GetMapping("/admin/agrupados")
+    public ResponseEntity<RespuestaApiResponse<Page<CompromisoPagoAdminResponse>>> listarPagosAgrupadosAdmin(
+            @RequestParam(required = false) Long anioAcademicoId,
+            @RequestParam(required = false) Long gradoId,
+            @RequestParam(required = false) Long seccionId,
+            @RequestParam(required = false) Long estudianteId,
+            @RequestParam(required = false) EstadoCompromisoPago estadoCompromiso,
+            @RequestParam(required = false) TipoCompromiso tipoCompromiso,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size) {
+
+        Sort sort = Sort.by(
+                Sort.Order.desc("fechaEmision"),
+                Sort.Order.desc("id")
+        );
+        Pageable pageable = PageRequest.of(page, size, sort);
+
+        Page<CompromisoPagoAdminResponse> resultado =
+                pagoService.listarPagosAgrupadosAdmin(
+                        anioAcademicoId,
+                        gradoId,
+                        seccionId,
+                        estudianteId,
+                        estadoCompromiso,
+                        tipoCompromiso,
+                        pageable
+                );
 
         return ResponseEntity.ok(RespuestaApiResponse.crearExito(resultado));
     }

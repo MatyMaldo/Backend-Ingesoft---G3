@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -28,6 +29,9 @@ public interface PagoRepository extends JpaRepository<Pago, Long> {
 
     // Verifica si ya existe un pago pendiente de validación para el compromiso
     boolean existsByCompromisoPagoIdAndEstado(Long compromisoId, EstadoPago estado);
+
+    // Verifica si existe otro pago en el estado indicado para el mismo compromiso.
+    boolean existsByCompromisoPagoIdAndEstadoAndIdNot(Long compromisoId, EstadoPago estado, Long id);
 
     /*
         HU-GEMAP-08: Listado de pagos para admin
@@ -78,4 +82,19 @@ public interface PagoRepository extends JpaRepository<Pago, Long> {
         WHERE p.id = :id
     """)
     Optional<Pago> findByIdConDetalle(@Param("id") Long id);
+
+    /**
+     * Trae en una sola consulta los pagos de los compromisos indicados.
+     */
+    @Query("""
+        SELECT p FROM Pago p
+        JOIN FETCH p.compromisoPago c
+        JOIN FETCH c.matricula m
+        JOIN FETCH m.estudiante e
+        JOIN FETCH p.apoderadoPagador a
+        LEFT JOIN FETCH p.usuarioValidador u
+        WHERE c.id IN :compromisoIds
+        ORDER BY p.fechaRegistro DESC, p.id DESC
+    """)
+    List<Pago> findByCompromisoPagoIdIn(@Param("compromisoIds") Collection<Long> compromisoIds);
 }
