@@ -30,7 +30,7 @@ public class LogErrorController {
             @RequestParam(required = false) String modulo,
             @RequestParam(required = false) String busqueda,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "15") int size,
+            @RequestParam(defaultValue = "10") int size,
             @RequestParam(defaultValue = "DESC") String sortDirection) {
 
         Sort sort = sortDirection.equalsIgnoreCase("ASC")
