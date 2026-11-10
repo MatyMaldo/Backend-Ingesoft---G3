@@ -8,6 +8,7 @@ import com.educoders.Gestion_Matricula_Pagos.dominio.PeriodoMatricula;
 import com.educoders.Gestion_Matricula_Pagos.persistencia.MatriculaRepository;
 import com.educoders.Gestion_Matricula_Pagos.persistencia.PeriodoMatriculaRepository;
 import com.educoders.Gestion_Matricula_Pagos.presentacion.dto.MatriculaAdminListResponse;
+import com.educoders.Gestion_Matricula_Pagos.presentacion.dto.MatriculasPorEstadoResponse;
 import com.educoders.Gestion_Matricula_Pagos.presentacion.dto.MatriculaResponse;
 import com.educoders.Gestion_Matricula_Pagos.presentacion.dto.RegistrarMatriculaRequest;
 import com.educoders.Gestion_Matricula_Pagos.presentacion.dto.SeccionEstudianteResponse;
@@ -180,13 +181,46 @@ public class MatriculaServiceImpl implements MatriculaService {
             Long seccionId,
             EstadoMatricula estado,
             Long estudianteId,
+            String busqueda,
             Pageable pageable) {
 
         exigirAdministrador();
 
+        String patron = busqueda == null || busqueda.isBlank()
+                ? ""
+                : "%" + busqueda.trim().toLowerCase() + "%";
+
         return matriculaRepository.listarMatriculas(
-                        anioId, gradoId, seccionId, estado, estudianteId, pageable)
+                        anioId, gradoId, seccionId, estado, estudianteId, patron, pageable)
                 .map(MatriculaAdminListResponse::fromEntity);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public MatriculasPorEstadoResponse contarMatriculasPorEstado(
+            Long anioId,
+            Long gradoId,
+            Long seccionId,
+            String busqueda) {
+
+        exigirAdministrador();
+
+        String patron = busqueda == null || busqueda.isBlank()
+                ? ""
+                : "%" + busqueda.trim().toLowerCase() + "%";
+
+        long pendientes = 0;
+        long confirmadas = 0;
+        long canceladas = 0;
+        for (Object[] fila : matriculaRepository.contarPorEstado(anioId, gradoId, seccionId, patron)) {
+            long cantidad = ((Number) fila[1]).longValue();
+            switch ((EstadoMatricula) fila[0]) {
+                case PENDIENTE -> pendientes = cantidad;
+                case CONFIRMADA -> confirmadas = cantidad;
+                case CANCELADA -> canceladas = cantidad;
+            }
+        }
+        return new MatriculasPorEstadoResponse(pendientes + confirmadas + canceladas, pendientes, confirmadas, canceladas);
     }
 
     @Override

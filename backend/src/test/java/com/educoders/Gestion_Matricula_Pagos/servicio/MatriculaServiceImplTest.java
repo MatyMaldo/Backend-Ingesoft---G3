@@ -9,6 +9,7 @@ import com.educoders.Gestion_Matricula_Pagos.dominio.PeriodoMatricula;
 import com.educoders.Gestion_Matricula_Pagos.persistencia.MatriculaRepository;
 import com.educoders.Gestion_Matricula_Pagos.persistencia.PeriodoMatriculaRepository;
 import com.educoders.Gestion_Matricula_Pagos.presentacion.dto.MatriculaAdminListResponse;
+import com.educoders.Gestion_Matricula_Pagos.presentacion.dto.MatriculasPorEstadoResponse;
 import com.educoders.Gestion_Matricula_Pagos.presentacion.dto.MatriculaResponse;
 import com.educoders.Gestion_Matricula_Pagos.presentacion.dto.RegistrarMatriculaRequest;
 import com.educoders.Gestion_Matricula_Pagos.presentacion.dto.SeccionEstudianteResponse;
@@ -205,13 +206,13 @@ class MatriculaServiceImplTest {
         matricula.setEstudiante(crearEstudiante());
         matricula.setSeccion(crearSeccion());
 
-        Pageable pageable = PageRequest.of(0, 15);
+        Pageable pageable = PageRequest.of(0, 10);
         when(matriculaRepository.listarMatriculas(
-                1L, 1L, 1L, EstadoMatricula.CONFIRMADA, 5L, pageable))
+                1L, 1L, 1L, EstadoMatricula.CONFIRMADA, 5L, "%luis%", pageable))
                 .thenReturn(new PageImpl<>(List.of(matricula), pageable, 1));
 
         Page<MatriculaAdminListResponse> resultado = service.listarMatriculas(
-                1L, 1L, 1L, EstadoMatricula.CONFIRMADA, 5L, pageable);
+                1L, 1L, 1L, EstadoMatricula.CONFIRMADA, 5L, "  Luis ", pageable);
 
         assertEquals(1, resultado.getTotalElements());
         MatriculaAdminListResponse fila = resultado.getContent().get(0);
@@ -230,14 +231,57 @@ class MatriculaServiceImplTest {
     void listarMatriculas_rolNoAdmin_rechaza() {
         autenticar(crearApoderado());
 
-        Pageable pageable = PageRequest.of(0, 15);
+        Pageable pageable = PageRequest.of(0, 10);
 
         ResponseStatusException ex = assertThrows(ResponseStatusException.class,
-                () -> service.listarMatriculas(null, null, null, null, null, pageable));
+                () -> service.listarMatriculas(null, null, null, null, null, null, pageable));
 
         assertEquals(HttpStatus.FORBIDDEN, ex.getStatusCode());
         verify(matriculaRepository, never()).listarMatriculas(
-                any(), any(), any(), any(), any(), any());
+                any(), any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void contarMatriculasPorEstado_sumaPorEstadoYCompletaLosQueFaltan() {
+        autenticar(crearAdmin());
+
+        when(matriculaRepository.contarPorEstado(1L, null, null, "%ana%"))
+                .thenReturn(List.of(
+                        new Object[]{EstadoMatricula.PENDIENTE, 3L},
+                        new Object[]{EstadoMatricula.CANCELADA, 1L}));
+
+        MatriculasPorEstadoResponse conteo = service.contarMatriculasPorEstado(1L, null, null, " Ana ");
+
+        assertEquals(4L, conteo.total());
+        assertEquals(3L, conteo.pendientes());
+        assertEquals(0L, conteo.confirmadas());
+        assertEquals(1L, conteo.canceladas());
+    }
+
+    @Test
+    void contarMatriculasPorEstado_rolNoAdmin_rechaza() {
+        autenticar(crearApoderado());
+
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class,
+                () -> service.contarMatriculasPorEstado(null, null, null, null));
+
+        assertEquals(HttpStatus.FORBIDDEN, ex.getStatusCode());
+        verify(matriculaRepository, never()).contarPorEstado(any(), any(), any(), any());
+    }
+
+    @Test
+    void listarMatriculas_busquedaEnBlanco_noFiltra() {
+        autenticar(crearAdmin());
+
+        Pageable pageable = PageRequest.of(0, 10);
+        when(matriculaRepository.listarMatriculas(null, null, null, null, null, "", pageable))
+                .thenReturn(new PageImpl<>(List.of(), pageable, 0));
+
+        Page<MatriculaAdminListResponse> resultado = service.listarMatriculas(
+                null, null, null, null, null, "   ", pageable);
+
+        assertEquals(0, resultado.getTotalElements());
+        verify(matriculaRepository).listarMatriculas(null, null, null, null, null, "", pageable);
     }
 
     @Test

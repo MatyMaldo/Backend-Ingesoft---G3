@@ -1,8 +1,8 @@
 # Spring Boot
-application.properties
-application-*.properties
-application.yml
-application-*.yml
+# application.properties
+# application-*.properties
+# application.yml
+# application-*.yml
 
 # Environment variables
 .env
