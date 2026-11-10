@@ -5,6 +5,7 @@ import com.educoders.Gestion_Academica_Motor_Evaluacion.servicio.AsignacionCurso
 import com.educoders.Gestion_Matriz_Horarios.presentacion.controladores.BloqueHorarioController;
 import com.educoders.Gestion_Matriz_Horarios.presentacion.controladores.SesionClaseController;
 import com.educoders.Gestion_Matriz_Horarios.servicio.BloqueHorarioService;
+import com.educoders.Gestion_Matriz_Horarios.servicio.HorarioCargaMasivaService;
 import com.educoders.Gestion_Matriz_Horarios.servicio.HorarioCsvService;
 import com.educoders.Gestion_Matriz_Horarios.servicio.SesionClaseService;
 import com.educoders.Seguridad_Auditoria.seguridad.JwtAuthenticationFilter;
@@ -40,6 +41,7 @@ class SeguridadEscrituraHorariosTest {
     @MockBean private AsignacionCursoService asignacionCursoService;
     @MockBean private BloqueHorarioService bloqueHorarioService;
     @MockBean private HorarioCsvService horarioCsvService;
+    @MockBean private HorarioCargaMasivaService horarioCargaMasivaService;
     @MockBean private SesionClaseService sesionClaseService;
     @MockBean private LogErrorService logErrorService;
     @MockBean private JwtAuthenticationFilter jwtFilter;

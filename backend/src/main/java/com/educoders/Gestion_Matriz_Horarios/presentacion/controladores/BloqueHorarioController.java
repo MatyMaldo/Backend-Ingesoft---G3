@@ -2,6 +2,7 @@ package com.educoders.Gestion_Matriz_Horarios.presentacion.controladores;
 
 import com.educoders.Gestion_Matriz_Horarios.presentacion.dto.*;
 import com.educoders.Gestion_Matriz_Horarios.servicio.BloqueHorarioService;
+import com.educoders.Gestion_Matriz_Horarios.servicio.HorarioCargaMasivaService;
 import com.educoders.Gestion_Matriz_Horarios.servicio.HorarioCsvService;
 import com.educoders.Infraestructura_Servicios.dto.RespuestaApiResponse;
 import jakarta.validation.Valid;
@@ -20,10 +21,14 @@ public class BloqueHorarioController {
 
     private final BloqueHorarioService service;
     private final HorarioCsvService csvService;
+    private final HorarioCargaMasivaService cargaMasivaService;
 
-    public BloqueHorarioController(BloqueHorarioService service, HorarioCsvService csvService) {
+    public BloqueHorarioController(BloqueHorarioService service,
+                                   HorarioCsvService csvService,
+                                   HorarioCargaMasivaService cargaMasivaService) {
         this.service = service;
         this.csvService = csvService;
+        this.cargaMasivaService = cargaMasivaService;
     }
 
     @PostMapping
@@ -52,7 +57,12 @@ public class BloqueHorarioController {
                 .body(csvService.generarPlantilla());
     }
 
-    /** HU-GEMIH-09: carga masiva de bloques horarios desde CSV. */
+    /**
+     * HU-GEMIH-09: carga masiva heredada desde un único CSV.
+     *
+     * @deprecated Usar /carga-masiva/preview y /carga-masiva/confirmar.
+     */
+    @Deprecated
     @PostMapping(value = "/carga-masiva", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<RespuestaApiResponse<CargaMasivaResponse>> cargaMasiva(
             @RequestParam("file") MultipartFile archivo,
@@ -66,6 +76,66 @@ public class BloqueHorarioController {
                 : HttpStatus.BAD_REQUEST;
         return ResponseEntity.status(estado)
                 .body(RespuestaApiResponse.crearExito(resultado));
+    }
+
+    /** Nuevo flujo: validación y preview de varios archivos sin persistir. */
+    @PostMapping(value = "/carga-masiva/preview", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<RespuestaApiResponse<PreviewCargaMasivaResponse>> previewCargaMasiva(
+            @RequestParam("files") List<MultipartFile> archivos,
+            @RequestParam Long anioAcademicoId) {
+        return ResponseEntity.ok(RespuestaApiResponse.crearExito(
+                cargaMasivaService.preview(archivos, anioAcademicoId)));
+    }
+
+    /** Nuevo flujo: confirma la lista normalizada y crea los bloques. */
+    @PostMapping("/carga-masiva/confirmar")
+    public ResponseEntity<RespuestaApiResponse<ConfirmarCargaMasivaResponse>> confirmarCargaMasiva(
+            @Valid @RequestBody ConfirmarCargaMasivaRequest request) {
+        return ResponseEntity.ok(RespuestaApiResponse.crearExito(
+                cargaMasivaService.confirmar(request)));
+    }
+
+    /** Exporta una grilla de ensayo sin guardarla. */
+    @PostMapping("/exportar-borrador")
+    public ResponseEntity<byte[]> exportarBorrador(
+            @Valid @RequestBody ExportarBorradorRequest request) {
+        byte[] contenido = cargaMasivaService.exportarBorrador(request);
+        return archivo(contenido, request.formato(), "horarios-borrador");
+    }
+
+    /** Exporta los bloques existentes con IDs y nombres. */
+    @GetMapping("/exportar")
+    public ResponseEntity<byte[]> exportar(
+            @RequestParam(required = false) Long anioId,
+            @RequestParam(required = false) Long gradoId,
+            @RequestParam(required = false) Long seccionId,
+            @RequestParam(required = false) Long docenteId,
+            @RequestParam(defaultValue = "csv") String formato) {
+
+        byte[] contenido = cargaMasivaService.exportar(
+                anioId, gradoId, seccionId, docenteId, formato);
+        return archivo(contenido, formato, "horarios");
+    }
+
+    /** Plantilla nueva en CSV o XLSX. */
+    @GetMapping("/plantilla")
+    public ResponseEntity<byte[]> plantilla(
+            @RequestParam(defaultValue = "csv") String formato) {
+        byte[] contenido = cargaMasivaService.generarPlantilla(formato);
+        return archivo(contenido, formato, "plantilla-horarios");
+    }
+
+    private ResponseEntity<byte[]> archivo(byte[] contenido, String formato, String prefijo) {
+        boolean excel = "xlsx".equalsIgnoreCase(formato) || "xls".equalsIgnoreCase(formato);
+        String extension = excel ? "xlsx" : "csv";
+        MediaType tipo = excel
+                ? MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                : MediaType.parseMediaType("text/csv; charset=UTF-8");
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION,
+                        "attachment; filename=\"" + prefijo + "." + extension + "\"")
+                .contentType(tipo)
+                .body(contenido);
     }
 
     /** Guardado masivo: reemplaza el estado completo de bloques de una sección. */
