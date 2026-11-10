@@ -23,18 +23,21 @@ import com.educoders.Infraestructura_Servicios.enums.Mes;
 import com.educoders.Infraestructura_Servicios.enums.TipoCompromiso;
 import com.educoders.Infraestructura_Servicios.exception.RecursoNoEncontradoException;
 import com.educoders.Infraestructura_Servicios.exception.ReglaNegocioException;
+import com.educoders.Infraestructura_Servicios.operaciones.ProgresoLote;
 import com.educoders.Infraestructura_Servicios.servicio.ServicioNotificacionEmail;
 import com.educoders.Seguridad_Auditoria.dominio.Administrador;
 import com.educoders.Seguridad_Auditoria.dominio.Apoderado;
 import com.educoders.Seguridad_Auditoria.dominio.Estudiante;
 import com.educoders.Seguridad_Auditoria.dominio.Usuario;
 import com.educoders.Seguridad_Auditoria.persistencia.EstudianteRepository;
+import com.educoders.Seguridad_Auditoria.presentacion.dto.RegistrarAuditoriaRequestDTO;
 import com.educoders.Seguridad_Auditoria.servicio.AuditoriaService;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -581,6 +584,68 @@ class CompromisoPagoServiceImplTest {
     }
 
     @Test
+    void emitirCompromisosMatriculaLote_asyncUsaUsuarioExplicitoYProgreso() {
+        Matricula matricula = crearMatricula(EstadoMatricula.PENDIENTE, true);
+
+        when(periodoMatriculaRepository.findByAnioAcademicoId(1L))
+                .thenReturn(Optional.of(crearPeriodo(true)));
+        when(matriculaRepository.buscarPendientesPorAnioConDetalle(1L, EstadoMatricula.PENDIENTE))
+                .thenReturn(List.of(matricula));
+        stubGuardadoMatricula(20L);
+
+        ProgresoGrabado progreso = new ProgresoGrabado();
+        EmitirCompromisosMatriculaLoteResponse r = service.emitirCompromisosMatriculaLote(
+                new EmitirCompromisosMatriculaLoteRequest(1L), 77L, progreso);
+
+        assertEquals(1, r.emitidos());
+        assertEquals(1, progreso.totalIniciado);
+        assertEquals(1, progreso.ultimoProcesado);
+        assertEquals(1, progreso.ultimoExitoso);
+
+        ArgumentCaptor<RegistrarAuditoriaRequestDTO> captor =
+                ArgumentCaptor.forClass(RegistrarAuditoriaRequestDTO.class);
+        verify(auditoriaService).registrarAuditoria(captor.capture());
+        assertEquals(77L, captor.getValue().getUsuarioId());
+    }
+
+    @Test
+    void emitirCompromisosPensionLote_asyncUsaUsuarioExplicitoYProgreso() {
+        Assumptions.assumeTrue(LocalDate.now().getMonthValue() >= 3,
+                "No hay meses no futuros antes de marzo");
+
+        AnioAcademico anio = crearSeccion(true).getAnioAcademico();
+        Mes mesActual = Mes.values()[Math.min(
+                LocalDate.now().getMonthValue() - 3, Mes.values().length - 1)];
+        Matricula matricula = crearMatricula(EstadoMatricula.CONFIRMADA, true);
+
+        when(anioAcademicoRepository.findById(1L)).thenReturn(Optional.of(anio));
+        when(matriculaRepository.buscarPorAnioYEstadoConDetalle(
+                1L, EstadoMatricula.CONFIRMADA, null, null))
+                .thenReturn(List.of(matricula));
+        when(compromisoPagoRepository.existsByMatriculaIdAndTipoCompromisoAndMes(
+                1L, TipoCompromiso.PENSION, mesActual)).thenReturn(false);
+        when(compromisoPagoRepository.save(any(CompromisoPago.class))).thenAnswer(inv -> {
+            CompromisoPago c = inv.getArgument(0);
+            c.setId(30L);
+            return c;
+        });
+
+        ProgresoGrabado progreso = new ProgresoGrabado();
+        EmitirCompromisosPensionLoteResponse r = service.emitirCompromisosPensionLote(
+                new EmitirCompromisosPensionLoteRequest(1L, mesActual, null, null),
+                88L, progreso);
+
+        assertEquals(1, r.emitidos());
+        assertEquals(1, progreso.totalIniciado);
+        assertEquals(1, progreso.ultimoExitoso);
+
+        ArgumentCaptor<RegistrarAuditoriaRequestDTO> captor =
+                ArgumentCaptor.forClass(RegistrarAuditoriaRequestDTO.class);
+        verify(auditoriaService).registrarAuditoria(captor.capture());
+        assertEquals(88L, captor.getValue().getUsuarioId());
+    }
+
+    @Test
     void emitirCompromisosMatriculaLote_sinPendientes_devuelveCeros() {
         autenticar(crearAdmin());
         when(periodoMatriculaRepository.findByAnioAcademicoId(1L))
@@ -594,5 +659,34 @@ class CompromisoPagoServiceImplTest {
         assertEquals(0, r.emitidos());
         assertEquals(0, r.omitidos());
         assertEquals(0, r.errores().size());
+    }
+
+    private static class ProgresoGrabado implements ProgresoLote {
+        private int totalIniciado = -1;
+        private int ultimoProcesado = -1;
+        private int ultimoExitoso = -1;
+        private int ultimoOmitido = -1;
+        private int ultimoError = -1;
+
+        @Override
+        public void iniciar(int total) {
+            this.totalIniciado = total;
+        }
+
+        @Override
+        public void actualizar(int procesados, int exitosos, int omitidos, int errores) {
+            this.ultimoProcesado = procesados;
+            this.ultimoExitoso = exitosos;
+            this.ultimoOmitido = omitidos;
+            this.ultimoError = errores;
+        }
+
+        @Override
+        public void registrarError(String mensaje) {
+        }
+
+        @Override
+        public void fase(String mensaje) {
+        }
     }
 }

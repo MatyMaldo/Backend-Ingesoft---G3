@@ -10,6 +10,7 @@ public class AuditoriaResponseDTO {
     private Long id;
     private LocalDateTime fechaHora;
     private Long usuarioId;
+    private UsuarioAuditoriaDTO usuario;
     private CategoriaAuditoria categoria;
     private String accion;
     private String entidad;
@@ -21,12 +22,14 @@ public class AuditoriaResponseDTO {
     }
 
     public AuditoriaResponseDTO(Long id, LocalDateTime fechaHora, Long usuarioId,
+                                UsuarioAuditoriaDTO usuario,
                                 CategoriaAuditoria categoria, String accion,
                                 String entidad, Long entidadId,
                                 String descripcion, List<DetalleAuditoriaDTO> detalles) {
         this.id = id;
         this.fechaHora = fechaHora;
         this.usuarioId = usuarioId;
+        this.usuario = usuario;
         this.categoria = categoria;
         this.accion = accion;
         this.entidad = entidad;
@@ -43,6 +46,9 @@ public class AuditoriaResponseDTO {
 
     public Long getUsuarioId() { return usuarioId; }
     public void setUsuarioId(Long usuarioId) { this.usuarioId = usuarioId; }
+
+    public UsuarioAuditoriaDTO getUsuario() { return usuario; }
+    public void setUsuario(UsuarioAuditoriaDTO usuario) { this.usuario = usuario; }
 
     public CategoriaAuditoria getCategoria() { return categoria; }
     public void setCategoria(CategoriaAuditoria categoria) { this.categoria = categoria; }

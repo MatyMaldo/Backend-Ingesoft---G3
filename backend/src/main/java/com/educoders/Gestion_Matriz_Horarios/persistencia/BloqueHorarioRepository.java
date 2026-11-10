@@ -82,4 +82,25 @@ public interface BloqueHorarioRepository extends JpaRepository<BloqueHorario, Lo
     List<BloqueHorario> findEnOtrasSecciones(
             @Param("anioId") Long anioId,
             @Param("seccionId") Long seccionId);
+
+    @Query("""
+        SELECT b FROM BloqueHorario b
+        JOIN FETCH b.asignacionCurso a
+        JOIN FETCH a.seccion s
+        JOIN FETCH s.grado g
+        JOIN FETCH s.anioAcademico an
+        JOIN FETCH a.curso c
+        JOIN FETCH a.docente d
+        JOIN FETCH b.aula au
+        WHERE (:anioId IS NULL OR an.id = :anioId)
+          AND (:gradoId IS NULL OR g.id = :gradoId)
+          AND (:seccionId IS NULL OR s.id = :seccionId)
+          AND (:docenteId IS NULL OR d.id = :docenteId)
+        ORDER BY g.nombre, s.nombre, b.diaSemana, b.horaInicio
+        """)
+    List<BloqueHorario> buscarParaExportar(
+            @Param("anioId") Long anioId,
+            @Param("gradoId") Long gradoId,
+            @Param("seccionId") Long seccionId,
+            @Param("docenteId") Long docenteId);
 }

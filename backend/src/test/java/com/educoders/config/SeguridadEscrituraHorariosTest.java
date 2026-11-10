@@ -5,8 +5,11 @@ import com.educoders.Gestion_Academica_Motor_Evaluacion.servicio.AsignacionCurso
 import com.educoders.Gestion_Matriz_Horarios.presentacion.controladores.BloqueHorarioController;
 import com.educoders.Gestion_Matriz_Horarios.presentacion.controladores.SesionClaseController;
 import com.educoders.Gestion_Matriz_Horarios.servicio.BloqueHorarioService;
+import com.educoders.Gestion_Matriz_Horarios.servicio.HorarioCargaMasivaService;
 import com.educoders.Gestion_Matriz_Horarios.servicio.HorarioCsvService;
 import com.educoders.Gestion_Matriz_Horarios.servicio.SesionClaseService;
+import com.educoders.Infraestructura_Servicios.operaciones.OperacionMasivaService;
+import com.educoders.Infraestructura_Servicios.operaciones.UsuarioAutenticadoResolver;
 import com.educoders.Seguridad_Auditoria.seguridad.JwtAuthenticationFilter;
 import com.educoders.Seguridad_Auditoria.servicio.LogErrorService;
 import jakarta.servlet.FilterChain;
@@ -17,6 +20,7 @@ import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
+import org.springframework.test.context.TestPropertySource;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -32,6 +36,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         SesionClaseController.class
 })
 @Import(SeguridadConfig.class)
+@TestPropertySource(properties = "server.port=0")
 class SeguridadEscrituraHorariosTest {
 
     @Autowired
@@ -40,7 +45,10 @@ class SeguridadEscrituraHorariosTest {
     @MockBean private AsignacionCursoService asignacionCursoService;
     @MockBean private BloqueHorarioService bloqueHorarioService;
     @MockBean private HorarioCsvService horarioCsvService;
+    @MockBean private HorarioCargaMasivaService horarioCargaMasivaService;
     @MockBean private SesionClaseService sesionClaseService;
+    @MockBean private OperacionMasivaService operacionMasivaService;
+    @MockBean private UsuarioAutenticadoResolver usuarioAutenticadoResolver;
     @MockBean private LogErrorService logErrorService;
     @MockBean private JwtAuthenticationFilter jwtFilter;
 
