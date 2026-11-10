@@ -3,8 +3,14 @@ package com.educoders.Gestion_Matriz_Horarios.presentacion.controladores;
 import com.educoders.Gestion_Matriz_Horarios.presentacion.dto.*;
 import com.educoders.Gestion_Matriz_Horarios.servicio.SesionClaseService;
 import com.educoders.Infraestructura_Servicios.dto.RespuestaApiResponse;
+import com.educoders.Infraestructura_Servicios.operaciones.OperacionMasiva;
+import com.educoders.Infraestructura_Servicios.operaciones.OperacionMasivaService;
+import com.educoders.Infraestructura_Servicios.operaciones.TipoOperacionMasiva;
+import com.educoders.Infraestructura_Servicios.operaciones.UsuarioAutenticadoResolver;
+import com.educoders.Infraestructura_Servicios.operaciones.dto.IniciarOperacionResponse;
 import jakarta.validation.Valid;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -16,9 +22,15 @@ import java.util.List;
 public class SesionClaseController {
 
     private final SesionClaseService service;
+    private final OperacionMasivaService operacionMasivaService;
+    private final UsuarioAutenticadoResolver usuarioAutenticadoResolver;
 
-    public SesionClaseController(SesionClaseService service) {
+    public SesionClaseController(SesionClaseService service,
+                                 OperacionMasivaService operacionMasivaService,
+                                 UsuarioAutenticadoResolver usuarioAutenticadoResolver) {
         this.service = service;
+        this.operacionMasivaService = operacionMasivaService;
+        this.usuarioAutenticadoResolver = usuarioAutenticadoResolver;
     }
 
     @PostMapping("/preview")
@@ -31,6 +43,23 @@ public class SesionClaseController {
     public ResponseEntity<RespuestaApiResponse<GenerarSesionesResponse>> generar(
             @Valid @RequestBody GenerarSesionesRequest request) {
         return ResponseEntity.ok(RespuestaApiResponse.crearExito(service.generarSesiones(request)));
+    }
+
+    @PostMapping("/generar/async")
+    public ResponseEntity<RespuestaApiResponse<IniciarOperacionResponse>> generarAsync(
+            @Valid @RequestBody GenerarSesionesRequest request,
+            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey) {
+
+        Long usuarioId = usuarioAutenticadoResolver.idActual();
+        OperacionMasiva operacion = operacionMasivaService.iniciar(
+                TipoOperacionMasiva.GENERACION_SESIONES,
+                usuarioId,
+                idempotencyKey,
+                progreso -> service.generarSesiones(request, progreso));
+
+        return ResponseEntity.status(HttpStatus.ACCEPTED)
+                .body(RespuestaApiResponse.crearExito(
+                        IniciarOperacionResponse.desde(operacion)));
     }
 
     @GetMapping

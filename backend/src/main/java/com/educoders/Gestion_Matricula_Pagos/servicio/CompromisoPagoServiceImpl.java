@@ -26,6 +26,7 @@ import com.educoders.Infraestructura_Servicios.enums.TipoCompromiso;
 import com.educoders.Infraestructura_Servicios.exception.ConflictoException;
 import com.educoders.Infraestructura_Servicios.exception.RecursoNoEncontradoException;
 import com.educoders.Infraestructura_Servicios.exception.ReglaNegocioException;
+import com.educoders.Infraestructura_Servicios.operaciones.ProgresoLote;
 import com.educoders.Infraestructura_Servicios.servicio.ServicioNotificacionEmail;
 import com.educoders.Seguridad_Auditoria.dominio.Administrador;
 import com.educoders.Seguridad_Auditoria.dominio.Apoderado;
@@ -142,8 +143,18 @@ public class CompromisoPagoServiceImpl implements CompromisoPagoService {
     @Override
     public EmitirCompromisosMatriculaLoteResponse emitirCompromisosMatriculaLote(
             EmitirCompromisosMatriculaLoteRequest request) {
+        return emitirCompromisosMatriculaLote(request, null, null);
+    }
 
-        exigirAdministrador();
+    @Override
+    public EmitirCompromisosMatriculaLoteResponse emitirCompromisosMatriculaLote(
+            EmitirCompromisosMatriculaLoteRequest request,
+            Long usuarioId,
+            ProgresoLote progreso) {
+
+        if (usuarioId == null) {
+            exigirAdministrador();
+        }
 
         if (request == null || request.anioId() == null) {
             throw new ReglaNegocioException("El año académico es obligatorio.");
@@ -164,8 +175,13 @@ public class CompromisoPagoServiceImpl implements CompromisoPagoService {
 
         int emitidos = 0;
         int omitidos = 0;
+        int procesados = 0;
         List<EmisionCompromisoLoteError> errores = new ArrayList<>();
         LocalDate hoy = LocalDate.now();
+
+        if (progreso != null) {
+            progreso.iniciar(pendientes.size());
+        }
 
         for (Matricula matricula : pendientes) {
             try {
@@ -200,13 +216,23 @@ public class CompromisoPagoServiceImpl implements CompromisoPagoService {
                     );
                 }
 
-                auditarCompromiso(guardado, "Emisión masiva de compromiso de matrícula");
+                auditarCompromiso(guardado,
+                        "Emisión masiva de compromiso de matrícula", usuarioId);
                 emitidos++;
             } catch (Exception e) {
                 String mensaje = e.getMessage() != null
                         ? e.getMessage()
                         : e.getClass().getSimpleName();
                 errores.add(new EmisionCompromisoLoteError(matricula.getId(), mensaje));
+                if (progreso != null) {
+                    progreso.registrarError(
+                            "Matrícula " + matricula.getId() + ": " + mensaje);
+                }
+            } finally {
+                procesados++;
+                if (progreso != null) {
+                    progreso.actualizar(procesados, emitidos, omitidos, errores.size());
+                }
             }
         }
 
@@ -216,8 +242,18 @@ public class CompromisoPagoServiceImpl implements CompromisoPagoService {
     @Override
     public EmitirCompromisosPensionLoteResponse emitirCompromisosPensionLote(
             EmitirCompromisosPensionLoteRequest request) {
+        return emitirCompromisosPensionLote(request, null, null);
+    }
 
-        exigirAdministrador();
+    @Override
+    public EmitirCompromisosPensionLoteResponse emitirCompromisosPensionLote(
+            EmitirCompromisosPensionLoteRequest request,
+            Long usuarioId,
+            ProgresoLote progreso) {
+
+        if (usuarioId == null) {
+            exigirAdministrador();
+        }
 
         if (request == null || request.anioId() == null || request.mes() == null) {
             throw new ReglaNegocioException("El año académico y el mes son obligatorios.");
@@ -247,8 +283,13 @@ public class CompromisoPagoServiceImpl implements CompromisoPagoService {
 
         int emitidos = 0;
         int omitidos = 0;
+        int procesados = 0;
         List<EmisionCompromisoLoteError> errores = new ArrayList<>();
         LocalDate hoy = LocalDate.now();
+
+        if (progreso != null) {
+            progreso.iniciar(matriculas.size());
+        }
 
         for (Matricula matricula : matriculas) {
             try {
@@ -284,13 +325,23 @@ public class CompromisoPagoServiceImpl implements CompromisoPagoService {
                     );
                 }
 
-                auditarCompromiso(guardado, "Emisión masiva de compromiso de pensión");
+                auditarCompromiso(guardado,
+                        "Emisión masiva de compromiso de pensión", usuarioId);
                 emitidos++;
             } catch (Exception e) {
                 String mensaje = e.getMessage() != null
                         ? e.getMessage()
                         : e.getClass().getSimpleName();
                 errores.add(new EmisionCompromisoLoteError(matricula.getId(), mensaje));
+                if (progreso != null) {
+                    progreso.registrarError(
+                            "Matrícula " + matricula.getId() + ": " + mensaje);
+                }
+            } finally {
+                procesados++;
+                if (progreso != null) {
+                    progreso.actualizar(procesados, emitidos, omitidos, errores.size());
+                }
             }
         }
 
@@ -427,8 +478,12 @@ public class CompromisoPagoServiceImpl implements CompromisoPagoService {
     // --- Auditoría y seguridad ---
 
     private void auditarCompromiso(CompromisoPago c, String descripcion) {
+        auditarCompromiso(c, descripcion, null);
+    }
+
+    private void auditarCompromiso(CompromisoPago c, String descripcion, Long usuarioId) {
         auditoriaService.registrarAuditoria(new RegistrarAuditoriaRequestDTO(
-                null,
+                usuarioId,
                 CategoriaAuditoria.PAGOS,
                 TipoAccionAuditoria.CREAR,
                 "CompromisoPago",

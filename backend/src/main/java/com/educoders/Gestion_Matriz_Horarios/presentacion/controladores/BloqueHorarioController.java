@@ -5,6 +5,11 @@ import com.educoders.Gestion_Matriz_Horarios.servicio.BloqueHorarioService;
 import com.educoders.Gestion_Matriz_Horarios.servicio.HorarioCargaMasivaService;
 import com.educoders.Gestion_Matriz_Horarios.servicio.HorarioCsvService;
 import com.educoders.Infraestructura_Servicios.dto.RespuestaApiResponse;
+import com.educoders.Infraestructura_Servicios.operaciones.OperacionMasiva;
+import com.educoders.Infraestructura_Servicios.operaciones.OperacionMasivaService;
+import com.educoders.Infraestructura_Servicios.operaciones.TipoOperacionMasiva;
+import com.educoders.Infraestructura_Servicios.operaciones.UsuarioAutenticadoResolver;
+import com.educoders.Infraestructura_Servicios.operaciones.dto.IniciarOperacionResponse;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -22,13 +27,19 @@ public class BloqueHorarioController {
     private final BloqueHorarioService service;
     private final HorarioCsvService csvService;
     private final HorarioCargaMasivaService cargaMasivaService;
+    private final OperacionMasivaService operacionMasivaService;
+    private final UsuarioAutenticadoResolver usuarioAutenticadoResolver;
 
     public BloqueHorarioController(BloqueHorarioService service,
                                    HorarioCsvService csvService,
-                                   HorarioCargaMasivaService cargaMasivaService) {
+                                   HorarioCargaMasivaService cargaMasivaService,
+                                   OperacionMasivaService operacionMasivaService,
+                                   UsuarioAutenticadoResolver usuarioAutenticadoResolver) {
         this.service = service;
         this.csvService = csvService;
         this.cargaMasivaService = cargaMasivaService;
+        this.operacionMasivaService = operacionMasivaService;
+        this.usuarioAutenticadoResolver = usuarioAutenticadoResolver;
     }
 
     @PostMapping
@@ -93,6 +104,25 @@ public class BloqueHorarioController {
             @Valid @RequestBody ConfirmarCargaMasivaRequest request) {
         return ResponseEntity.ok(RespuestaApiResponse.crearExito(
                 cargaMasivaService.confirmar(request)));
+    }
+
+    /** Variante asíncrona de la confirmación de carga masiva. */
+    @PostMapping("/carga-masiva/confirmar/async")
+    public ResponseEntity<RespuestaApiResponse<IniciarOperacionResponse>>
+    confirmarCargaMasivaAsync(
+            @Valid @RequestBody ConfirmarCargaMasivaRequest request,
+            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey) {
+
+        Long usuarioId = usuarioAutenticadoResolver.idActual();
+        OperacionMasiva operacion = operacionMasivaService.iniciar(
+                TipoOperacionMasiva.CONFIRMAR_HORARIOS_LOTE,
+                usuarioId,
+                idempotencyKey,
+                progreso -> cargaMasivaService.confirmar(request, usuarioId, progreso));
+
+        return ResponseEntity.status(HttpStatus.ACCEPTED)
+                .body(RespuestaApiResponse.crearExito(
+                        IniciarOperacionResponse.desde(operacion)));
     }
 
     /** Exporta una grilla de ensayo sin guardarla. */

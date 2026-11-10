@@ -9,12 +9,14 @@ import com.educoders.Gestion_Academica_Motor_Evaluacion.persistencia.SeccionRepo
 import com.educoders.Gestion_Matriz_Horarios.config.HorarioProperties;
 import com.educoders.Gestion_Matriz_Horarios.dominio.Aula;
 import com.educoders.Gestion_Matriz_Horarios.dominio.BloqueHorario;
+import com.educoders.Gestion_Matriz_Horarios.exception.GuardadoBloquesConConflictosException;
 import com.educoders.Gestion_Matriz_Horarios.persistencia.AulaRepository;
 import com.educoders.Gestion_Matriz_Horarios.persistencia.BloqueHorarioRepository;
 import com.educoders.Gestion_Matriz_Horarios.presentacion.dto.BloqueMasivoItemRequest;
 import com.educoders.Gestion_Matriz_Horarios.presentacion.dto.CrearBloqueRequest;
 import com.educoders.Gestion_Matriz_Horarios.presentacion.dto.GuardarBloquesSeccionRequest;
 import com.educoders.Gestion_Matriz_Horarios.presentacion.dto.GuardadoMasivoBloquesResponse;
+import com.educoders.Gestion_Matriz_Horarios.presentacion.dto.GuardadoSeccionErroresResponse;
 import com.educoders.Gestion_Matriz_Horarios.presentacion.dto.ActualizarBloqueRequest;
 import com.educoders.Gestion_Matriz_Horarios.presentacion.dto.BloqueHorarioResponse;
 import com.educoders.Gestion_Matricula_Pagos.dominio.PeriodoMatricula;
@@ -500,7 +502,7 @@ class BloqueHorarioServiceImplTest {
 
         when(bloqueRepo.findByAsignacionCursoSeccionId(1L))
                 .thenReturn(List.of(existente100, existente101));
-        when(asignacionRepo.findBySeccionId(1L))
+        when(asignacionRepo.findAllById(any()))
                 .thenReturn(List.of(asignacion1, asignacion2));
         when(aulaRepo.findAllById(any())).thenReturn(List.of(aula1, aula2));
         when(bloqueRepo.findEnOtrasSecciones(1L, 1L)).thenReturn(List.of());
@@ -536,9 +538,6 @@ class BloqueHorarioServiceImplTest {
         BloqueHorario existente = bloque(100L, asignacion, aula, DiaSemana.LUNES, 8, 0, 10, 0);
 
         when(bloqueRepo.findByAsignacionCursoSeccionId(1L)).thenReturn(List.of(existente));
-        when(asignacionRepo.findBySeccionId(1L)).thenReturn(List.of(asignacion));
-        when(aulaRepo.findAllById(any())).thenReturn(List.of(aula));
-        when(bloqueRepo.findEnOtrasSecciones(1L, 1L)).thenReturn(List.of());
 
         GuardadoMasivoBloquesResponse respuesta = bloqueService.guardarMasivo(
                 1L, new GuardarBloquesSeccionRequest(1L, List.of()));
@@ -577,7 +576,7 @@ class BloqueHorarioServiceImplTest {
         Aula aula = crearAula(1L, "Aula 101", 30);
 
         when(bloqueRepo.findByAsignacionCursoSeccionId(1L)).thenReturn(List.of());
-        when(asignacionRepo.findBySeccionId(1L)).thenReturn(List.of(asignacion));
+        when(asignacionRepo.findAllById(any())).thenReturn(List.of(asignacion));
         when(aulaRepo.findAllById(any())).thenReturn(List.of(aula));
 
         GuardarBloquesSeccionRequest request = new GuardarBloquesSeccionRequest(1L, List.of(
@@ -585,8 +584,11 @@ class BloqueHorarioServiceImplTest {
                         LocalTime.of(10, 0), LocalTime.of(9, 0))
         ));
 
-        assertThrows(ReglaNegocioException.class,
+        GuardadoBloquesConConflictosException ex = assertThrows(
+                GuardadoBloquesConConflictosException.class,
                 () -> bloqueService.guardarMasivo(1L, request));
+        assertEquals("HORARIO_INVALIDO", ex.getErrores().errores().get(0).tipo());
+        assertTrue(ex.getErrores().errores().get(0).mensaje().contains("posterior"));
     }
 
     @Test
@@ -597,7 +599,7 @@ class BloqueHorarioServiceImplTest {
         Aula aula = crearAula(1L, "Aula 101", 30);
 
         when(bloqueRepo.findByAsignacionCursoSeccionId(1L)).thenReturn(List.of());
-        when(asignacionRepo.findBySeccionId(1L)).thenReturn(List.of(asignacion));
+        when(asignacionRepo.findAllById(any())).thenReturn(List.of(asignacion));
         when(aulaRepo.findAllById(any())).thenReturn(List.of(aula));
 
         GuardarBloquesSeccionRequest request = new GuardarBloquesSeccionRequest(1L, List.of(
@@ -605,8 +607,11 @@ class BloqueHorarioServiceImplTest {
                         LocalTime.of(8, 0), LocalTime.of(9, 0))
         ));
 
-        assertThrows(ReglaNegocioException.class,
+        GuardadoBloquesConConflictosException ex = assertThrows(
+                GuardadoBloquesConConflictosException.class,
                 () -> bloqueService.guardarMasivo(1L, request));
+        assertEquals("HORARIO_INVALIDO", ex.getErrores().errores().get(0).tipo());
+        assertTrue(ex.getErrores().errores().get(0).mensaje().contains("jornada"));
     }
 
     @Test
@@ -615,7 +620,7 @@ class BloqueHorarioServiceImplTest {
         Aula aula = crearAula(1L, "Aula 101", 30);
 
         when(bloqueRepo.findByAsignacionCursoSeccionId(1L)).thenReturn(List.of());
-        when(asignacionRepo.findBySeccionId(1L)).thenReturn(List.of(asignacion));
+        when(asignacionRepo.findAllById(any())).thenReturn(List.of(asignacion));
         when(aulaRepo.findAllById(any())).thenReturn(List.of(aula));
 
         GuardarBloquesSeccionRequest request = new GuardarBloquesSeccionRequest(1L, List.of(
@@ -623,9 +628,11 @@ class BloqueHorarioServiceImplTest {
                         LocalTime.of(10, 30), LocalTime.of(11, 15))
         ));
 
-        ReglaNegocioException ex = assertThrows(ReglaNegocioException.class,
+        GuardadoBloquesConConflictosException ex = assertThrows(
+                GuardadoBloquesConConflictosException.class,
                 () -> bloqueService.guardarMasivo(1L, request));
-        assertTrue(ex.getMessage().contains("receso"));
+        assertEquals("HORARIO_INVALIDO", ex.getErrores().errores().get(0).tipo());
+        assertTrue(ex.getErrores().errores().get(0).mensaje().contains("receso"));
     }
 
     @Test
@@ -634,7 +641,7 @@ class BloqueHorarioServiceImplTest {
         Aula aula = crearAula(1L, "Aula 101", 30);
 
         when(bloqueRepo.findByAsignacionCursoSeccionId(1L)).thenReturn(List.of());
-        when(asignacionRepo.findBySeccionId(1L)).thenReturn(List.of(asignacion));
+        when(asignacionRepo.findAllById(any())).thenReturn(List.of(asignacion));
         when(aulaRepo.findAllById(any())).thenReturn(List.of(aula));
 
         GuardarBloquesSeccionRequest request = new GuardarBloquesSeccionRequest(1L, List.of(
@@ -642,9 +649,11 @@ class BloqueHorarioServiceImplTest {
                         LocalTime.of(7, 0), LocalTime.of(8, 0))
         ));
 
-        ReglaNegocioException ex = assertThrows(ReglaNegocioException.class,
+        GuardadoBloquesConConflictosException ex = assertThrows(
+                GuardadoBloquesConConflictosException.class,
                 () -> bloqueService.guardarMasivo(1L, request));
-        assertTrue(ex.getMessage().contains("jornada"));
+        assertEquals("HORARIO_INVALIDO", ex.getErrores().errores().get(0).tipo());
+        assertTrue(ex.getErrores().errores().get(0).mensaje().contains("jornada"));
     }
 
     @Test
@@ -655,7 +664,7 @@ class BloqueHorarioServiceImplTest {
         Aula aula2 = crearAula(2L, "Aula 102", 30);
 
         when(bloqueRepo.findByAsignacionCursoSeccionId(1L)).thenReturn(List.of());
-        when(asignacionRepo.findBySeccionId(1L)).thenReturn(List.of(asignacion1, asignacion2));
+        when(asignacionRepo.findAllById(any())).thenReturn(List.of(asignacion1, asignacion2));
         when(aulaRepo.findAllById(any())).thenReturn(List.of(aula1, aula2));
 
         GuardarBloquesSeccionRequest request = new GuardarBloquesSeccionRequest(1L, List.of(
@@ -665,9 +674,13 @@ class BloqueHorarioServiceImplTest {
                         LocalTime.of(9, 0), LocalTime.of(10, 0))
         ));
 
-        ConflictoException ex = assertThrows(ConflictoException.class,
+        GuardadoBloquesConConflictosException ex = assertThrows(
+                GuardadoBloquesConConflictosException.class,
                 () -> bloqueService.guardarMasivo(1L, request));
-        assertTrue(ex.getMessage().contains("docente"));
+        assertTrue(ex.getErrores().errores().stream()
+                .anyMatch(e -> "CONFLICTO_DOCENTE".equals(e.tipo())
+                        && e.mensaje().contains("docente")));
+        assertTrue(ex.getErrores().errores().size() >= 2);
     }
 
     @Test
@@ -677,7 +690,7 @@ class BloqueHorarioServiceImplTest {
         Aula aula = crearAula(1L, "Aula 101", 30);
 
         when(bloqueRepo.findByAsignacionCursoSeccionId(1L)).thenReturn(List.of());
-        when(asignacionRepo.findBySeccionId(1L)).thenReturn(List.of(asignacion1, asignacion2));
+        when(asignacionRepo.findAllById(any())).thenReturn(List.of(asignacion1, asignacion2));
         when(aulaRepo.findAllById(any())).thenReturn(List.of(aula));
 
         GuardarBloquesSeccionRequest request = new GuardarBloquesSeccionRequest(1L, List.of(
@@ -687,9 +700,12 @@ class BloqueHorarioServiceImplTest {
                         LocalTime.of(9, 0), LocalTime.of(10, 0))
         ));
 
-        ConflictoException ex = assertThrows(ConflictoException.class,
+        GuardadoBloquesConConflictosException ex = assertThrows(
+                GuardadoBloquesConConflictosException.class,
                 () -> bloqueService.guardarMasivo(1L, request));
-        assertTrue(ex.getMessage().contains("aula"));
+        assertTrue(ex.getErrores().errores().stream()
+                .anyMatch(e -> "CONFLICTO_AULA".equals(e.tipo())
+                        && e.mensaje().contains("aula")));
     }
 
     @Test
@@ -700,7 +716,7 @@ class BloqueHorarioServiceImplTest {
         Aula aula2 = crearAula(2L, "Aula 102", 30);
 
         when(bloqueRepo.findByAsignacionCursoSeccionId(1L)).thenReturn(List.of());
-        when(asignacionRepo.findBySeccionId(1L)).thenReturn(List.of(asignacion1, asignacion2));
+        when(asignacionRepo.findAllById(any())).thenReturn(List.of(asignacion1, asignacion2));
         when(aulaRepo.findAllById(any())).thenReturn(List.of(aula1, aula2));
 
         GuardarBloquesSeccionRequest request = new GuardarBloquesSeccionRequest(1L, List.of(
@@ -710,9 +726,41 @@ class BloqueHorarioServiceImplTest {
                         LocalTime.of(9, 0), LocalTime.of(10, 0))
         ));
 
-        ConflictoException ex = assertThrows(ConflictoException.class,
+        GuardadoBloquesConConflictosException ex = assertThrows(
+                GuardadoBloquesConConflictosException.class,
                 () -> bloqueService.guardarMasivo(1L, request));
-        assertTrue(ex.getMessage().contains("sección"));
+        assertTrue(ex.getErrores().errores().stream()
+                .anyMatch(e -> "CONFLICTO_SECCION".equals(e.tipo())
+                        && e.mensaje().contains("sección")));
+    }
+
+    @Test
+    void guardarMasivo_duplicadoExacto_rechazaYNoPersiste() {
+        AsignacionCurso asignacion = crearAsignacion(
+                1L, 1L, "Matematicas", 2L, "Juan Perez", true, 1L);
+        Aula aula = crearAula(1L, "Aula 101", 30);
+
+        when(bloqueRepo.findByAsignacionCursoSeccionId(1L)).thenReturn(List.of());
+        when(asignacionRepo.findAllById(any())).thenReturn(List.of(asignacion));
+        when(aulaRepo.findAllById(any())).thenReturn(List.of(aula));
+
+        GuardarBloquesSeccionRequest request = new GuardarBloquesSeccionRequest(1L, List.of(
+                new BloqueMasivoItemRequest(null, 1L, 1L, DiaSemana.LUNES,
+                        LocalTime.of(8, 0), LocalTime.of(10, 0)),
+                new BloqueMasivoItemRequest(null, 1L, 1L, DiaSemana.LUNES,
+                        LocalTime.of(8, 0), LocalTime.of(10, 0))
+        ));
+
+        GuardadoBloquesConConflictosException ex = assertThrows(
+                GuardadoBloquesConConflictosException.class,
+                () -> bloqueService.guardarMasivo(1L, request));
+
+        assertTrue(ex.getErrores().errores().stream()
+                .anyMatch(e -> "DUPLICADO".equals(e.tipo())
+                        && Integer.valueOf(1).equals(e.indice())
+                        && Integer.valueOf(0).equals(e.indiceConflicto())));
+        verify(bloqueRepo, never()).deleteAll(any());
+        verify(bloqueRepo, never()).save(any());
     }
 
     @Test
@@ -722,7 +770,7 @@ class BloqueHorarioServiceImplTest {
         Aula aula = crearAula(1L, "Aula 101", 30);
 
         when(bloqueRepo.findByAsignacionCursoSeccionId(1L)).thenReturn(List.of());
-        when(asignacionRepo.findBySeccionId(1L)).thenReturn(List.of(asignacion));
+        when(asignacionRepo.findAllById(any())).thenReturn(List.of(asignacion));
         when(aulaRepo.findAllById(any())).thenReturn(List.of(aula));
         when(bloqueRepo.findEnOtrasSecciones(1L, 1L)).thenReturn(List.of(
                 bloque(500L, asignacionOtra, aula, DiaSemana.LUNES, 8, 0, 10, 0)
@@ -733,16 +781,22 @@ class BloqueHorarioServiceImplTest {
                         LocalTime.of(9, 0), LocalTime.of(10, 0))
         ));
 
-        ConflictoException ex = assertThrows(ConflictoException.class,
+        GuardadoBloquesConConflictosException ex = assertThrows(
+                GuardadoBloquesConConflictosException.class,
                 () -> bloqueService.guardarMasivo(1L, request));
-        assertTrue(ex.getMessage().contains("otra sección"));
+        assertTrue(ex.getErrores().errores().stream()
+                .anyMatch(e -> "CONFLICTO_DOCENTE".equals(e.tipo())
+                        && e.mensaje().contains("ya tiene clase")));
+        assertTrue(ex.getErrores().errores().stream()
+                .anyMatch(e -> e.bloqueConflictoId() != null
+                        && e.bloqueConflictoId().equals(500L)));
     }
 
     @Test
     void guardarMasivo_aulaNoExiste_rechaza() {
         AsignacionCurso asignacion = crearAsignacion(1L, 1L, "Matematicas", 2L, "Juan Perez", true, 1L);
         when(bloqueRepo.findByAsignacionCursoSeccionId(1L)).thenReturn(List.of());
-        when(asignacionRepo.findBySeccionId(1L)).thenReturn(List.of(asignacion));
+        when(asignacionRepo.findAllById(any())).thenReturn(List.of(asignacion));
         when(aulaRepo.findAllById(any())).thenReturn(List.of());
 
         GuardarBloquesSeccionRequest request = new GuardarBloquesSeccionRequest(1L, List.of(
@@ -750,14 +804,18 @@ class BloqueHorarioServiceImplTest {
                         LocalTime.of(8, 0), LocalTime.of(10, 0))
         ));
 
-        assertThrows(RecursoNoEncontradoException.class,
+        GuardadoBloquesConConflictosException ex = assertThrows(
+                GuardadoBloquesConConflictosException.class,
                 () -> bloqueService.guardarMasivo(1L, request));
+        assertTrue(ex.getErrores().errores().stream()
+                .anyMatch(e -> "REFERENCIA_INVALIDA".equals(e.tipo())
+                        && e.mensaje().contains("aula 99")));
     }
 
     @Test
     void guardarMasivo_bloqueIdDeOtraSeccion_rechaza() {
         when(bloqueRepo.findByAsignacionCursoSeccionId(1L)).thenReturn(List.of());
-        when(bloqueRepo.findById(999L)).thenReturn(Optional.of(
+        when(bloqueRepo.findAllById(any())).thenReturn(List.of(
                 bloque(999L, crearAsignacion(9L, 9L, "Otra", 3L, "Maria Gomez", true, 2L),
                         crearAula(9L, "Aula 999", 30), DiaSemana.LUNES, 8, 0, 10, 0)));
 
@@ -766,8 +824,12 @@ class BloqueHorarioServiceImplTest {
                         LocalTime.of(8, 0), LocalTime.of(10, 0))
         ));
 
-        assertThrows(ReglaNegocioException.class,
+        GuardadoBloquesConConflictosException ex = assertThrows(
+                GuardadoBloquesConConflictosException.class,
                 () -> bloqueService.guardarMasivo(1L, request));
+        assertTrue(ex.getErrores().errores().stream()
+                .anyMatch(e -> "REFERENCIA_INVALIDA".equals(e.tipo())
+                        && e.mensaje().contains("bloque 999")));
     }
 
     @Test

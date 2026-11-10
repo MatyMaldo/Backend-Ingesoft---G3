@@ -26,6 +26,7 @@ import com.educoders.Infraestructura_Servicios.enums.CategoriaAuditoria;
 import com.educoders.Infraestructura_Servicios.enums.DiaSemana;
 import com.educoders.Infraestructura_Servicios.enums.TipoAccionAuditoria;
 import com.educoders.Infraestructura_Servicios.exception.ReglaNegocioException;
+import com.educoders.Infraestructura_Servicios.operaciones.ProgresoLote;
 import com.educoders.Seguridad_Auditoria.dominio.Docente;
 import com.educoders.Seguridad_Auditoria.persistencia.DocenteRepository;
 import com.educoders.Seguridad_Auditoria.presentacion.dto.RegistrarAuditoriaRequestDTO;
@@ -141,7 +142,7 @@ public class HorarioCargaMasivaServiceImpl implements HorarioCargaMasivaService 
 
         List<PreviewCargaMasivaResponse.BloquePreview> bloques = new ArrayList<>();
         List<Validado> validos = new ArrayList<>();
-        Map<String, Boolean> clavesVistas = new HashMap<>();
+        Map<String, String> clavesVistas = new HashMap<>();
         Map<String, Integer> erroresPorArchivo = new HashMap<>();
 
         int indice = 0;
@@ -151,20 +152,29 @@ public class HorarioCargaMasivaServiceImpl implements HorarioCargaMasivaService 
             try {
                 Validado validado = resolver(fila, anio);
                 String clave = clave(validado);
-                PreviewCargaMasivaResponse.BloquePreview bloque = preview(
-                        validado, previewId, fila.fila(), "VALIDO", List.of());
+                String referenciaPrevia = clavesVistas.get(clave);
+                List<String> mensajes = new ArrayList<>();
 
-                if (clavesVistas.containsKey(clave)) {
-                    bloque = preview(validado, previewId, fila.fila(), "DUPLICADO",
-                            List.of("Bloque duplicado dentro de la carga."));
-                } else if (hayConflicto(validado, validos)
-                        || hayConflictoEnBase(validado, anio.getId())) {
-                    bloque = preview(validado, previewId, fila.fila(), "CONFLICTO",
-                            List.of("El docente, la sección o el aula ya tienen un bloque en ese horario."));
+                if (referenciaPrevia != null) {
+                    mensajes.add("El bloque " + validado.referencia()
+                            + " duplica a " + referenciaPrevia
+                            + ": misma asignación, aula, día y horas.");
                 } else {
-                    validos.add(validado);
+                    mensajes.addAll(conflictosEnPayload(validado, validos));
+                    mensajes.addAll(conflictosEnBase(validado, anio.getId()));
                 }
-                clavesVistas.put(clave, true);
+
+                String estado;
+                if (mensajes.isEmpty()) {
+                    estado = "VALIDO";
+                    validos.add(validado);
+                } else {
+                    estado = referenciaPrevia != null ? "DUPLICADO" : "CONFLICTO";
+                }
+
+                clavesVistas.putIfAbsent(clave, validado.referencia());
+                PreviewCargaMasivaResponse.BloquePreview bloque = preview(
+                        validado, previewId, fila.fila(), estado, mensajes);
                 bloques.add(bloque);
                 if (!"VALIDO".equals(bloque.estado())) {
                     erroresPorArchivo.merge(fila.archivo(), 1, Integer::sum);
@@ -196,6 +206,14 @@ public class HorarioCargaMasivaServiceImpl implements HorarioCargaMasivaService 
     @Override
     @Transactional
     public ConfirmarCargaMasivaResponse confirmar(ConfirmarCargaMasivaRequest request) {
+        return confirmar(request, null, null);
+    }
+
+    @Override
+    @Transactional
+    public ConfirmarCargaMasivaResponse confirmar(ConfirmarCargaMasivaRequest request,
+                                                  Long usuarioId,
+                                                  ProgresoLote progreso) {
         if (request == null || request.anioAcademicoId() == null) {
             throw new ReglaNegocioException("El año académico es obligatorio.");
         }
@@ -206,10 +224,15 @@ public class HorarioCargaMasivaServiceImpl implements HorarioCargaMasivaService 
 
         List<ConfirmarCargaMasivaResponse.ErrorConfirmacion> errores = new ArrayList<>();
         List<Validado> validados = new ArrayList<>();
-        Set<String> claves = new HashSet<>();
+        Map<String, String> claves = new HashMap<>();
 
         if (request.bloques() == null || request.bloques().isEmpty()) {
             throw new ReglaNegocioException("La lista de bloques es obligatoria.");
+        }
+
+        if (progreso != null) {
+            progreso.iniciar(request.bloques().size());
+            progreso.fase("VALIDANDO");
         }
 
         for (ConfirmarCargaMasivaRequest.BloqueConfirmacion bloque : request.bloques()) {
@@ -231,15 +254,30 @@ public class HorarioCargaMasivaServiceImpl implements HorarioCargaMasivaService 
 
                 Validado validado = new Validado(
                         asignacion, seccion, asignacion.getCurso(), asignacion.getDocente(),
-                        aula, bloque.diaSemana(), bloque.horaInicio(), bloque.horaFin(), origen);
+                        aula, bloque.diaSemana(), bloque.horaInicio(), bloque.horaFin(),
+                        origen, origen);
+
                 String clave = clave(validado);
-                if (!claves.add(clave)) {
-                    throw new FilaException("Bloque duplicado dentro de la solicitud.");
+                String referenciaPrevia = claves.get(clave);
+                List<String> mensajes = new ArrayList<>();
+                if (referenciaPrevia != null) {
+                    mensajes.add("El bloque " + origen + " duplica a "
+                            + referenciaPrevia
+                            + ": misma asignación, aula, día y horas.");
+                } else {
+                    mensajes.addAll(conflictosEnPayload(validado, validados));
+                    mensajes.addAll(conflictosEnBase(validado, anio.getId()));
                 }
-                if (hayConflicto(validado, validados) || hayConflictoEnBase(validado, anio.getId())) {
-                    throw new FilaException("El docente, la sección o el aula ya tienen un bloque en ese horario.");
+                claves.putIfAbsent(clave, origen);
+
+                if (mensajes.isEmpty()) {
+                    validados.add(validado);
+                } else {
+                    for (String mensaje : mensajes) {
+                        errores.add(new ConfirmarCargaMasivaResponse.ErrorConfirmacion(
+                                origen, "ERROR", mensaje));
+                    }
                 }
-                validados.add(validado);
             } catch (FilaException ex) {
                 errores.add(new ConfirmarCargaMasivaResponse.ErrorConfirmacion(
                         origen, "ERROR", ex.getMessage()));
@@ -247,7 +285,17 @@ public class HorarioCargaMasivaServiceImpl implements HorarioCargaMasivaService 
         }
 
         if (!errores.isEmpty()) {
+            if (progreso != null) {
+                errores.forEach(error -> progreso.registrarError(
+                        error.origen() + ": " + error.mensaje()));
+                progreso.actualizar(0, 0, 0, errores.size());
+                progreso.fase("VALIDACION_CON_ERRORES");
+            }
             return new ConfirmarCargaMasivaResponse(0, errores);
+        }
+
+        if (progreso != null) {
+            progreso.fase("GUARDANDO");
         }
 
         List<BloqueHorario> bloques = validados.stream().map(v -> {
@@ -263,7 +311,7 @@ public class HorarioCargaMasivaServiceImpl implements HorarioCargaMasivaService 
         bloqueRepo.saveAll(bloques);
 
         auditoriaService.registrarAuditoria(new RegistrarAuditoriaRequestDTO(
-                null,
+                usuarioId,
                 CategoriaAuditoria.HORARIOS,
                 TipoAccionAuditoria.CREAR,
                 "BloqueHorario",
@@ -271,6 +319,11 @@ public class HorarioCargaMasivaServiceImpl implements HorarioCargaMasivaService 
                 "Carga masiva confirmada: " + bloques.size() + " bloque(s) creado(s)",
                 List.of()
         ));
+
+        if (progreso != null) {
+            progreso.actualizar(bloques.size(), bloques.size(), 0, 0);
+            progreso.fase("FINALIZANDO");
+        }
 
         return new ConfirmarCargaMasivaResponse(bloques.size(), List.of());
     }
@@ -556,7 +609,8 @@ public class HorarioCargaMasivaServiceImpl implements HorarioCargaMasivaService 
                 throw new FilaException("El docente no coincide con la asignación del curso en la sección.");
             }
 
-            return new Validado(asignacion, seccion, curso, docente, aula, dia, inicio, fin, fila.archivo());
+            return new Validado(asignacion, seccion, curso, docente, aula, dia, inicio, fin,
+                    fila.archivo(), fila.archivo() + "#" + fila.fila());
         } catch (FilaException ex) {
             throw ex;
         } catch (Exception ex) {
@@ -639,10 +693,14 @@ public class HorarioCargaMasivaServiceImpl implements HorarioCargaMasivaService 
         LocalTime recesoFin = parsearConfig(horarioProperties.getRecesoFin());
 
         if (inicio.isBefore(jornadaInicio) || fin.isAfter(jornadaFin)) {
-            throw new FilaException("El bloque está fuera de la jornada permitida.");
+            throw new FilaException("El bloque está fuera de la jornada de "
+                    + horarioProperties.getJornadaInicio() + " a "
+                    + horarioProperties.getJornadaFin() + ".");
         }
         if (inicio.isBefore(recesoFin) && fin.isAfter(recesoInicio)) {
-            throw new FilaException("El bloque no puede cruzar el receso.");
+            throw new FilaException("El bloque no puede cruzar el receso de "
+                    + horarioProperties.getRecesoInicio() + " a "
+                    + horarioProperties.getRecesoFin() + ".");
         }
     }
 
@@ -689,30 +747,96 @@ public class HorarioCargaMasivaServiceImpl implements HorarioCargaMasivaService 
     // Conflictos
     // ------------------------------------------------------------------
 
-    private boolean hayConflicto(Validado nuevo, List<Validado> previos) {
-        for (Validado actual : previos) {
-            if (actual.diaSemana() != nuevo.diaSemana()
-                    || !solapan(actual, nuevo)) continue;
-            if (actual.seccion().getId().equals(nuevo.seccion().getId())
-                    || actual.docente().getId().equals(nuevo.docente().getId())
-                    || actual.aula().getId().equals(nuevo.aula().getId())) {
-                return true;
+    private List<String> conflictosEnPayload(Validado nuevo, List<Validado> previos) {
+        List<String> mensajes = new ArrayList<>();
+
+        for (Validado previo : previos) {
+            if (previo.diaSemana() != nuevo.diaSemana() || !solapan(previo, nuevo)) {
+                continue;
+            }
+
+            String dia = nombreDia(nuevo.diaSemana());
+            String rango = rangoHorario(nuevo.horaInicio(), nuevo.horaFin());
+            String base = "El bloque " + nuevo.referencia()
+                    + " se solapa con " + previo.referencia() + ": ";
+
+            if (previo.docente().getId().equals(nuevo.docente().getId())) {
+                mensajes.add(base + "mismo docente ("
+                        + nombreDocente(nuevo.docente()) + ") el " + dia + " de " + rango + ".");
+            }
+            if (previo.seccion().getId().equals(nuevo.seccion().getId())) {
+                mensajes.add(base + "misma sección ("
+                        + nombreSeccion(nuevo.seccion()) + ") el " + dia + " de " + rango + ".");
+            }
+            if (previo.aula().getId().equals(nuevo.aula().getId())) {
+                mensajes.add(base + "misma aula ("
+                        + nuevo.aula().getNombre() + ") el " + dia + " de " + rango + ".");
             }
         }
-        return false;
+
+        return mensajes;
     }
 
-    private boolean hayConflictoEnBase(Validado v, Long anioId) {
-        return !bloqueRepo.findConflictoDocente(
-                v.diaSemana(), v.horaInicio(), v.horaFin(), anioId, null, v.docente().getId()).isEmpty()
-                || !bloqueRepo.findConflictoSeccion(
-                v.diaSemana(), v.horaInicio(), v.horaFin(), anioId, null, v.seccion().getId()).isEmpty()
-                || !bloqueRepo.findConflictoAula(
-                v.diaSemana(), v.horaInicio(), v.horaFin(), anioId, null, v.aula().getId()).isEmpty();
+    private List<String> conflictosEnBase(Validado v, Long anioId) {
+        List<String> mensajes = new ArrayList<>();
+
+        for (BloqueHorario existente : bloqueRepo.findConflictoDocente(
+                v.diaSemana(), v.horaInicio(), v.horaFin(), anioId, null, v.docente().getId())) {
+            mensajes.add("El docente " + nombreDocente(v.docente())
+                    + " ya tiene clase en " + descripcionExistente(existente) + ".");
+        }
+        for (BloqueHorario existente : bloqueRepo.findConflictoSeccion(
+                v.diaSemana(), v.horaInicio(), v.horaFin(), anioId, null, v.seccion().getId())) {
+            mensajes.add("La sección " + nombreSeccion(v.seccion())
+                    + " ya tiene " + existente.getAsignacionCurso().getCurso().getNombre()
+                    + " el " + nombreDia(existente.getDiaSemana()) + " de "
+                    + rangoHorario(existente.getHoraInicio(), existente.getHoraFin()) + ".");
+        }
+        for (BloqueHorario existente : bloqueRepo.findConflictoAula(
+                v.diaSemana(), v.horaInicio(), v.horaFin(), anioId, null, v.aula().getId())) {
+            mensajes.add("El aula " + v.aula().getNombre()
+                    + " está ocupada por " + descripcionExistente(existente) + ".");
+        }
+
+        return mensajes;
     }
 
     private boolean solapan(Validado a, Validado b) {
         return a.horaInicio().isBefore(b.horaFin()) && b.horaInicio().isBefore(a.horaFin());
+    }
+
+    private String descripcionExistente(BloqueHorario bloque) {
+        var asignacion = bloque.getAsignacionCurso();
+        return nombreSeccion(asignacion.getSeccion())
+                + " (" + asignacion.getCurso().getNombre() + ") el "
+                + nombreDia(bloque.getDiaSemana()) + " de "
+                + rangoHorario(bloque.getHoraInicio(), bloque.getHoraFin());
+    }
+
+    private String nombreDocente(Docente docente) {
+        String nombre = docente.getNombre() + " " + docente.getApellidoPaterno();
+        if (docente.getApellidoMaterno() != null && !docente.getApellidoMaterno().isBlank()) {
+            nombre += " " + docente.getApellidoMaterno();
+        }
+        return nombre;
+    }
+
+    private String nombreSeccion(Seccion seccion) {
+        return seccion.getGrado().getNombre() + " " + seccion.getNombre();
+    }
+
+    private String nombreDia(DiaSemana dia) {
+        return switch (dia) {
+            case LUNES -> "lunes";
+            case MARTES -> "martes";
+            case MIERCOLES -> "miércoles";
+            case JUEVES -> "jueves";
+            case VIERNES -> "viernes";
+        };
+    }
+
+    private String rangoHorario(LocalTime inicio, LocalTime fin) {
+        return inicio.format(FORMATO_HORA) + " a " + fin.format(FORMATO_HORA);
     }
 
     private String clave(Validado v) {
@@ -831,7 +955,7 @@ public class HorarioCargaMasivaServiceImpl implements HorarioCargaMasivaService 
     private record Validado(
             AsignacionCurso asignacion, Seccion seccion, Curso curso, Docente docente,
             Aula aula, DiaSemana diaSemana, LocalTime horaInicio, LocalTime horaFin,
-            String origen
+            String origen, String referencia
     ) {
     }
 

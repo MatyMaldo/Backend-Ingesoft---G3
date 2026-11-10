@@ -1,0 +1,29 @@
+package com.educoders.config;
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
+
+/**
+ * Executor acotado para las operaciones masivas asíncronas.
+ * <p>
+ * Un pool acotado evita que muchas operaciones simultáneas consuman toda la
+ * memoria o los hilos del servidor. Cuando la cola está llena, el executor
+ * rechaza la tarea y la API responde 503 en lugar de dejar la petición colgada.
+ */
+@Configuration
+public class AsyncConfig {
+
+    @Bean(name = "operacionesMasivasExecutor")
+    public ThreadPoolTaskExecutor operacionesMasivasExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(2);
+        executor.setMaxPoolSize(4);
+        executor.setQueueCapacity(50);
+        executor.setThreadNamePrefix("operacion-masiva-");
+        executor.setWaitForTasksToCompleteOnShutdown(true);
+        executor.setAwaitTerminationSeconds(30);
+        executor.initialize();
+        return executor;
+    }
+}

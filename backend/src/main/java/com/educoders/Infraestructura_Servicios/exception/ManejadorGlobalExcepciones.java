@@ -1,6 +1,9 @@
 package com.educoders.Infraestructura_Servicios.exception;
 
+import com.educoders.Gestion_Matriz_Horarios.exception.GuardadoBloquesConConflictosException;
+import com.educoders.Gestion_Matriz_Horarios.presentacion.dto.GuardadoSeccionErroresResponse;
 import com.educoders.Infraestructura_Servicios.dto.RespuestaApiResponse;
+import com.educoders.Infraestructura_Servicios.operaciones.OperacionMasivaRechazadaException;
 import com.educoders.Seguridad_Auditoria.servicio.LogErrorService;
 import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
@@ -104,6 +107,25 @@ public class ManejadorGlobalExcepciones {
     public ResponseEntity<RespuestaApiResponse<Void>> manejarNoEncontrado(RecursoNoEncontradoException ex) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
                 .body(RespuestaApiResponse.crearError(ex.getMessage()));
+    }
+
+    @ExceptionHandler(OperacionMasivaRechazadaException.class)
+    public ResponseEntity<RespuestaApiResponse<Void>> manejarOperacionRechazada(
+            OperacionMasivaRechazadaException ex) {
+        REGISTRO.warn("Operación masiva rechazada: {}", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .body(RespuestaApiResponse.crearError(ex.getMessage()));
+    }
+
+    @ExceptionHandler(GuardadoBloquesConConflictosException.class)
+    public ResponseEntity<RespuestaApiResponse<GuardadoSeccionErroresResponse>>
+    manejarGuardadoConConflictos(GuardadoBloquesConConflictosException ex) {
+        GuardadoSeccionErroresResponse detalle = ex.getErrores();
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(new RespuestaApiResponse<>(
+                        detalle,
+                        "No se guardó el horario: " + detalle.errores().size()
+                                + " conflicto(s)."));
     }
 
     /** Endpoint inexistente: se registra como 404 y no como error interno 500. */

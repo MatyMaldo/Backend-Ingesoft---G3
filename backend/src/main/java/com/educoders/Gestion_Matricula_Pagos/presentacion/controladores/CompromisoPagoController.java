@@ -10,6 +10,11 @@ import com.educoders.Gestion_Matricula_Pagos.presentacion.dto.EmitirCompromisosP
 import com.educoders.Gestion_Matricula_Pagos.presentacion.dto.EmitirCompromisosPensionLoteResponse;
 import com.educoders.Gestion_Matricula_Pagos.servicio.CompromisoPagoService;
 import com.educoders.Infraestructura_Servicios.dto.RespuestaApiResponse;
+import com.educoders.Infraestructura_Servicios.operaciones.OperacionMasiva;
+import com.educoders.Infraestructura_Servicios.operaciones.OperacionMasivaService;
+import com.educoders.Infraestructura_Servicios.operaciones.TipoOperacionMasiva;
+import com.educoders.Infraestructura_Servicios.operaciones.UsuarioAutenticadoResolver;
+import com.educoders.Infraestructura_Servicios.operaciones.dto.IniciarOperacionResponse;
 
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -23,9 +28,15 @@ import java.util.List;
 public class CompromisoPagoController {
 
     private final CompromisoPagoService compromisoPagoService;
+    private final OperacionMasivaService operacionMasivaService;
+    private final UsuarioAutenticadoResolver usuarioAutenticadoResolver;
 
-    public CompromisoPagoController(CompromisoPagoService compromisoPagoService) {
+    public CompromisoPagoController(CompromisoPagoService compromisoPagoService,
+                                    OperacionMasivaService operacionMasivaService,
+                                    UsuarioAutenticadoResolver usuarioAutenticadoResolver) {
         this.compromisoPagoService = compromisoPagoService;
+        this.operacionMasivaService = operacionMasivaService;
+        this.usuarioAutenticadoResolver = usuarioAutenticadoResolver;
     }
 
     @PostMapping("/matricula")
@@ -58,6 +69,44 @@ public class CompromisoPagoController {
                 compromisoPagoService.emitirCompromisosPensionLote(request);
 
         return ResponseEntity.ok(RespuestaApiResponse.crearExito(respuesta));
+    }
+
+    @PostMapping("/matricula/lote/async")
+    public ResponseEntity<RespuestaApiResponse<IniciarOperacionResponse>>
+    emitirCompromisosMatriculaLoteAsync(
+            @Valid @RequestBody EmitirCompromisosMatriculaLoteRequest request,
+            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey) {
+
+        Long usuarioId = usuarioAutenticadoResolver.idActual();
+        OperacionMasiva operacion = operacionMasivaService.iniciar(
+                TipoOperacionMasiva.EMISION_MATRICULA_LOTE,
+                usuarioId,
+                idempotencyKey,
+                progreso -> compromisoPagoService.emitirCompromisosMatriculaLote(
+                        request, usuarioId, progreso));
+
+        return ResponseEntity.status(HttpStatus.ACCEPTED)
+                .body(RespuestaApiResponse.crearExito(
+                        IniciarOperacionResponse.desde(operacion)));
+    }
+
+    @PostMapping("/pension/lote/async")
+    public ResponseEntity<RespuestaApiResponse<IniciarOperacionResponse>>
+    emitirCompromisosPensionLoteAsync(
+            @Valid @RequestBody EmitirCompromisosPensionLoteRequest request,
+            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey) {
+
+        Long usuarioId = usuarioAutenticadoResolver.idActual();
+        OperacionMasiva operacion = operacionMasivaService.iniciar(
+                TipoOperacionMasiva.EMISION_PENSION_LOTE,
+                usuarioId,
+                idempotencyKey,
+                progreso -> compromisoPagoService.emitirCompromisosPensionLote(
+                        request, usuarioId, progreso));
+
+        return ResponseEntity.status(HttpStatus.ACCEPTED)
+                .body(RespuestaApiResponse.crearExito(
+                        IniciarOperacionResponse.desde(operacion)));
     }
 
     @PostMapping("/pension")

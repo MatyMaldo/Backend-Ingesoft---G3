@@ -133,6 +133,11 @@ public class SeguridadConfig {
                                 "/api/v1/auditorias/**"
                         ).hasRole("ADMINISTRADOR")
 
+                        // Operaciones masivas asíncronas
+                        .requestMatchers(
+                                "/api/v1/operaciones-masivas/**"
+                        ).hasRole("ADMINISTRADOR")
+
                         // Logs de errores
                         .requestMatchers(
                                 "/api/v1/admin/logs-error/**",
@@ -192,7 +197,9 @@ public class SeguridadConfig {
                                         HttpMethod.POST,
                                         "/api/v1/matriculas/cancelar-pendientes-por-periodo",
                                         "/api/v1/compromisos-pago/matricula/lote",
-                                        "/api/v1/compromisos-pago/pension/lote"
+                                        "/api/v1/compromisos-pago/matricula/lote/async",
+                                        "/api/v1/compromisos-pago/pension/lote",
+                                        "/api/v1/compromisos-pago/pension/lote/async"
                                 ).hasRole("ADMINISTRADOR")
 
                                 // HU-GEMIH-02: solo el administrador gestiona la
@@ -206,7 +213,8 @@ public class SeguridadConfig {
                                         "/api/v1/aulas",
                                         "/api/v1/aulas/**",
                                         "/api/v1/sesiones-clase/preview",
-                                        "/api/v1/sesiones-clase/generar"
+                                        "/api/v1/sesiones-clase/generar",
+                                        "/api/v1/sesiones-clase/generar/async"
                                 ).hasRole("ADMINISTRADOR")
 
                                 .requestMatchers(

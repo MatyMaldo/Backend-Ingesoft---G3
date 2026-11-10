@@ -22,8 +22,10 @@ import com.educoders.Gestion_Matriz_Horarios.presentacion.dto.ConfirmarCargaMasi
 import com.educoders.Gestion_Matriz_Horarios.presentacion.dto.ExportarBorradorRequest;
 import com.educoders.Gestion_Matriz_Horarios.presentacion.dto.PreviewCargaMasivaResponse;
 import com.educoders.Infraestructura_Servicios.enums.DiaSemana;
+import com.educoders.Infraestructura_Servicios.operaciones.ProgresoLote;
 import com.educoders.Seguridad_Auditoria.dominio.Docente;
 import com.educoders.Seguridad_Auditoria.persistencia.DocenteRepository;
+import com.educoders.Seguridad_Auditoria.presentacion.dto.RegistrarAuditoriaRequestDTO;
 import com.educoders.Seguridad_Auditoria.servicio.AuditoriaService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -171,6 +173,65 @@ class HorarioCargaMasivaServiceImplTest {
     }
 
     @Test
+    void previewAcumulaConflictosConNombres() {
+        AnioAcademico anio = anio();
+        AsignacionCurso asignacion = asignacion(anio);
+        stubsPreview(anio, asignacion);
+
+        BloqueHorario existente = new BloqueHorario();
+        existente.setId(500L);
+        existente.setDiaSemana(DiaSemana.LUNES);
+        existente.setHoraInicio(LocalTime.of(8, 0));
+        existente.setHoraFin(LocalTime.of(9, 0));
+        existente.setAula(aula());
+        existente.setAsignacionCurso(asignacion);
+
+        when(bloqueRepo.findConflictoDocente(any(), any(), any(), anyLong(), any(), anyLong()))
+                .thenReturn(List.of(existente));
+        when(bloqueRepo.findConflictoSeccion(any(), any(), any(), anyLong(), any(), anyLong()))
+                .thenReturn(List.of(existente));
+        when(bloqueRepo.findConflictoAula(any(), any(), any(), anyLong(), any(), anyLong()))
+                .thenReturn(List.of(existente));
+
+        String csv = "Grado;Sección;Curso;DNI Docente;Aula;Día;Hora inicio;Hora fin\n"
+                + "1er Grado;A;Matemática;1234567;Aula 101;LUNES;08:00;09:00\n";
+        MockMultipartFile archivo = new MockMultipartFile(
+                "files", "1A.csv", "text/csv", csv.getBytes(StandardCharsets.UTF_8));
+
+        PreviewCargaMasivaResponse respuesta = service.preview(List.of(archivo), 1L);
+
+        assertEquals("CONFLICTO", respuesta.bloques().get(0).estado());
+        assertEquals(3, respuesta.bloques().get(0).errores().size());
+        assertTrue(respuesta.bloques().get(0).errores().stream()
+                .anyMatch(m -> m.contains("docente")));
+        assertTrue(respuesta.bloques().get(0).errores().stream()
+                .anyMatch(m -> m.contains("sección")));
+        assertTrue(respuesta.bloques().get(0).errores().stream()
+                .anyMatch(m -> m.contains("aula")));
+    }
+
+    @Test
+    void previewDuplicadoReportaSoloUnMensaje() {
+        AnioAcademico anio = anio();
+        AsignacionCurso asignacion = asignacion(anio);
+        stubsPreview(anio, asignacion);
+
+        String csv = "Grado;Sección;Curso;DNI Docente;Aula;Día;Hora inicio;Hora fin\n"
+                + "1er Grado;A;Matemática;1234567;Aula 101;LUNES;08:00;09:00\n"
+                + "1er Grado;A;Matemática;1234567;Aula 101;LUNES;08:00;09:00\n";
+        MockMultipartFile archivo = new MockMultipartFile(
+                "files", "1A.csv", "text/csv", csv.getBytes(StandardCharsets.UTF_8));
+
+        PreviewCargaMasivaResponse respuesta = service.preview(List.of(archivo), 1L);
+
+        assertEquals(1, respuesta.resumen().validas());
+        assertEquals(1, respuesta.resumen().duplicadas());
+        assertEquals("DUPLICADO", respuesta.bloques().get(1).estado());
+        assertEquals(1, respuesta.bloques().get(1).errores().size());
+        assertTrue(respuesta.bloques().get(1).errores().get(0).contains("duplica"));
+    }
+
+    @Test
     void confirmarCreaBloquesSiTodoEsValido() {
         AnioAcademico anio = anio();
         AsignacionCurso asignacion = asignacion(anio);
@@ -190,12 +251,46 @@ class HorarioCargaMasivaServiceImplTest {
     }
 
     @Test
+    void confirmarAsyncUsaUsuarioExplicitoYProgreso() {
+        AnioAcademico anio = anio();
+        AsignacionCurso asignacion = asignacion(anio);
+        stubsPreview(anio, asignacion);
+        when(bloqueRepo.saveAll(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        ProgresoGrabado progreso = new ProgresoGrabado();
+        ConfirmarCargaMasivaResponse respuesta = service.confirmar(
+                new ConfirmarCargaMasivaRequest(1L, List.of(
+                        new ConfirmarCargaMasivaRequest.BloqueConfirmacion(
+                                10L, 1L, DiaSemana.LUNES,
+                                LocalTime.of(8, 0), LocalTime.of(9, 0), "1A.csv#2"))),
+                55L,
+                progreso);
+
+        assertEquals(1, respuesta.bloquesCreados());
+        assertEquals(1, progreso.totalIniciado);
+        assertEquals(1, progreso.ultimoExitoso);
+
+        ArgumentCaptor<RegistrarAuditoriaRequestDTO> captor =
+                ArgumentCaptor.forClass(RegistrarAuditoriaRequestDTO.class);
+        verify(auditoriaService).registrarAuditoria(captor.capture());
+        assertEquals(55L, captor.getValue().getUsuarioId());
+    }
+
+    @Test
     void confirmarNoCreaNadaSiHayConflicto() {
         AnioAcademico anio = anio();
         AsignacionCurso asignacion = asignacion(anio);
         stubsPreview(anio, asignacion);
+
+        BloqueHorario existente = new BloqueHorario();
+        existente.setId(500L);
+        existente.setDiaSemana(DiaSemana.LUNES);
+        existente.setHoraInicio(LocalTime.of(8, 0));
+        existente.setHoraFin(LocalTime.of(9, 0));
+        existente.setAula(aula());
+        existente.setAsignacionCurso(asignacion);
         when(bloqueRepo.findConflictoAula(any(), any(), any(), anyLong(), any(), anyLong()))
-                .thenReturn(List.of(new BloqueHorario()));
+                .thenReturn(List.of(existente));
 
         ConfirmarCargaMasivaResponse respuesta = service.confirmar(
                 new ConfirmarCargaMasivaRequest(1L, List.of(
@@ -205,6 +300,66 @@ class HorarioCargaMasivaServiceImplTest {
 
         assertEquals(0, respuesta.bloquesCreados());
         assertFalse(respuesta.errores().isEmpty());
+        assertTrue(respuesta.errores().stream()
+                .anyMatch(e -> e.mensaje().contains("aula")));
+        verify(bloqueRepo, never()).saveAll(any());
+    }
+
+    @Test
+    void confirmarAcumulaDocenteSeccionYAulaEnLaMismaFila() {
+        AnioAcademico anio = anio();
+        AsignacionCurso asignacion = asignacion(anio);
+        stubsPreview(anio, asignacion);
+
+        BloqueHorario existente = new BloqueHorario();
+        existente.setId(500L);
+        existente.setDiaSemana(DiaSemana.LUNES);
+        existente.setHoraInicio(LocalTime.of(8, 0));
+        existente.setHoraFin(LocalTime.of(9, 0));
+        existente.setAula(aula());
+        existente.setAsignacionCurso(asignacion);
+
+        when(bloqueRepo.findConflictoDocente(any(), any(), any(), anyLong(), any(), anyLong()))
+                .thenReturn(List.of(existente));
+        when(bloqueRepo.findConflictoSeccion(any(), any(), any(), anyLong(), any(), anyLong()))
+                .thenReturn(List.of(existente));
+        when(bloqueRepo.findConflictoAula(any(), any(), any(), anyLong(), any(), anyLong()))
+                .thenReturn(List.of(existente));
+
+        ConfirmarCargaMasivaResponse respuesta = service.confirmar(
+                new ConfirmarCargaMasivaRequest(1L, List.of(
+                        new ConfirmarCargaMasivaRequest.BloqueConfirmacion(
+                                10L, 1L, DiaSemana.LUNES,
+                                LocalTime.of(8, 0), LocalTime.of(9, 0), "1A.csv#2"))));
+
+        assertEquals(0, respuesta.bloquesCreados());
+        assertEquals(3, respuesta.errores().size());
+        assertTrue(respuesta.errores().stream().anyMatch(e -> e.mensaje().contains("docente")));
+        assertTrue(respuesta.errores().stream().anyMatch(e -> e.mensaje().contains("sección")));
+        assertTrue(respuesta.errores().stream().anyMatch(e -> e.mensaje().contains("aula")));
+        verify(bloqueRepo, never()).saveAll(any());
+    }
+
+    @Test
+    void confirmarDuplicadoEnLaSolicitudReportaUnSoloError() {
+        AnioAcademico anio = anio();
+        AsignacionCurso asignacion = asignacion(anio);
+        stubsPreview(anio, asignacion);
+
+        ConfirmarCargaMasivaRequest request = new ConfirmarCargaMasivaRequest(1L, List.of(
+                new ConfirmarCargaMasivaRequest.BloqueConfirmacion(
+                        10L, 1L, DiaSemana.LUNES,
+                        LocalTime.of(8, 0), LocalTime.of(9, 0), "fila-1"),
+                new ConfirmarCargaMasivaRequest.BloqueConfirmacion(
+                        10L, 1L, DiaSemana.LUNES,
+                        LocalTime.of(8, 0), LocalTime.of(9, 0), "fila-2")
+        ));
+
+        ConfirmarCargaMasivaResponse respuesta = service.confirmar(request);
+
+        assertEquals(0, respuesta.bloquesCreados());
+        assertEquals(1, respuesta.errores().size());
+        assertTrue(respuesta.errores().get(0).mensaje().contains("duplica"));
         verify(bloqueRepo, never()).saveAll(any());
     }
 
@@ -241,5 +396,28 @@ class HorarioCargaMasivaServiceImplTest {
         assertTrue(bytes.length > 2);
         assertEquals((byte) 'P', bytes[0]);
         assertEquals((byte) 'K', bytes[1]);
+    }
+
+    private static class ProgresoGrabado implements ProgresoLote {
+        private int totalIniciado = -1;
+        private int ultimoExitoso = -1;
+
+        @Override
+        public void iniciar(int total) {
+            this.totalIniciado = total;
+        }
+
+        @Override
+        public void actualizar(int procesados, int exitosos, int omitidos, int errores) {
+            this.ultimoExitoso = exitosos;
+        }
+
+        @Override
+        public void registrarError(String mensaje) {
+        }
+
+        @Override
+        public void fase(String mensaje) {
+        }
     }
 }
