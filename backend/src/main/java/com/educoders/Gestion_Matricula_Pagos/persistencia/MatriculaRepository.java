@@ -35,6 +35,8 @@ public interface MatriculaRepository extends JpaRepository<Matricula, Long> {
 
     List<Matricula> findBySeccionId(Long seccionId);
 
+    List<Matricula> findBySeccionIdAndEstado(Long seccionId, EstadoMatricula estado);
+
     Optional<Matricula> findByEstudianteIdAndSeccionId(Long estudianteId, Long seccionId);
 
     List<Matricula> findByEstudianteIdOrderBySeccionAnioAcademicoAnioDesc(Long estudianteId);

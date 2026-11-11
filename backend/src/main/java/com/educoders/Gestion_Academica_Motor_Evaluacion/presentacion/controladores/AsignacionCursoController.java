@@ -1,8 +1,12 @@
 package com.educoders.Gestion_Academica_Motor_Evaluacion.presentacion.controladores;
 
+import com.educoders.Gestion_Academica_Motor_Evaluacion.dominio.AsignacionCurso;
+import com.educoders.Gestion_Academica_Motor_Evaluacion.persistencia.AsignacionCursoRepository;
 import com.educoders.Gestion_Academica_Motor_Evaluacion.presentacion.dto.*;
 import com.educoders.Gestion_Academica_Motor_Evaluacion.servicio.AsignacionCursoService;
+import com.educoders.Gestion_Matricula_Pagos.servicio.MatriculaService;
 import com.educoders.Infraestructura_Servicios.dto.RespuestaApiResponse;
+import com.educoders.Infraestructura_Servicios.exception.RecursoNoEncontradoException;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -15,9 +19,15 @@ import java.util.List;
 public class AsignacionCursoController {
 
     private final AsignacionCursoService service;
+    private final MatriculaService matriculaService;
+    private final AsignacionCursoRepository asignacionCursoRepository;
 
-    public AsignacionCursoController(AsignacionCursoService service) {
+    public AsignacionCursoController(AsignacionCursoService service,
+                                    MatriculaService matriculaService,
+                                    AsignacionCursoRepository asignacionCursoRepository) {
         this.service = service;
+        this.matriculaService = matriculaService;
+        this.asignacionCursoRepository = asignacionCursoRepository;
     }
 
     @PostMapping
@@ -35,6 +45,18 @@ public class AsignacionCursoController {
             @RequestParam(required = false) Long anioId,
             @RequestParam(required = false) Long docenteId) {
         List<AsignacionCursoResponse> r = service.listar(gradoId, seccionId, anioId, docenteId);
+        return ResponseEntity.ok(RespuestaApiResponse.crearExito(r));
+    }
+
+    @GetMapping("/{id}/estudiantes")
+    public ResponseEntity<RespuestaApiResponse<List<EstudianteAsignacionResponse>>> listarEstudiantes(
+            @PathVariable Long id) {
+        AsignacionCurso asignacion = asignacionCursoRepository.findById(id)
+                .orElseThrow(() -> RecursoNoEncontradoException.de("Asignación de curso", id));
+
+        List<EstudianteAsignacionResponse> r = matriculaService.listarEstudiantesActivosPorSeccion(
+                asignacion.getSeccion().getId()
+        );
         return ResponseEntity.ok(RespuestaApiResponse.crearExito(r));
     }
 

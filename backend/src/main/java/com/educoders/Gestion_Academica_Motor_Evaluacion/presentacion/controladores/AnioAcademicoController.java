@@ -1,16 +1,17 @@
 package com.educoders.Gestion_Academica_Motor_Evaluacion.presentacion.controladores;
 
 import com.educoders.Gestion_Academica_Motor_Evaluacion.presentacion.dto.AnioAcademicoResponse;
+import com.educoders.Gestion_Academica_Motor_Evaluacion.presentacion.dto.ContextoDocenteResponse;
 import com.educoders.Gestion_Academica_Motor_Evaluacion.presentacion.dto.PeriodoMatriculaEstadoResponse;
+import com.educoders.Gestion_Academica_Motor_Evaluacion.presentacion.dto.VacantesAnioResponse;
+import com.educoders.Gestion_Academica_Motor_Evaluacion.servicio.AnioAcademicoService;
+import com.educoders.Gestion_Academica_Motor_Evaluacion.servicio.GradoSeccionService;
 import com.educoders.Infraestructura_Servicios.dto.RespuestaApiResponse;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-import com.educoders.Gestion_Academica_Motor_Evaluacion.presentacion.dto.VacantesAnioResponse;
-import com.educoders.Gestion_Academica_Motor_Evaluacion.servicio.GradoSeccionService;
-import org.springframework.web.bind.annotation.PathVariable;
-
 
 import java.util.List;
 import java.util.Optional;
@@ -19,11 +20,10 @@ import java.util.Optional;
 @RequestMapping("/api/v1/anios-academicos")
 public class AnioAcademicoController {
 
-    private final com.educoders.Gestion_Academica_Motor_Evaluacion.servicio.AnioAcademicoService anioAcademicoService;
-
+    private final AnioAcademicoService anioAcademicoService;
     private final GradoSeccionService gradoSeccionService;
 
-    public AnioAcademicoController(com.educoders.Gestion_Academica_Motor_Evaluacion.servicio.AnioAcademicoService anioAcademicoService,
+    public AnioAcademicoController(AnioAcademicoService anioAcademicoService,
                                    GradoSeccionService gradoSeccionService) {
         this.anioAcademicoService = anioAcademicoService;
         this.gradoSeccionService = gradoSeccionService;
@@ -45,13 +45,24 @@ public class AnioAcademicoController {
         }
     }
 
-
     @GetMapping("/{anioId}/periodo-matricula")
     public ResponseEntity<RespuestaApiResponse<PeriodoMatriculaEstadoResponse>>
     obtenerPeriodoMatricula(@PathVariable Long anioId) {
 
         PeriodoMatriculaEstadoResponse response =
                 anioAcademicoService.obtenerPeriodoMatricula(anioId);
+
+        return ResponseEntity.ok(
+                RespuestaApiResponse.crearExito(response)
+        );
+    }
+
+    @GetMapping("/{anioId}/bimestres")
+    public ResponseEntity<RespuestaApiResponse<List<ContextoDocenteResponse.BimestreInfo>>>
+    listarBimestres(@PathVariable Long anioId) {
+
+        List<ContextoDocenteResponse.BimestreInfo> response =
+                anioAcademicoService.listarBimestres(anioId);
 
         return ResponseEntity.ok(
                 RespuestaApiResponse.crearExito(response)

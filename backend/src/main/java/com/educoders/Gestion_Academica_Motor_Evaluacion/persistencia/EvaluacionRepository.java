@@ -14,6 +14,8 @@ public interface EvaluacionRepository extends JpaRepository<Evaluacion, Long> {
     List<Evaluacion> findByAsignacionCursoSeccionIdAndAsignacionCursoCursoId(
             Long seccionId, Long cursoId);
 
+    List<Evaluacion> findByAsignacionCursoId(Long idAsignacionCurso);
+
     @Query("SELECT e FROM Evaluacion e " +
             "JOIN FETCH e.bimestre b " +
             "JOIN FETCH e.competencia c " +

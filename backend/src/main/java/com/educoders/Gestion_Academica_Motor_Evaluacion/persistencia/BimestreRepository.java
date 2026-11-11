@@ -4,10 +4,12 @@ import com.educoders.Gestion_Academica_Motor_Evaluacion.dominio.Bimestre;
 import com.educoders.Infraestructura_Servicios.enums.NombreBimestre;
 import org.springframework.data.jpa.repository.JpaRepository;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Optional;
 
 public interface BimestreRepository extends JpaRepository<Bimestre, Long> {
 
+    List<Bimestre> findByAnioAcademicoId(Long anioAcademicoId);
 
     // Spring Data JPA lee el nombre del método y genera el SQL automáticamente.
     // Busca el primer BIM_1 ordenado por el año del AnioAcademico de forma descendente.

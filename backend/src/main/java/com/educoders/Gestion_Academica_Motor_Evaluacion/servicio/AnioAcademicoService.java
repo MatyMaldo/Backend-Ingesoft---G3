@@ -1,6 +1,7 @@
 package com.educoders.Gestion_Academica_Motor_Evaluacion.servicio;
 
 import com.educoders.Gestion_Academica_Motor_Evaluacion.presentacion.dto.AnioAcademicoResponse;
+import com.educoders.Gestion_Academica_Motor_Evaluacion.presentacion.dto.ContextoDocenteResponse;
 import com.educoders.Gestion_Academica_Motor_Evaluacion.presentacion.dto.PeriodoMatriculaEstadoResponse;
 
 import java.util.List;
@@ -15,4 +16,9 @@ public interface AnioAcademicoService {
      * Habilitadas para asignación, bloques y generación de sesiones.
      */
     PeriodoMatriculaEstadoResponse obtenerPeriodoMatricula(Long anioId);
+
+    /**
+     * Lista los bimestres de un año académico específico.
+     */
+    List<ContextoDocenteResponse.BimestreInfo> listarBimestres(Long idAnio);
 }

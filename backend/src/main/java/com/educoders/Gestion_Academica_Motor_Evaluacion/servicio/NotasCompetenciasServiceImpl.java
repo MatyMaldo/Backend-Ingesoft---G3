@@ -11,6 +11,7 @@ import com.educoders.Gestion_Academica_Motor_Evaluacion.persistencia.Competencia
 import com.educoders.Gestion_Academica_Motor_Evaluacion.persistencia.LibretaNotasRepository;
 import com.educoders.Gestion_Academica_Motor_Evaluacion.persistencia.NotaCompetenciaRepository;
 import com.educoders.Gestion_Academica_Motor_Evaluacion.presentacion.dto.CalificacionCompetenciaRequest;
+import com.educoders.Gestion_Academica_Motor_Evaluacion.presentacion.dto.NotaCompetenciaResponse;
 import com.educoders.Gestion_Academica_Motor_Evaluacion.presentacion.dto.NotasCompetenciasResponse;
 import com.educoders.Gestion_Academica_Motor_Evaluacion.presentacion.dto.RegistrarNotasCompetenciasRequest;
 import com.educoders.Gestion_Matricula_Pagos.dominio.Matricula;
@@ -33,6 +34,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -316,5 +318,41 @@ public class NotasCompetenciasServiceImpl
                 bimestre.getId(),
                 resultados
         );
+    }
+
+    @Override
+    public List<NotaCompetenciaResponse> listarNotasCompetencias(
+            Optional<Long> idEstudiante,
+            Optional<Long> idBimestre,
+            Optional<Long> idCurso) {
+
+        List<NotaCompetencia> notas;
+
+        if (idEstudiante.isPresent() && idBimestre.isPresent() && idCurso.isPresent()) {
+            notas = notaCompetenciaRepository.findByEstudianteIdAndBimestreIdAndCompetenciaCursoId(
+                    idEstudiante.get(),
+                    idBimestre.get(),
+                    idCurso.get()
+            );
+        } else if (idEstudiante.isPresent() && idCurso.isPresent()) {
+            notas = notaCompetenciaRepository.findByEstudianteIdAndCompetenciaCursoIdAndBimestreAnioAcademicoId(
+                    idEstudiante.get(),
+                    idCurso.get(),
+                    null
+            );
+        } else {
+            throw new ReglaNegocioException(
+                    "Debe proporcionar al menos idEstudiante, idBimestre e idCurso juntos, o idEstudiante e idCurso"
+            );
+        }
+
+        return notas.stream()
+                .map(nota -> new NotaCompetenciaResponse(
+                        nota.getCompetencia().getNombre(),
+                        nota.getBimestre().getNombre().name(),
+                        nota.getValor(),
+                        nota.getConclusionDescriptiva()
+                ))
+                .collect(Collectors.toList());
     }
 }

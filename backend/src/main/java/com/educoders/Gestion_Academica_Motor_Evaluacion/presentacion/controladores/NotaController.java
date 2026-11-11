@@ -10,6 +10,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
+
 @RestController
 @RequestMapping("/api/v1/evaluaciones/{idEvaluacion}/notas")
 public class NotaController {
@@ -18,6 +20,12 @@ public class NotaController {
 
     public NotaController(NotaService notaService) {
         this.notaService = notaService;
+    }
+
+    @GetMapping
+    public ResponseEntity<List<NotaResponse>> listarNotas(@PathVariable Long idEvaluacion) {
+        List<NotaResponse> response = notaService.listarNotasPorEvaluacion(idEvaluacion);
+        return ResponseEntity.ok(response);
     }
 
     @PostMapping

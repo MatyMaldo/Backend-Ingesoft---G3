@@ -1,6 +1,7 @@
 
 package com.educoders.Gestion_Academica_Motor_Evaluacion.presentacion.controladores;
 
+import com.educoders.Gestion_Academica_Motor_Evaluacion.presentacion.dto.NotaCompetenciaResponse;
 import com.educoders.Gestion_Academica_Motor_Evaluacion.presentacion.dto.NotasCompetenciasResponse;
 import com.educoders.Gestion_Academica_Motor_Evaluacion.presentacion.dto.RegistrarNotasCompetenciasRequest;
 import com.educoders.Gestion_Academica_Motor_Evaluacion.servicio.NotasCompetenciasService;
@@ -10,11 +11,11 @@ import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
+
+import java.util.List;
+import java.util.Optional;
 
 /**
  * Controlador REST para registrar calificaciones
@@ -29,6 +30,21 @@ public class NotasCompetenciasController {
     public NotasCompetenciasController(
             NotasCompetenciasService notasCompetenciasService) {
         this.notasCompetenciasService = notasCompetenciasService;
+    }
+
+    @GetMapping
+    public ResponseEntity<List<NotaCompetenciaResponse>> listarNotasCompetencias(
+            @RequestParam(required = false) Long idEstudiante,
+            @RequestParam(required = false) Long idBimestre,
+            @RequestParam(required = false) Long idCurso) {
+
+        List<NotaCompetenciaResponse> response = notasCompetenciasService.listarNotasCompetencias(
+                Optional.ofNullable(idEstudiante),
+                Optional.ofNullable(idBimestre),
+                Optional.ofNullable(idCurso)
+        );
+
+        return ResponseEntity.ok(response);
     }
 
     /**

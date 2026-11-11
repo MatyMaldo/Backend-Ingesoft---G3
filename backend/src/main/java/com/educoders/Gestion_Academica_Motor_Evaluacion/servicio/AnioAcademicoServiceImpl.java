@@ -1,8 +1,11 @@
 package com.educoders.Gestion_Academica_Motor_Evaluacion.servicio;
 
 import com.educoders.Gestion_Academica_Motor_Evaluacion.dominio.AnioAcademico;
+import com.educoders.Gestion_Academica_Motor_Evaluacion.dominio.Bimestre;
 import com.educoders.Gestion_Academica_Motor_Evaluacion.persistencia.AnioAcademicoRepository;
+import com.educoders.Gestion_Academica_Motor_Evaluacion.persistencia.BimestreRepository;
 import com.educoders.Gestion_Academica_Motor_Evaluacion.presentacion.dto.AnioAcademicoResponse;
+import com.educoders.Gestion_Academica_Motor_Evaluacion.presentacion.dto.ContextoDocenteResponse;
 import com.educoders.Gestion_Academica_Motor_Evaluacion.presentacion.dto.PeriodoMatriculaEstadoResponse;
 import com.educoders.Gestion_Matricula_Pagos.dominio.PeriodoMatricula;
 import com.educoders.Gestion_Matricula_Pagos.dominio.VentanaMatricula;
@@ -22,11 +25,14 @@ public class AnioAcademicoServiceImpl implements AnioAcademicoService {
 
     private final AnioAcademicoRepository anioAcademicoRepository;
     private final PeriodoMatriculaRepository periodoMatriculaRepository;
+    private final BimestreRepository bimestreRepository;
 
     public AnioAcademicoServiceImpl(AnioAcademicoRepository anioAcademicoRepository,
-                                     PeriodoMatriculaRepository periodoMatriculaRepository) {
+                                     PeriodoMatriculaRepository periodoMatriculaRepository,
+                                     BimestreRepository bimestreRepository) {
         this.anioAcademicoRepository = anioAcademicoRepository;
         this.periodoMatriculaRepository = periodoMatriculaRepository;
+        this.bimestreRepository = bimestreRepository;
     }
 
     @Override
@@ -93,5 +99,23 @@ public class AnioAcademicoServiceImpl implements AnioAcademicoService {
                 VentanaMatricula.crudBloquesHorarioAbierta(periodo, hoy),
                 VentanaMatricula.generacionSesionesAbierta(periodo, hoy)
         );
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<ContextoDocenteResponse.BimestreInfo> listarBimestres(Long idAnio) {
+        LocalDate hoy = LocalDate.now();
+
+        List<Bimestre> bimestres = bimestreRepository.findByAnioAcademicoId(idAnio);
+
+        return bimestres.stream()
+                .map(b -> new ContextoDocenteResponse.BimestreInfo(
+                        b.getId(),
+                        b.getNombre(),
+                        b.getFechaInicio().toString(),
+                        b.getFechaFin().toString(),
+                        hoy.isAfter(b.getFechaFin())
+                ))
+                .collect(Collectors.toList());
     }
 }
