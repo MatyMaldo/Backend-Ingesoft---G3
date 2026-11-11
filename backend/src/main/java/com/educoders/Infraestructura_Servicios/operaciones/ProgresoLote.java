@@ -19,4 +19,11 @@ public interface ProgresoLote {
 
     /** Informa la fase actual (por ejemplo VALIDANDO o GUARDANDO). */
     void fase(String mensaje);
+
+    /**
+     * Publica el resultado final detallado de la operación (por ejemplo, el desenlace de cada fila). Se llama una vez,
+     * al terminar. Por omisión no hace nada: solo lo usan las operaciones que devuelven un detalle.
+     */
+    default void resultado(Object resultado) {
+    }
 }
