@@ -15,6 +15,7 @@ import com.educoders.Infraestructura_Servicios.enums.EstadoMatricula;
 import com.educoders.Infraestructura_Servicios.enums.EstadoSesion;
 import com.educoders.Infraestructura_Servicios.exception.RecursoNoEncontradoException;
 import com.educoders.Infraestructura_Servicios.exception.ReglaNegocioException;
+import com.educoders.Infraestructura_Servicios.operaciones.ProgresoLote;
 import com.educoders.Seguridad_Auditoria.dominio.Apoderado;
 import com.educoders.Seguridad_Auditoria.dominio.Docente;
 import com.educoders.Seguridad_Auditoria.dominio.Estudiante;
@@ -30,6 +31,7 @@ import org.springframework.web.server.ResponseStatusException;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -62,6 +64,13 @@ public class SesionClaseServiceImpl implements SesionClaseService {
     @Override
     @Transactional
     public GenerarSesionesResponse generarSesiones(GenerarSesionesRequest request) {
+        return generarSesiones(request, null);
+    }
+
+    @Override
+    @Transactional
+    public GenerarSesionesResponse generarSesiones(GenerarSesionesRequest request,
+                                                   ProgresoLote progreso) {
         validarFechas(request.getFechaInicio(), request.getFechaFin());
         validarPeriodoCerrado(request.getAnioAcademicoId());
 
@@ -74,6 +83,14 @@ public class SesionClaseServiceImpl implements SesionClaseService {
 
         GenerarSesionesResponse resumen = new GenerarSesionesResponse();
         resumen.setTotalBloquesProcesados(bloques.size());
+
+        int totalDias = (int) ChronoUnit.DAYS.between(
+                request.getFechaInicio(), request.getFechaFin()) + 1;
+        int diasProcesados = 0;
+        if (progreso != null) {
+            progreso.iniciar(totalDias);
+            progreso.fase("GENERANDO");
+        }
 
         LocalDate fecha = request.getFechaInicio();
         while (!fecha.isAfter(request.getFechaFin())) {
@@ -101,12 +118,28 @@ public class SesionClaseServiceImpl implements SesionClaseService {
                         repo.save(sesion);
                         resumen.setSesionesCreadas(resumen.getSesionesCreadas() + 1);
                     } catch (Exception e) {
-                        resumen.getErrores().add(
-                                "Error en bloque " + bloque.getId() + " fecha " + fecha + ": " + e.getMessage());
+                        String mensaje = "Error en bloque " + bloque.getId()
+                                + " fecha " + fecha + ": " + e.getMessage();
+                        resumen.getErrores().add(mensaje);
+                        if (progreso != null) {
+                            progreso.registrarError(mensaje);
+                        }
                     }
                 }
             }
             fecha = fecha.plusDays(1);
+            diasProcesados++;
+            if (progreso != null) {
+                progreso.actualizar(
+                        diasProcesados,
+                        resumen.getSesionesCreadas(),
+                        resumen.getSesionesOmitidas() + resumen.getSesionesYaExistentes(),
+                        resumen.getErrores().size());
+            }
+        }
+
+        if (progreso != null) {
+            progreso.fase("FINALIZANDO");
         }
 
         return resumen;

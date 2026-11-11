@@ -2,10 +2,13 @@ package com.educoders.Seguridad_Auditoria.servicio;
 
 import com.educoders.Infraestructura_Servicios.enums.CategoriaAuditoria;
 import com.educoders.Infraestructura_Servicios.enums.TipoAccionAuditoria;
+import com.educoders.Seguridad_Auditoria.dominio.Administrador;
 import com.educoders.Seguridad_Auditoria.dominio.Auditoria;
 import com.educoders.Seguridad_Auditoria.dominio.Docente;
 import com.educoders.Seguridad_Auditoria.dominio.Usuario;
 import com.educoders.Seguridad_Auditoria.persistencia.AuditoriaRepository;
+import com.educoders.Seguridad_Auditoria.persistencia.UsuarioRepository;
+import com.educoders.Seguridad_Auditoria.presentacion.dto.AuditoriaResponseDTO;
 import com.educoders.Seguridad_Auditoria.presentacion.dto.RegistrarAuditoriaRequestDTO;
 
 import org.junit.jupiter.api.AfterEach;
@@ -15,15 +18,21 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 
+import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -31,6 +40,9 @@ class AuditoriaServiceImplTest {
 
     @Mock
     private AuditoriaRepository auditoriaRepository;
+
+    @Mock
+    private UsuarioRepository usuarioRepository;
 
     @InjectMocks
     private AuditoriaServiceImpl auditoriaService;
@@ -96,6 +108,107 @@ class AuditoriaServiceImplTest {
         ArgumentCaptor<Auditoria> captor = ArgumentCaptor.forClass(Auditoria.class);
         verify(auditoriaRepository).saveAndFlush(captor.capture());
         assertEquals(99L, captor.getValue().getUsuarioId());
+    }
+
+    private Auditoria crearAuditoria(Long usuarioId) {
+        Auditoria auditoria = new Auditoria();
+        auditoria.setId(1L);
+        auditoria.setFechaHora(LocalDateTime.now());
+        auditoria.setUsuarioId(usuarioId);
+        auditoria.setCategoria(CategoriaAuditoria.HORARIOS);
+        auditoria.setAccion(TipoAccionAuditoria.CREAR);
+        auditoria.setEntidad("BloqueHorario");
+        auditoria.setEntidadId(10L);
+        auditoria.setDescripcion("prueba");
+        return auditoria;
+    }
+
+    private Administrador crearAdmin() {
+        Administrador admin = new Administrador();
+        admin.setId(1L);
+        admin.setNombre("Admin");
+        admin.setApellidoPaterno("Sistema");
+        return admin;
+    }
+
+    @Test
+    void listarAuditorias_incluyeUsuarioResueltoEnLote() {
+        Auditoria auditoria = crearAuditoria(1L);
+        PageRequest pageable = PageRequest.of(0, 10);
+        when(auditoriaRepository.buscarConFiltros(null, null, null, null, pageable))
+                .thenReturn(new PageImpl<>(List.of(auditoria), pageable, 1));
+        when(usuarioRepository.findAllById(any())).thenReturn(List.of(crearAdmin()));
+
+        Page<AuditoriaResponseDTO> resultado =
+                auditoriaService.listarAuditorias(null, null, null, null, pageable);
+
+        AuditoriaResponseDTO dto = resultado.getContent().get(0);
+        assertEquals(1L, dto.getUsuarioId());
+        assertEquals(1L, dto.getUsuario().id());
+        assertEquals("Admin Sistema", dto.getUsuario().nombre());
+        assertEquals("ADMINISTRADOR", dto.getUsuario().rol());
+        verify(usuarioRepository).findAllById(any());
+    }
+
+    @Test
+    void obtenerPorId_incluyeUsuario() {
+        Auditoria auditoria = crearAuditoria(1L);
+        when(auditoriaRepository.findById(1L)).thenReturn(Optional.of(auditoria));
+        when(usuarioRepository.findById(1L)).thenReturn(Optional.of(crearAdmin()));
+
+        AuditoriaResponseDTO dto = auditoriaService.obtenerPorId(1L);
+
+        assertEquals("Admin Sistema", dto.getUsuario().nombre());
+        assertEquals("ADMINISTRADOR", dto.getUsuario().rol());
+        verify(usuarioRepository).findById(1L);
+    }
+
+    @Test
+    void listarAuditorias_sinUsuarioUsaSistema() {
+        Auditoria auditoria = crearAuditoria(null);
+        PageRequest pageable = PageRequest.of(0, 10);
+        when(auditoriaRepository.buscarConFiltros(null, null, null, null, pageable))
+                .thenReturn(new PageImpl<>(List.of(auditoria), pageable, 1));
+
+        Page<AuditoriaResponseDTO> resultado =
+                auditoriaService.listarAuditorias(null, null, null, null, pageable);
+
+        AuditoriaResponseDTO dto = resultado.getContent().get(0);
+        assertNull(dto.getUsuarioId());
+        assertEquals("Sistema", dto.getUsuario().nombre());
+        assertEquals("SISTEMA", dto.getUsuario().rol());
+        verifyNoInteractions(usuarioRepository);
+    }
+
+    @Test
+    void listarAuditorias_usuarioNoEncontradoUsaFallback() {
+        Auditoria auditoria = crearAuditoria(99L);
+        PageRequest pageable = PageRequest.of(0, 10);
+        when(auditoriaRepository.buscarConFiltros(null, null, null, null, pageable))
+                .thenReturn(new PageImpl<>(List.of(auditoria), pageable, 1));
+        when(usuarioRepository.findAllById(any())).thenReturn(List.of());
+
+        Page<AuditoriaResponseDTO> resultado =
+                auditoriaService.listarAuditorias(null, null, null, null, pageable);
+
+        AuditoriaResponseDTO dto = resultado.getContent().get(0);
+        assertEquals("Usuario #99", dto.getUsuario().nombre());
+        assertNull(dto.getUsuario().rol());
+    }
+
+    @Test
+    void obtenerHistorialPorEntidad_incluyeUsuario() {
+        Auditoria auditoria = crearAuditoria(1L);
+        PageRequest pageable = PageRequest.of(0, 10);
+        when(auditoriaRepository.findByEntidadAndEntidadIdOrderByFechaHoraAsc(
+                "BloqueHorario", 10L, pageable))
+                .thenReturn(new PageImpl<>(List.of(auditoria), pageable, 1));
+        when(usuarioRepository.findAllById(any())).thenReturn(List.of(crearAdmin()));
+
+        Page<AuditoriaResponseDTO> resultado =
+                auditoriaService.obtenerHistorialPorEntidad("BloqueHorario", 10L, pageable);
+
+        assertEquals("Admin Sistema", resultado.getContent().get(0).getUsuario().nombre());
     }
 
     @Test

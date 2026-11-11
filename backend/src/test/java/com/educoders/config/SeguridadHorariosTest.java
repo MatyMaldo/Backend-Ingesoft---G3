@@ -2,6 +2,8 @@ package com.educoders.config;
 
 import com.educoders.Gestion_Matriz_Horarios.presentacion.controladores.SesionClaseController;
 import com.educoders.Gestion_Matriz_Horarios.servicio.SesionClaseService;
+import com.educoders.Infraestructura_Servicios.operaciones.OperacionMasivaService;
+import com.educoders.Infraestructura_Servicios.operaciones.UsuarioAutenticadoResolver;
 import com.educoders.Seguridad_Auditoria.seguridad.JwtAuthenticationFilter;
 import com.educoders.Seguridad_Auditoria.servicio.LogErrorService;
 import jakarta.servlet.FilterChain;
@@ -11,6 +13,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Import;
+import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.security.test.context.support.WithMockUser;
 
@@ -21,6 +24,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @WebMvcTest(SesionClaseController.class)
 @Import(SeguridadConfig.class)
+@TestPropertySource(properties = "server.port=0")
 class SeguridadHorariosTest {
 
     @Autowired
@@ -28,6 +32,12 @@ class SeguridadHorariosTest {
 
     @MockBean
     private SesionClaseService service;
+
+    @MockBean
+    private OperacionMasivaService operacionMasivaService;
+
+    @MockBean
+    private UsuarioAutenticadoResolver usuarioAutenticadoResolver;
 
     @MockBean
     private LogErrorService logErrorService;

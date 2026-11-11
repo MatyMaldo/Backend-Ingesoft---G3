@@ -7,6 +7,7 @@ import com.educoders.Gestion_Academica_Motor_Evaluacion.persistencia.SeccionRepo
 import com.educoders.Gestion_Matriz_Horarios.config.HorarioProperties;
 import com.educoders.Gestion_Matriz_Horarios.dominio.Aula;
 import com.educoders.Gestion_Matriz_Horarios.dominio.BloqueHorario;
+import com.educoders.Gestion_Matriz_Horarios.exception.GuardadoBloquesConConflictosException;
 import com.educoders.Gestion_Matriz_Horarios.persistencia.AulaRepository;
 import com.educoders.Gestion_Matriz_Horarios.persistencia.BloqueHorarioRepository;
 import com.educoders.Gestion_Matriz_Horarios.presentacion.dto.*;
@@ -25,9 +26,11 @@ import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -264,72 +267,143 @@ public class BloqueHorarioServiceImpl implements BloqueHorarioService {
             throw new ReglaNegocioException("La sección no pertenece al año académico indicado.");
         }
 
+        List<BloqueMasivoItemRequest> items = request.bloques();
         List<BloqueHorario> existentes = bloqueRepo.findByAsignacionCursoSeccionId(seccionId);
         Map<Long, BloqueHorario> existentesPorId = existentes.stream()
                 .collect(Collectors.toMap(BloqueHorario::getId, b -> b));
 
-        Set<Long> idsPayload = new HashSet<>();
-        for (BloqueMasivoItemRequest item : request.bloques()) {
-            if (item != null && item.id() != null && !idsPayload.add(item.id())) {
-                throw new ReglaNegocioException(
-                        "El bloque con id " + item.id() + " está repetido en la solicitud.");
+        List<GuardadoSeccionErroresResponse.ConflictoBloque> errores = new ArrayList<>();
+
+        // IDs repetidos dentro del payload.
+        Map<Long, Integer> primerIndicePorId = new HashMap<>();
+        for (int i = 0; i < items.size(); i++) {
+            BloqueMasivoItemRequest item = items.get(i);
+            if (item == null) {
+                errores.add(conflicto(null, i, "REFERENCIA_INVALIDA",
+                        "El bloque en la posición " + (i + 1) + " está vacío.",
+                        null, null));
+                continue;
             }
-        }
-        for (Long id : idsPayload) {
-            if (!existentesPorId.containsKey(id)) {
-                bloqueRepo.findById(id)
-                        .orElseThrow(() -> RecursoNoEncontradoException.de("bloque horario", id));
-                throw new ReglaNegocioException(
-                        "El bloque " + id + " no pertenece a la sección indicada.");
+            if (item.id() != null) {
+                Integer indicePrevio = primerIndicePorId.putIfAbsent(item.id(), i);
+                if (indicePrevio != null) {
+                    errores.add(conflicto(item, i, "DUPLICADO",
+                            "El bloque en la posición " + (i + 1)
+                                    + " repite el id " + item.id()
+                                    + " del bloque en la posición " + (indicePrevio + 1) + ".",
+                            indicePrevio, null));
+                }
             }
         }
 
-        Map<Long, AsignacionCurso> asignaciones = asignacionRepo.findBySeccionId(seccionId).stream()
-                .collect(Collectors.toMap(AsignacionCurso::getId, a -> a));
+        // Carga en lote de bloques, asignaciones y aulas referenciadas.
+        Map<Long, BloqueHorario> bloquesPorId = new HashMap<>(existentesPorId);
+        if (!primerIndicePorId.isEmpty()) {
+            bloqueRepo.findAllById(primerIndicePorId.keySet())
+                    .forEach(b -> bloquesPorId.put(b.getId(), b));
+        }
 
-        Set<Long> aulaIds = request.bloques().stream()
-                .filter(item -> item != null)
-                .map(BloqueMasivoItemRequest::aulaId)
+        Set<Long> asignacionIds = items.stream()
+                .filter(Objects::nonNull)
+                .map(BloqueMasivoItemRequest::asignacionCursoId)
+                .filter(Objects::nonNull)
                 .collect(Collectors.toSet());
-        Map<Long, Aula> aulas = aulaRepo.findAllById(aulaIds).stream()
-                .collect(Collectors.toMap(Aula::getId, a -> a));
-        Set<Long> aulasFaltantes = new HashSet<>(aulaIds);
-        aulasFaltantes.removeAll(aulas.keySet());
-        if (!aulasFaltantes.isEmpty()) {
-            throw RecursoNoEncontradoException.de("aula", aulasFaltantes.iterator().next());
+        Map<Long, AsignacionCurso> asignacionesPorId = new HashMap<>();
+        if (!asignacionIds.isEmpty()) {
+            asignacionRepo.findAllById(asignacionIds)
+                    .forEach(a -> asignacionesPorId.put(a.getId(), a));
+        }
+
+        Set<Long> aulaIds = items.stream()
+                .filter(Objects::nonNull)
+                .map(BloqueMasivoItemRequest::aulaId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        Map<Long, Aula> aulasPorId = new HashMap<>();
+        if (!aulaIds.isEmpty()) {
+            aulaRepo.findAllById(aulaIds).forEach(a -> aulasPorId.put(a.getId(), a));
         }
 
         List<BloqueValidado> validados = new ArrayList<>();
-        for (BloqueMasivoItemRequest item : request.bloques()) {
-            if (item == null || item.diaSemana() == null) {
-                throw new ReglaNegocioException(
-                        "Cada bloque debe indicar día, asignación, aula y horas.");
+
+        for (int i = 0; i < items.size(); i++) {
+            BloqueMasivoItemRequest item = items.get(i);
+            if (item == null) {
+                continue;
             }
-            AsignacionCurso asignacion = asignaciones.get(item.asignacionCursoId());
-            if (asignacion == null) {
-                asignacionRepo.findById(item.asignacionCursoId())
-                        .orElseThrow(() -> RecursoNoEncontradoException.de(
-                                "asignación", item.asignacionCursoId()));
-                throw new ReglaNegocioException(
+
+            int erroresAntes = errores.size();
+
+            if (item.id() != null && !existentesPorId.containsKey(item.id())) {
+                if (!bloquesPorId.containsKey(item.id())) {
+                    errores.add(conflicto(item, i, "REFERENCIA_INVALIDA",
+                            "El bloque " + item.id() + " no existe.", null, null));
+                } else {
+                    errores.add(conflicto(item, i, "REFERENCIA_INVALIDA",
+                            "El bloque " + item.id()
+                                    + " no pertenece a la sección indicada.", null, null));
+                }
+            }
+
+            AsignacionCurso asignacion = item.asignacionCursoId() == null
+                    ? null
+                    : asignacionesPorId.get(item.asignacionCursoId());
+            if (item.asignacionCursoId() == null) {
+                errores.add(conflicto(item, i, "REFERENCIA_INVALIDA",
+                        "La asignación de curso es obligatoria.", null, null));
+            } else if (asignacion == null) {
+                errores.add(conflicto(item, i, "REFERENCIA_INVALIDA",
+                        "La asignación " + item.asignacionCursoId() + " no existe.", null, null));
+            } else if (asignacion.getSeccion() == null
+                    || !seccionId.equals(asignacion.getSeccion().getId())) {
+                errores.add(conflicto(item, i, "REFERENCIA_INVALIDA",
                         "La asignación " + item.asignacionCursoId()
-                                + " no pertenece a la sección indicada.");
+                                + " no pertenece a la sección indicada.", null, null));
             }
 
-            Aula aula = aulas.get(item.aulaId());
-            if (aula == null) {
-                throw RecursoNoEncontradoException.de("aula", item.aulaId());
+            Aula aula = item.aulaId() == null ? null : aulasPorId.get(item.aulaId());
+            if (item.aulaId() == null) {
+                errores.add(conflicto(item, i, "REFERENCIA_INVALIDA",
+                        "El aula es obligatoria.", null, null));
+            } else if (aula == null) {
+                errores.add(conflicto(item, i, "REFERENCIA_INVALIDA",
+                        "El aula " + item.aulaId() + " no existe.", null, null));
             }
 
-            validarHorarioPermitido(item.horaInicio(), item.horaFin());
-            validados.add(new BloqueValidado(
-                    item.id(), asignacion, aula, item.diaSemana(),
-                    item.horaInicio(), item.horaFin()));
+            if (item.diaSemana() == null) {
+                errores.add(conflicto(item, i, "REFERENCIA_INVALIDA",
+                        "El día de la semana es obligatorio.", null, null));
+            }
+
+            String mensajeHorario = mensajeHorarioInvalido(item.horaInicio(), item.horaFin());
+            if (mensajeHorario != null) {
+                errores.add(conflicto(item, i, "HORARIO_INVALIDO",
+                        mensajeHorario, null, null));
+            }
+
+            if (errores.size() == erroresAntes) {
+                validados.add(new BloqueValidado(
+                        item.id(), i, asignacion, aula, item.diaSemana(),
+                        item.horaInicio(), item.horaFin()));
+            }
         }
 
-        validarConflictosPayload(validados);
-        validarConflictosOtrasSecciones(
-                validados,
-                bloqueRepo.findEnOtrasSecciones(request.anioAcademicoId(), seccionId));
+        errores.addAll(conflictosEnPayload(validados));
+        if (!validados.isEmpty()) {
+            errores.addAll(conflictosEnOtrasSecciones(
+                    validados,
+                    bloqueRepo.findEnOtrasSecciones(request.anioAcademicoId(), seccionId)));
+        }
+
+        if (!errores.isEmpty()) {
+            throw new GuardadoBloquesConConflictosException(
+                    new GuardadoSeccionErroresResponse(errores));
+        }
+
+        Set<Long> idsPayload = validados.stream()
+                .map(BloqueValidado::id)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
 
         List<BloqueHorario> aEliminar = existentes.stream()
                 .filter(b -> !idsPayload.contains(b.getId()))
@@ -385,11 +459,23 @@ public class BloqueHorarioServiceImpl implements BloqueHorarioService {
     }
 
     private void validarHorarioPermitido(LocalTime inicio, LocalTime fin) {
+        String mensaje = mensajeHorarioInvalido(inicio, fin);
+        if (mensaje != null) {
+            throw new ReglaNegocioException(mensaje);
+        }
+    }
+
+    /**
+     * Devuelve el motivo por el que el horario no es válido, o {@code null} si
+     * es correcto. Se usa tanto en el guardado individual (que lanza excepción)
+     * como en el masivo (que acumula todos los errores).
+     */
+    private String mensajeHorarioInvalido(LocalTime inicio, LocalTime fin) {
         if (inicio == null || fin == null) {
-            throw new ReglaNegocioException("La hora de inicio y fin son obligatorias.");
+            return "La hora de inicio y fin son obligatorias.";
         }
         if (!fin.isAfter(inicio)) {
-            throw new ReglaNegocioException("La hora de fin debe ser posterior a la de inicio.");
+            return "La hora de fin debe ser posterior a la de inicio.";
         }
 
         LocalTime jornadaInicio = parsearHoraConfig(
@@ -402,17 +488,16 @@ public class BloqueHorarioServiceImpl implements BloqueHorarioService {
                 horarioProperties.getRecesoFin(), "receso-fin");
 
         if (inicio.isBefore(jornadaInicio) || fin.isAfter(jornadaFin)) {
-            throw new ReglaNegocioException(
-                    "El bloque debe estar dentro de la jornada de "
-                            + horarioProperties.getJornadaInicio() + " a "
-                            + horarioProperties.getJornadaFin() + ".");
+            return "El bloque debe estar dentro de la jornada de "
+                    + horarioProperties.getJornadaInicio() + " a "
+                    + horarioProperties.getJornadaFin() + ".";
         }
         if (inicio.isBefore(recesoFin) && fin.isAfter(recesoInicio)) {
-            throw new ReglaNegocioException(
-                    "El bloque no puede cruzar el receso de "
-                            + horarioProperties.getRecesoInicio() + " a "
-                            + horarioProperties.getRecesoFin() + ".");
+            return "El bloque no puede cruzar el receso de "
+                    + horarioProperties.getRecesoInicio() + " a "
+                    + horarioProperties.getRecesoFin() + ".";
         }
+        return null;
     }
 
     private LocalTime parsearHoraConfig(String valor, String nombre) {
@@ -424,7 +509,10 @@ public class BloqueHorarioServiceImpl implements BloqueHorarioService {
         }
     }
 
-    private void validarConflictosPayload(List<BloqueValidado> bloques) {
+    private List<GuardadoSeccionErroresResponse.ConflictoBloque> conflictosEnPayload(
+            List<BloqueValidado> bloques) {
+        List<GuardadoSeccionErroresResponse.ConflictoBloque> errores = new ArrayList<>();
+
         for (int i = 0; i < bloques.size(); i++) {
             for (int j = i + 1; j < bloques.size(); j++) {
                 BloqueValidado a = bloques.get(i);
@@ -433,22 +521,52 @@ public class BloqueHorarioServiceImpl implements BloqueHorarioService {
                         || !seSuperponen(a.horaInicio(), a.horaFin(), b.horaInicio(), b.horaFin())) {
                     continue;
                 }
-                if (a.asignacion().getDocente().getId().equals(b.asignacion().getDocente().getId())) {
-                    throw new ConflictoException(
-                            "El docente tiene dos bloques en el mismo horario.");
+
+                String dia = nombreDia(a.diaSemana());
+                String rango = a.horaInicio().format(FORMATO_HORA)
+                        + " a " + a.horaFin().format(FORMATO_HORA);
+
+                boolean duplicado = a.asignacion().getId().equals(b.asignacion().getId())
+                        && a.horaInicio().equals(b.horaInicio())
+                        && a.horaFin().equals(b.horaFin());
+                if (duplicado) {
+                    errores.add(conflicto(b, "DUPLICADO",
+                            "El bloque en la posición " + (j + 1)
+                                    + " duplica al bloque en la posición " + (i + 1)
+                                    + ": misma asignación, aula, día y horas.",
+                            i, null));
+                    continue;
+                }
+
+                if (a.asignacion().getDocente().getId()
+                        .equals(b.asignacion().getDocente().getId())) {
+                    errores.add(conflicto(b, "CONFLICTO_DOCENTE",
+                            "El docente " + nombreDocente(a.asignacion())
+                                    + " tiene dos bloques el " + dia + " de " + rango + ".",
+                            i, null));
                 }
                 if (a.aula().getId().equals(b.aula().getId())) {
-                    throw new ConflictoException(
-                            "El aula está ocupada en el mismo horario.");
+                    errores.add(conflicto(b, "CONFLICTO_AULA",
+                            "El aula " + a.aula().getNombre()
+                                    + " está ocupada en dos bloques el "
+                                    + dia + " de " + rango + ".",
+                            i, null));
                 }
-                throw new ConflictoException(
-                        "La sección tiene dos bloques en el mismo horario.");
+                errores.add(conflicto(b, "CONFLICTO_SECCION",
+                        "La sección " + nombreSeccion(a.asignacion().getSeccion())
+                                + " tiene dos bloques el " + dia + " de " + rango + ".",
+                        i, null));
             }
         }
+
+        return errores;
     }
 
-    private void validarConflictosOtrasSecciones(List<BloqueValidado> validados,
-                                                 List<BloqueHorario> otrasSecciones) {
+    private List<GuardadoSeccionErroresResponse.ConflictoBloque> conflictosEnOtrasSecciones(
+            List<BloqueValidado> validados,
+            List<BloqueHorario> otrasSecciones) {
+        List<GuardadoSeccionErroresResponse.ConflictoBloque> errores = new ArrayList<>();
+
         for (BloqueValidado validado : validados) {
             for (BloqueHorario existente : otrasSecciones) {
                 if (existente.getDiaSemana() != validado.diaSemana()
@@ -456,17 +574,100 @@ public class BloqueHorarioServiceImpl implements BloqueHorarioService {
                         existente.getHoraInicio(), existente.getHoraFin())) {
                     continue;
                 }
+
+                String descripcion = descripcionBloqueExistente(existente);
                 if (existente.getAsignacionCurso().getDocente().getId()
                         .equals(validado.asignacion().getDocente().getId())) {
-                    throw new ConflictoException(
-                            "El docente ya tiene un bloque en ese horario en otra sección.");
+                    errores.add(conflicto(validado, "CONFLICTO_DOCENTE",
+                            "El docente " + nombreDocente(validado.asignacion())
+                                    + " ya tiene clase en " + descripcion + ".",
+                            null, existente.getId()));
                 }
                 if (existente.getAula().getId().equals(validado.aula().getId())) {
-                    throw new ConflictoException(
-                            "El aula ya está asignada en ese horario en otra sección.");
+                    errores.add(conflicto(validado, "CONFLICTO_AULA",
+                            "El aula " + existente.getAula().getNombre()
+                                    + " está ocupada por " + descripcion + ".",
+                            null, existente.getId()));
                 }
             }
         }
+
+        return errores;
+    }
+
+    private GuardadoSeccionErroresResponse.ConflictoBloque conflicto(
+            BloqueMasivoItemRequest item,
+            int indice,
+            String tipo,
+            String mensaje,
+            Integer indiceConflicto,
+            Long bloqueConflictoId) {
+        return new GuardadoSeccionErroresResponse.ConflictoBloque(
+                indice,
+                item != null ? item.id() : null,
+                indiceConflicto,
+                bloqueConflictoId,
+                item != null ? item.asignacionCursoId() : null,
+                item != null ? item.aulaId() : null,
+                item != null ? item.diaSemana() : null,
+                item != null ? item.horaInicio() : null,
+                item != null ? item.horaFin() : null,
+                tipo,
+                mensaje
+        );
+    }
+
+    private GuardadoSeccionErroresResponse.ConflictoBloque conflicto(
+            BloqueValidado validado,
+            String tipo,
+            String mensaje,
+            Integer indiceConflicto,
+            Long bloqueConflictoId) {
+        return new GuardadoSeccionErroresResponse.ConflictoBloque(
+                validado.indice(),
+                validado.id(),
+                indiceConflicto,
+                bloqueConflictoId,
+                validado.asignacion().getId(),
+                validado.aula().getId(),
+                validado.diaSemana(),
+                validado.horaInicio(),
+                validado.horaFin(),
+                tipo,
+                mensaje
+        );
+    }
+
+    private String descripcionBloqueExistente(BloqueHorario bloque) {
+        AsignacionCurso asignacion = bloque.getAsignacionCurso();
+        return nombreSeccion(asignacion.getSeccion())
+                + " (" + asignacion.getCurso().getNombre() + ") el "
+                + nombreDia(bloque.getDiaSemana()) + " de "
+                + bloque.getHoraInicio().format(FORMATO_HORA) + " a "
+                + bloque.getHoraFin().format(FORMATO_HORA);
+    }
+
+    private String nombreDocente(AsignacionCurso asignacion) {
+        var docente = asignacion.getDocente();
+        String nombre = docente.getNombre() + " " + docente.getApellidoPaterno();
+        if (docente.getApellidoMaterno() != null && !docente.getApellidoMaterno().isBlank()) {
+            nombre += " " + docente.getApellidoMaterno();
+        }
+        return nombre;
+    }
+
+    private String nombreSeccion(Seccion seccion) {
+        return seccion.getGrado().getNombre() + " " + seccion.getNombre();
+    }
+
+    private String nombreDia(DiaSemana dia) {
+        return switch (dia) {
+            case LUNES -> "lunes";
+            case MARTES -> "martes";
+            case MIERCOLES -> "miércoles";
+            case JUEVES -> "jueves";
+            case VIERNES -> "viernes";
+        };
     }
 
     private boolean seSuperponen(LocalTime inicioA, LocalTime finA,
@@ -504,6 +705,7 @@ public class BloqueHorarioServiceImpl implements BloqueHorarioService {
 
     private record BloqueValidado(
             Long id,
+            int indice,
             AsignacionCurso asignacion,
             Aula aula,
             DiaSemana diaSemana,

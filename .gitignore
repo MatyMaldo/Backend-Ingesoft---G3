@@ -36,3 +36,9 @@ buildNumber.properties
 # OS
 .DS_Store
 Thumbs.db
+
+# Variables de entorno locales
+env-local.ps1
+
+# Configuración local por desarrollador (perfil dev)
+application-dev.properties

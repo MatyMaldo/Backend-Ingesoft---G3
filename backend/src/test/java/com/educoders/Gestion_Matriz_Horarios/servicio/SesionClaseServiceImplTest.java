@@ -23,6 +23,7 @@ import com.educoders.Infraestructura_Servicios.enums.EstadoMatricula;
 import com.educoders.Infraestructura_Servicios.enums.DiaSemana;
 import com.educoders.Infraestructura_Servicios.enums.EstadoSesion;
 import com.educoders.Infraestructura_Servicios.exception.ReglaNegocioException;
+import com.educoders.Infraestructura_Servicios.operaciones.ProgresoLote;
 import com.educoders.Seguridad_Auditoria.dominio.Apoderado;
 import com.educoders.Seguridad_Auditoria.dominio.Docente;
 import com.educoders.Seguridad_Auditoria.dominio.Estudiante;
@@ -255,6 +256,25 @@ class SesionClaseServiceImplTest {
         assertEquals(0, r.getSesionesOmitidas());
         assertEquals(0, r.getErrores().size());
         verify(repo).save(any(SesionClase.class));
+    }
+
+    @Test
+    void generarSesiones_conProgresoReportaDias() {
+        BloqueHorario bloque = crearBloque(10L, DiaSemana.LUNES, LocalTime.of(8, 0), LocalTime.of(10, 0));
+
+        when(periodoRepo.findByAnioAcademicoId(1L)).thenReturn(Optional.of(crearPeriodoCerrado()));
+        when(bloqueRepo.findByAsignacionCursoSeccionId(1L)).thenReturn(List.of(bloque));
+        when(repo.existsByBloqueHorarioIdAndFecha(any(), any())).thenReturn(false);
+        when(repo.save(any(SesionClase.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        ProgresoGrabado progreso = new ProgresoGrabado();
+        GenerarSesionesResponse r = sesionService.generarSesiones(
+                generarReq(LUNES_1, LUNES_2), progreso);
+
+        assertEquals(2, r.getSesionesCreadas());
+        assertEquals(8, progreso.totalIniciado);
+        assertEquals(8, progreso.ultimoProcesado);
+        assertEquals(2, progreso.ultimoExitoso);
     }
 
     @Test
@@ -727,5 +747,28 @@ class SesionClaseServiceImplTest {
                 );
     }
 
+    private static class ProgresoGrabado implements ProgresoLote {
+        private int totalIniciado = -1;
+        private int ultimoProcesado = -1;
+        private int ultimoExitoso = -1;
 
+        @Override
+        public void iniciar(int total) {
+            this.totalIniciado = total;
+        }
+
+        @Override
+        public void actualizar(int procesados, int exitosos, int omitidos, int errores) {
+            this.ultimoProcesado = procesados;
+            this.ultimoExitoso = exitosos;
+        }
+
+        @Override
+        public void registrarError(String mensaje) {
+        }
+
+        @Override
+        public void fase(String mensaje) {
+        }
+    }
 }

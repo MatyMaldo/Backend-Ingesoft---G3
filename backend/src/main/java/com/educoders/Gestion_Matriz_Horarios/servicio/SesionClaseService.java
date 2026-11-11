@@ -5,6 +5,7 @@ import com.educoders.Gestion_Matriz_Horarios.presentacion.dto.GenerarSesionesRes
 import com.educoders.Gestion_Matriz_Horarios.presentacion.dto.PreviewSesionesRequest;
 import com.educoders.Gestion_Matriz_Horarios.presentacion.dto.PreviewSesionesResponse;
 import com.educoders.Gestion_Matriz_Horarios.presentacion.dto.SesionClaseResponse;
+import com.educoders.Infraestructura_Servicios.operaciones.ProgresoLote;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -12,6 +13,13 @@ import java.util.List;
 public interface SesionClaseService {
     PreviewSesionesResponse previewSesiones(PreviewSesionesRequest request);
     GenerarSesionesResponse generarSesiones(GenerarSesionesRequest request);
+
+    /**
+     * Variante que reporta el avance por día del rango solicitado.
+     */
+    GenerarSesionesResponse generarSesiones(GenerarSesionesRequest request,
+                                            ProgresoLote progreso);
+
     List<SesionClaseResponse> listarPorSeccion(Long seccionId, LocalDate fechaInicio, LocalDate fechaFin);
     List<SesionClaseResponse> listarPorDocente(Long docenteId, LocalDate fechaInicio, LocalDate fechaFin);
     List<SesionClaseResponse> listarMiHorarioDocente(LocalDate fechaInicio, LocalDate fechaFin);

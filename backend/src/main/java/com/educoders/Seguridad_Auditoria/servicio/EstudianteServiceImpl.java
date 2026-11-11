@@ -53,6 +53,25 @@ public class EstudianteServiceImpl implements EstudianteService {
                         )
                 );
 
+        Estudiante estudianteGuardado =
+                estudianteRepository.save(construirEstudiante(solicitud, apoderado));
+
+        return convertirARespuesta(estudianteGuardado);
+    }
+
+    @Override
+    @Transactional
+    public void registrarEstudianteEnLote(
+            RegistrarEstudianteRequest solicitud,
+            Apoderado apoderado) {
+
+        estudianteRepository.save(construirEstudiante(solicitud, apoderado));
+    }
+
+    private Estudiante construirEstudiante(
+            RegistrarEstudianteRequest solicitud,
+            Apoderado apoderado) {
+
         Estudiante estudiante = new Estudiante();
 
         estudiante.setNombre(solicitud.nombre());
@@ -78,10 +97,7 @@ public class EstudianteServiceImpl implements EstudianteService {
         estudiante.setActivo(true);
         estudiante.setFechaCreacion(LocalDateTime.now());
 
-        Estudiante estudianteGuardado =
-                estudianteRepository.save(estudiante);
-
-        return convertirARespuesta(estudianteGuardado);
+        return estudiante;
     }
 
     private EstudianteResponse convertirARespuesta(

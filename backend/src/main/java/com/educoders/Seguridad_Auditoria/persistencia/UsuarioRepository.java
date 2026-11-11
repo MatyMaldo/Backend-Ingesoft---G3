@@ -10,6 +10,7 @@ import org.springframework.data.jpa.repository.Query;
 
 import org.springframework.data.repository.query.Param;
 
+import java.util.Collection;
 import java.util.List;
 
 
@@ -74,4 +75,27 @@ public interface UsuarioRepository extends JpaRepository<Usuario, Long> {
             @Param("dni") String dni,
             @Param("tipoUsuario") Class<? extends Usuario> tipoUsuario
     );
+
+    /**
+     * Devuelve, de la lista dada, los DNI que ya existen para el tipo de usuario indicado.
+     * Reemplaza N consultas {@code existsByDniAndTipoUsuario} en las cargas masivas.
+     */
+    @Query("""
+       SELECT u.dni
+       FROM Usuario u
+       WHERE u.dni IN :dnis
+       AND TYPE(u) = :tipoUsuario
+       """)
+    List<String> findDnisExistentesPorTipo(
+            @Param("dnis") Collection<String> dnis,
+            @Param("tipoUsuario") Class<? extends Usuario> tipoUsuario
+    );
+
+    /** Devuelve, de la lista dada, los correos que ya existen (cualquier tipo de usuario). */
+    @Query("SELECT u.email FROM Usuario u WHERE u.email IN :emails")
+    List<String> findEmailsExistentes(@Param("emails") Collection<String> emails);
+
+    /** Devuelve, de la lista dada, los usernames que ya existen (cualquier tipo de usuario). */
+    @Query("SELECT u.username FROM Usuario u WHERE u.username IN :usernames")
+    List<String> findUsernamesExistentes(@Param("usernames") Collection<String> usernames);
 }
