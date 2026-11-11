@@ -135,6 +135,11 @@ public class OperacionMasivaService {
             public void fase(String mensaje) {
                 operacion.fase(mensaje);
             }
+
+            @Override
+            public void resultado(Object resultado) {
+                operacion.resultado(resultado);
+            }
         };
 
         try {

@@ -8,7 +8,8 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 /**
- * Estado público de una operación masiva. No expone el usuario que la lanzó.
+ * Estado público de una operación masiva. No expone el usuario que la lanzó. {@code resultado} es el detalle final
+ * que publica la operación al terminar (nulo mientras corre y en las operaciones que no devuelven detalle).
  */
 public record OperacionMasivaResponse(
         String jobId,
@@ -24,7 +25,8 @@ public record OperacionMasivaResponse(
         List<String> detalleErrores,
         LocalDateTime creadoEn,
         LocalDateTime iniciadoEn,
-        LocalDateTime finalizadoEn
+        LocalDateTime finalizadoEn,
+        Object resultado
 ) {
 
     public static OperacionMasivaResponse desde(OperacionMasiva operacion) {
@@ -48,7 +50,8 @@ public record OperacionMasivaResponse(
                 operacion.getDetalleErrores(),
                 operacion.getCreadoEn(),
                 operacion.getIniciadoEn(),
-                operacion.getFinalizadoEn()
+                operacion.getFinalizadoEn(),
+                operacion.getResultado()
         );
     }
 }

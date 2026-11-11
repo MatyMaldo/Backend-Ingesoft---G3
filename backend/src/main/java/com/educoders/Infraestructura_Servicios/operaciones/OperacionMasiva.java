@@ -27,6 +27,7 @@ public class OperacionMasiva {
     private int errores;
     private String fase;
     private final List<String> detalleErrores = new ArrayList<>();
+    private Object resultado;
     private LocalDateTime iniciadoEn;
     private LocalDateTime finalizadoEn;
 
@@ -83,6 +84,14 @@ public class OperacionMasiva {
 
     public synchronized List<String> getDetalleErrores() {
         return List.copyOf(detalleErrores);
+    }
+
+    public synchronized Object getResultado() {
+        return resultado;
+    }
+
+    public synchronized void resultado(Object resultado) {
+        this.resultado = resultado;
     }
 
     public synchronized LocalDateTime getIniciadoEn() {

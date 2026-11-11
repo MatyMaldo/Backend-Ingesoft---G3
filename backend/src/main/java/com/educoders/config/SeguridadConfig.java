@@ -128,6 +128,12 @@ public class SeguridadConfig {
                                 "/api/v1/usuarios/**"
                         ).hasRole("ADMINISTRADOR")
 
+                        // Carga masiva de usuarios
+                        .requestMatchers(
+                                HttpMethod.POST,
+                                "/api/v1/usuarios/carga-masiva/**"
+                        ).hasRole("ADMINISTRADOR")
+
                         // Auditorías
                         .requestMatchers(
                                 "/api/v1/auditorias/**"

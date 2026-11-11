@@ -51,6 +51,7 @@ import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -60,6 +61,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 @Service
@@ -75,6 +77,15 @@ public class HorarioCargaMasivaServiceImpl implements HorarioCargaMasivaService 
     private static final int MAX_FILAS = 5000;
     private static final long MAX_BYTES = 10L * 1024 * 1024;
     private static final DateTimeFormatter FORMATO_HORA = DateTimeFormatter.ofPattern("HH:mm");
+    private static final List<DateTimeFormatter> FORMATOS_HORA_ENTRADA = List.of(
+            DateTimeFormatter.ofPattern("HH:mm"),
+            DateTimeFormatter.ofPattern("H:mm"),
+            DateTimeFormatter.ofPattern("HH:mm:ss"));
+
+    /** Cada cuántas filas validadas se informa el avance al job asíncrono. */
+    private static final int LOTE_PROGRESO = 100;
+    /** Tamaño de cada {@code saveAll}; permite informar avance mientras se guarda. */
+    private static final int LOTE_GUARDADO = 500;
 
     private final PeriodoMatriculaRepository periodoRepo;
     private final AnioAcademicoRepository anioRepo;
@@ -141,7 +152,7 @@ public class HorarioCargaMasivaServiceImpl implements HorarioCargaMasivaService 
         }
 
         List<PreviewCargaMasivaResponse.BloquePreview> bloques = new ArrayList<>();
-        List<Validado> validos = new ArrayList<>();
+        ContextoCarga ctx = new ContextoCarga(anio);
         Map<String, String> clavesVistas = new HashMap<>();
         Map<String, Integer> erroresPorArchivo = new HashMap<>();
 
@@ -150,7 +161,7 @@ public class HorarioCargaMasivaServiceImpl implements HorarioCargaMasivaService 
             indice++;
             String previewId = "p-" + indice;
             try {
-                Validado validado = resolver(fila, anio);
+                Validado validado = resolver(fila, ctx);
                 String clave = clave(validado);
                 String referenciaPrevia = clavesVistas.get(clave);
                 List<String> mensajes = new ArrayList<>();
@@ -160,14 +171,14 @@ public class HorarioCargaMasivaServiceImpl implements HorarioCargaMasivaService 
                             + " duplica a " + referenciaPrevia
                             + ": misma asignación, aula, día y horas.");
                 } else {
-                    mensajes.addAll(conflictosEnPayload(validado, validos));
-                    mensajes.addAll(conflictosEnBase(validado, anio.getId()));
+                    mensajes.addAll(conflictosEnPayload(validado, ctx));
+                    mensajes.addAll(conflictosEnBase(validado, ctx));
                 }
 
                 String estado;
                 if (mensajes.isEmpty()) {
                     estado = "VALIDO";
-                    validos.add(validado);
+                    ctx.registrarValido(validado);
                 } else {
                     estado = referenciaPrevia != null ? "DUPLICADO" : "CONFLICTO";
                 }
@@ -235,18 +246,29 @@ public class HorarioCargaMasivaServiceImpl implements HorarioCargaMasivaService 
             progreso.fase("VALIDANDO");
         }
 
+        ContextoCarga ctx = new ContextoCarga(anio);
+        int total = request.bloques().size();
+        int procesados = 0;
+
         for (ConfirmarCargaMasivaRequest.BloqueConfirmacion bloque : request.bloques()) {
             String origen = bloque.origen() != null ? bloque.origen() : "bloque";
             try {
-                AsignacionCurso asignacion = asignacionRepo.findById(bloque.asignacionCursoId())
-                        .orElseThrow(() -> new FilaException("No existe la asignación de curso."));
+                Long asignacionId = bloque.asignacionCursoId();
+                AsignacionCurso asignacion = obtener(ctx.asignacionesPorId, asignacionId,
+                        () -> asignacionRepo.findById(asignacionId));
+                if (asignacion == null) {
+                    throw new FilaException("No existe la asignación de curso.");
+                }
                 Seccion seccion = asignacion.getSeccion();
                 if (seccion.getAnioAcademico() == null
                         || !anio.getId().equals(seccion.getAnioAcademico().getId())) {
                     throw new FilaException("La asignación no pertenece al año académico indicado.");
                 }
-                Aula aula = aulaRepo.findById(bloque.aulaId())
-                        .orElseThrow(() -> new FilaException("No existe el aula."));
+                Long aulaId = bloque.aulaId();
+                Aula aula = obtener(ctx.aulasPorId, aulaId, () -> aulaRepo.findById(aulaId));
+                if (aula == null) {
+                    throw new FilaException("No existe el aula.");
+                }
                 if (bloque.diaSemana() == null) {
                     throw new FilaException("El día es obligatorio.");
                 }
@@ -265,13 +287,14 @@ public class HorarioCargaMasivaServiceImpl implements HorarioCargaMasivaService 
                             + referenciaPrevia
                             + ": misma asignación, aula, día y horas.");
                 } else {
-                    mensajes.addAll(conflictosEnPayload(validado, validados));
-                    mensajes.addAll(conflictosEnBase(validado, anio.getId()));
+                    mensajes.addAll(conflictosEnPayload(validado, ctx));
+                    mensajes.addAll(conflictosEnBase(validado, ctx));
                 }
                 claves.putIfAbsent(clave, origen);
 
                 if (mensajes.isEmpty()) {
                     validados.add(validado);
+                    ctx.registrarValido(validado);
                 } else {
                     for (String mensaje : mensajes) {
                         errores.add(new ConfirmarCargaMasivaResponse.ErrorConfirmacion(
@@ -282,13 +305,18 @@ public class HorarioCargaMasivaServiceImpl implements HorarioCargaMasivaService 
                 errores.add(new ConfirmarCargaMasivaResponse.ErrorConfirmacion(
                         origen, "ERROR", ex.getMessage()));
             }
+
+            procesados++;
+            if (progreso != null && procesados % LOTE_PROGRESO == 0) {
+                progreso.actualizar(procesados, validados.size(), 0, errores.size());
+            }
         }
 
         if (!errores.isEmpty()) {
             if (progreso != null) {
                 errores.forEach(error -> progreso.registrarError(
                         error.origen() + ": " + error.mensaje()));
-                progreso.actualizar(0, 0, 0, errores.size());
+                progreso.actualizar(total, 0, 0, errores.size());
                 progreso.fase("VALIDACION_CON_ERRORES");
             }
             return new ConfirmarCargaMasivaResponse(0, errores);
@@ -296,6 +324,8 @@ public class HorarioCargaMasivaServiceImpl implements HorarioCargaMasivaService 
 
         if (progreso != null) {
             progreso.fase("GUARDANDO");
+            // La barra se reinicia: la fase de guardado cuenta sus propios bloques.
+            progreso.actualizar(0, 0, 0, 0);
         }
 
         List<BloqueHorario> bloques = validados.stream().map(v -> {
@@ -308,7 +338,15 @@ public class HorarioCargaMasivaServiceImpl implements HorarioCargaMasivaService 
             return bloque;
         }).toList();
 
-        bloqueRepo.saveAll(bloques);
+        for (int desde = 0; desde < bloques.size(); desde += LOTE_GUARDADO) {
+            List<BloqueHorario> lote = bloques.subList(
+                    desde, Math.min(desde + LOTE_GUARDADO, bloques.size()));
+            bloqueRepo.insertarEnLotes(lote);
+            if (progreso != null) {
+                int guardados = desde + lote.size();
+                progreso.actualizar(guardados, guardados, 0, 0);
+            }
+        }
 
         auditoriaService.registrarAuditoria(new RegistrarAuditoriaRequestDTO(
                 usuarioId,
@@ -590,21 +628,24 @@ public class HorarioCargaMasivaServiceImpl implements HorarioCargaMasivaService 
     // Resolución y validación
     // ------------------------------------------------------------------
 
-    private Validado resolver(Fila fila, AnioAcademico anio) {
+    private Validado resolver(Fila fila, ContextoCarga ctx) {
         try {
-            Seccion seccion = resolverSeccion(fila, anio);
-            Curso curso = resolverCurso(fila);
-            Docente docente = resolverDocente(fila);
-            Aula aula = resolverAula(fila);
+            Seccion seccion = resolverSeccion(fila, ctx);
+            Curso curso = resolverCurso(fila, ctx);
+            Docente docente = resolverDocente(fila, ctx);
+            Aula aula = resolverAula(fila, ctx);
             DiaSemana dia = parsearDia(fila.dia());
             LocalTime inicio = parsearHora(fila.horaInicio(), "hora de inicio");
             LocalTime fin = parsearHora(fila.horaFin(), "hora de fin");
             validarHorario(inicio, fin);
 
-            AsignacionCurso asignacion = asignacionRepo
-                    .findByCursoIdAndSeccionId(curso.getId(), seccion.getId())
-                    .orElseThrow(() -> new FilaException(
-                            "No existe una asignación curso-docente-sección para esa sección."));
+            ClaveAsignacion claveAsignacion = new ClaveAsignacion(curso.getId(), seccion.getId());
+            AsignacionCurso asignacion = obtener(ctx.asignacionesPorCursoSeccion, claveAsignacion,
+                    () -> asignacionRepo.findByCursoIdAndSeccionId(curso.getId(), seccion.getId()));
+            if (asignacion == null) {
+                throw new FilaException(
+                        "No existe una asignación curso-docente-sección para esa sección.");
+            }
             if (!asignacion.getDocente().getId().equals(docente.getId())) {
                 throw new FilaException("El docente no coincide con la asignación del curso en la sección.");
             }
@@ -618,13 +659,18 @@ public class HorarioCargaMasivaServiceImpl implements HorarioCargaMasivaService 
         }
     }
 
-    private Seccion resolverSeccion(Fila fila, AnioAcademico anio) {
+    // Cada búsqueda se memoiza en el contexto (incluidos los "no existe"): un archivo con
+    // miles de filas consulta la base una vez por valor distinto, no una vez por fila.
+
+    private Seccion resolverSeccion(Fila fila, ContextoCarga ctx) {
         Long id = parseLong(fila.idSeccion(), "ID Sección");
         if (id != null) {
-            Seccion seccion = seccionRepo.findById(id)
-                    .orElseThrow(() -> new FilaException("No existe la sección con ID " + id + "."));
+            Seccion seccion = obtener(ctx.seccionesPorId, id, () -> seccionRepo.findById(id));
+            if (seccion == null) {
+                throw new FilaException("No existe la sección con ID " + id + ".");
+            }
             if (seccion.getAnioAcademico() == null
-                    || !anio.getId().equals(seccion.getAnioAcademico().getId())) {
+                    || !ctx.anio.getId().equals(seccion.getAnioAcademico().getId())) {
                 throw new FilaException("La sección no pertenece al año académico indicado.");
             }
             return seccion;
@@ -635,49 +681,84 @@ public class HorarioCargaMasivaServiceImpl implements HorarioCargaMasivaService 
         if (gradoNombre.isBlank() || seccionNombre.isBlank()) {
             throw new FilaException("Debe indicar ID Sección o Grado/Sección.");
         }
-        Grado grado = gradoRepo.findByNombre(gradoNombre)
-                .orElseThrow(() -> new FilaException("No existe el grado '" + gradoNombre + "'."));
-        return seccionRepo.findByGradoIdAndAnioAcademicoIdAndNombre(
-                        grado.getId(), anio.getId(), seccionNombre)
-                .orElseThrow(() -> new FilaException(
-                        "No existe la sección '" + seccionNombre + "' para el grado indicado."));
+        Grado grado = obtener(ctx.gradosPorNombre, gradoNombre,
+                () -> gradoRepo.findByNombre(gradoNombre));
+        if (grado == null) {
+            throw new FilaException("No existe el grado '" + gradoNombre + "'.");
+        }
+        Seccion seccion = obtener(ctx.seccionesPorNombre, grado.getId() + "|" + seccionNombre,
+                () -> seccionRepo.findByGradoIdAndAnioAcademicoIdAndNombre(
+                        grado.getId(), ctx.anio.getId(), seccionNombre));
+        if (seccion == null) {
+            throw new FilaException(
+                    "No existe la sección '" + seccionNombre + "' para el grado indicado.");
+        }
+        return seccion;
     }
 
-    private Curso resolverCurso(Fila fila) {
+    private Curso resolverCurso(Fila fila, ContextoCarga ctx) {
         Long id = parseLong(fila.idCurso(), "ID Curso");
         if (id != null) {
-            return cursoRepo.findById(id)
-                    .orElseThrow(() -> new FilaException("No existe el curso con ID " + id + "."));
+            Curso curso = obtener(ctx.cursosPorId, id, () -> cursoRepo.findById(id));
+            if (curso == null) {
+                throw new FilaException("No existe el curso con ID " + id + ".");
+            }
+            return curso;
         }
         if (fila.curso().isBlank()) throw new FilaException("Debe indicar ID Curso o Curso.");
-        return cursoRepo.findByNombre(fila.curso())
-                .orElseThrow(() -> new FilaException("No existe el curso '" + fila.curso() + "'."));
+        Curso curso = obtener(ctx.cursosPorNombre, fila.curso(),
+                () -> cursoRepo.findByNombre(fila.curso()));
+        if (curso == null) {
+            throw new FilaException("No existe el curso '" + fila.curso() + "'.");
+        }
+        return curso;
     }
 
-    private Docente resolverDocente(Fila fila) {
+    private Docente resolverDocente(Fila fila, ContextoCarga ctx) {
         Long id = parseLong(fila.idDocente(), "ID Docente");
         if (id != null) {
-            Docente docente = docenteRepo.findById(id)
-                    .orElseThrow(() -> new FilaException("No existe el docente con ID " + id + "."));
+            Docente docente = obtener(ctx.docentesPorId, id, () -> docenteRepo.findById(id));
+            if (docente == null) {
+                throw new FilaException("No existe el docente con ID " + id + ".");
+            }
             if (!docente.isActivo()) throw new FilaException("El docente no está activo.");
             return docente;
         }
         if (fila.dni().isBlank()) throw new FilaException("Debe indicar ID Docente o DNI Docente.");
-        Docente docente = docenteRepo.findByDni(fila.dni())
-                .orElseThrow(() -> new FilaException("No existe un docente con DNI '" + fila.dni() + "'."));
+        Docente docente = obtener(ctx.docentesPorDni, fila.dni(),
+                () -> docenteRepo.findByDni(fila.dni()));
+        if (docente == null) {
+            throw new FilaException("No existe un docente con DNI '" + fila.dni() + "'.");
+        }
         if (!docente.isActivo()) throw new FilaException("El docente no está activo.");
         return docente;
     }
 
-    private Aula resolverAula(Fila fila) {
+    private Aula resolverAula(Fila fila, ContextoCarga ctx) {
         Long id = parseLong(fila.idAula(), "ID Aula");
         if (id != null) {
-            return aulaRepo.findById(id)
-                    .orElseThrow(() -> new FilaException("No existe el aula con ID " + id + "."));
+            Aula aula = obtener(ctx.aulasPorId, id, () -> aulaRepo.findById(id));
+            if (aula == null) {
+                throw new FilaException("No existe el aula con ID " + id + ".");
+            }
+            return aula;
         }
         if (fila.aula().isBlank()) throw new FilaException("Debe indicar ID Aula o Aula.");
-        return aulaRepo.findByNombre(fila.aula())
-                .orElseThrow(() -> new FilaException("No existe el aula '" + fila.aula() + "'."));
+        Aula aula = obtener(ctx.aulasPorNombre, fila.aula(), () -> aulaRepo.findByNombre(fila.aula()));
+        if (aula == null) {
+            throw new FilaException("No existe el aula '" + fila.aula() + "'.");
+        }
+        return aula;
+    }
+
+    /** Devuelve el valor memoizado en {@code cache}, consultando {@code origen} solo la primera vez. */
+    private static <K, V> V obtener(Map<K, Optional<V>> cache, K clave, Supplier<Optional<V>> origen) {
+        Optional<V> resultado = cache.get(clave);
+        if (resultado == null) {
+            resultado = origen.get();
+            cache.put(clave, resultado);
+        }
+        return resultado.orElse(null);
     }
 
     private void validarHorario(LocalTime inicio, LocalTime fin) {
@@ -725,9 +806,9 @@ public class HorarioCargaMasivaServiceImpl implements HorarioCargaMasivaService 
     }
 
     private LocalTime parsearHora(String valor, String etiqueta) {
-        for (String patron : List.of("HH:mm", "H:mm", "HH:mm:ss")) {
+        for (DateTimeFormatter formato : FORMATOS_HORA_ENTRADA) {
             try {
-                return LocalTime.parse(valor, DateTimeFormatter.ofPattern(patron));
+                return LocalTime.parse(valor, formato);
             } catch (DateTimeParseException ignored) {
             }
         }
@@ -747,11 +828,11 @@ public class HorarioCargaMasivaServiceImpl implements HorarioCargaMasivaService 
     // Conflictos
     // ------------------------------------------------------------------
 
-    private List<String> conflictosEnPayload(Validado nuevo, List<Validado> previos) {
+    private List<String> conflictosEnPayload(Validado nuevo, ContextoCarga ctx) {
         List<String> mensajes = new ArrayList<>();
 
-        for (Validado previo : previos) {
-            if (previo.diaSemana() != nuevo.diaSemana() || !solapan(previo, nuevo)) {
+        for (Validado previo : ctx.validosDelDia(nuevo.diaSemana())) {
+            if (!solapan(previo, nuevo)) {
                 continue;
             }
 
@@ -777,23 +858,28 @@ public class HorarioCargaMasivaServiceImpl implements HorarioCargaMasivaService 
         return mensajes;
     }
 
-    private List<String> conflictosEnBase(Validado v, Long anioId) {
+    /**
+     * Conflictos con los bloques que ya existen en la base, calculados sobre los bloques del
+     * año cargados una sola vez en el contexto. Mismo criterio de solape estricto que las
+     * consultas {@code findConflicto*} (un bloque que termina cuando otro empieza no choca).
+     */
+    private List<String> conflictosEnBase(Validado v, ContextoCarga ctx) {
         List<String> mensajes = new ArrayList<>();
 
-        for (BloqueHorario existente : bloqueRepo.findConflictoDocente(
-                v.diaSemana(), v.horaInicio(), v.horaFin(), anioId, null, v.docente().getId())) {
+        for (BloqueHorario existente : ctx.existentesQueSolapan(
+                Dimension.DOCENTE, v.docente().getId(), v)) {
             mensajes.add("El docente " + nombreDocente(v.docente())
                     + " ya tiene clase en " + descripcionExistente(existente) + ".");
         }
-        for (BloqueHorario existente : bloqueRepo.findConflictoSeccion(
-                v.diaSemana(), v.horaInicio(), v.horaFin(), anioId, null, v.seccion().getId())) {
+        for (BloqueHorario existente : ctx.existentesQueSolapan(
+                Dimension.SECCION, v.seccion().getId(), v)) {
             mensajes.add("La sección " + nombreSeccion(v.seccion())
                     + " ya tiene " + existente.getAsignacionCurso().getCurso().getNombre()
                     + " el " + nombreDia(existente.getDiaSemana()) + " de "
                     + rangoHorario(existente.getHoraInicio(), existente.getHoraFin()) + ".");
         }
-        for (BloqueHorario existente : bloqueRepo.findConflictoAula(
-                v.diaSemana(), v.horaInicio(), v.horaFin(), anioId, null, v.aula().getId())) {
+        for (BloqueHorario existente : ctx.existentesQueSolapan(
+                Dimension.AULA, v.aula().getId(), v)) {
             mensajes.add("El aula " + v.aula().getNombre()
                     + " está ocupada por " + descripcionExistente(existente) + ".");
         }
@@ -802,7 +888,13 @@ public class HorarioCargaMasivaServiceImpl implements HorarioCargaMasivaService 
     }
 
     private boolean solapan(Validado a, Validado b) {
-        return a.horaInicio().isBefore(b.horaFin()) && b.horaInicio().isBefore(a.horaFin());
+        return seSuperponen(a.horaInicio(), a.horaFin(), b.horaInicio(), b.horaFin());
+    }
+
+    /** Solape estricto: un bloque que termina cuando otro empieza no se superpone. */
+    private static boolean seSuperponen(LocalTime inicioA, LocalTime finA,
+                                        LocalTime inicioB, LocalTime finB) {
+        return inicioA.isBefore(finB) && inicioB.isBefore(finA);
     }
 
     private String descripcionExistente(BloqueHorario bloque) {
@@ -957,6 +1049,92 @@ public class HorarioCargaMasivaServiceImpl implements HorarioCargaMasivaService 
             Aula aula, DiaSemana diaSemana, LocalTime horaInicio, LocalTime horaFin,
             String origen, String referencia
     ) {
+    }
+
+    private enum Dimension {
+        DOCENTE, SECCION, AULA
+    }
+
+    private record ClaveIndice(Dimension dimension, Long id, DiaSemana dia) {
+    }
+
+    private record ClaveAsignacion(Long cursoId, Long seccionId) {
+    }
+
+    /**
+     * Datos de una validación (preview o confirmación) cargados una sola vez: las
+     * asignaciones y los bloques del año, más la memoización de las búsquedas por valor.
+     * Vive solo durante una llamada; no se comparte entre peticiones.
+     */
+    private final class ContextoCarga {
+
+        private final AnioAcademico anio;
+
+        private final Map<Long, Optional<Seccion>> seccionesPorId = new HashMap<>();
+        private final Map<String, Optional<Grado>> gradosPorNombre = new HashMap<>();
+        private final Map<String, Optional<Seccion>> seccionesPorNombre = new HashMap<>();
+        private final Map<Long, Optional<Curso>> cursosPorId = new HashMap<>();
+        private final Map<String, Optional<Curso>> cursosPorNombre = new HashMap<>();
+        private final Map<Long, Optional<Docente>> docentesPorId = new HashMap<>();
+        private final Map<String, Optional<Docente>> docentesPorDni = new HashMap<>();
+        private final Map<Long, Optional<Aula>> aulasPorId = new HashMap<>();
+        private final Map<String, Optional<Aula>> aulasPorNombre = new HashMap<>();
+        private final Map<Long, Optional<AsignacionCurso>> asignacionesPorId = new HashMap<>();
+        private final Map<ClaveAsignacion, Optional<AsignacionCurso>> asignacionesPorCursoSeccion =
+                new HashMap<>();
+
+        private final Map<ClaveIndice, List<BloqueHorario>> existentes = new HashMap<>();
+        private final Map<DiaSemana, List<Validado>> validosPorDia = new EnumMap<>(DiaSemana.class);
+
+        private ContextoCarga(AnioAcademico anio) {
+            this.anio = anio;
+
+            for (AsignacionCurso asignacion : asignacionRepo.findByAnioAcademicoIdConDetalle(anio.getId())) {
+                Optional<AsignacionCurso> valor = Optional.of(asignacion);
+                asignacionesPorId.put(asignacion.getId(), valor);
+                asignacionesPorCursoSeccion.put(new ClaveAsignacion(
+                        asignacion.getCurso().getId(), asignacion.getSeccion().getId()), valor);
+            }
+
+            for (BloqueHorario bloque : bloqueRepo.findDelAnioConDetalle(anio.getId())) {
+                AsignacionCurso asignacion = bloque.getAsignacionCurso();
+                indexar(Dimension.DOCENTE, asignacion.getDocente().getId(), bloque);
+                indexar(Dimension.SECCION, asignacion.getSeccion().getId(), bloque);
+                indexar(Dimension.AULA, bloque.getAula().getId(), bloque);
+            }
+        }
+
+        private void indexar(Dimension dimension, Long id, BloqueHorario bloque) {
+            existentes.computeIfAbsent(
+                    new ClaveIndice(dimension, id, bloque.getDiaSemana()), k -> new ArrayList<>())
+                    .add(bloque);
+        }
+
+        /** Bloques ya guardados de esa dimensión y día que se superponen con {@code nuevo}. */
+        private List<BloqueHorario> existentesQueSolapan(Dimension dimension, Long id, Validado nuevo) {
+            List<BloqueHorario> candidatos = existentes.get(
+                    new ClaveIndice(dimension, id, nuevo.diaSemana()));
+            if (candidatos == null) {
+                return List.of();
+            }
+            List<BloqueHorario> solapados = new ArrayList<>();
+            for (BloqueHorario existente : candidatos) {
+                if (seSuperponen(nuevo.horaInicio(), nuevo.horaFin(),
+                        existente.getHoraInicio(), existente.getHoraFin())) {
+                    solapados.add(existente);
+                }
+            }
+            return solapados;
+        }
+
+        private List<Validado> validosDelDia(DiaSemana dia) {
+            return validosPorDia.getOrDefault(dia, List.of());
+        }
+
+        /** Registra un bloque aceptado para detectar choques con las filas siguientes. */
+        private void registrarValido(Validado validado) {
+            validosPorDia.computeIfAbsent(validado.diaSemana(), k -> new ArrayList<>()).add(validado);
+        }
     }
 
     private static class FilaException extends RuntimeException {
