@@ -86,6 +86,12 @@ public class SeguridadConfig {
                                 "/api/v1/auth/login"
                         ).permitAll()
 
+                        // Restablecimiento de contraseña público
+                        .requestMatchers(
+                                HttpMethod.POST,
+                                "/api/v1/auth/password/**"
+                        ).permitAll()
+
                         // --- HU-EVAL-01 ---
                         .requestMatchers(
                                 HttpMethod.POST,

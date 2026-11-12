@@ -2,11 +2,14 @@ package com.educoders.Infraestructura_Servicios.servicio;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 
 @Service
 public class ServicioNotificacionEmailImpl implements ServicioNotificacionEmail {
@@ -14,6 +17,9 @@ public class ServicioNotificacionEmailImpl implements ServicioNotificacionEmail 
     private static final Logger log = LoggerFactory.getLogger(ServicioNotificacionEmailImpl.class);
 
     private final JavaMailSender mailSender;
+
+    @Value("${MAIL_FROM}")
+    private String remitente;
 
     public ServicioNotificacionEmailImpl(JavaMailSender mailSender) {
         this.mailSender = mailSender;
@@ -34,6 +40,7 @@ public class ServicioNotificacionEmailImpl implements ServicioNotificacionEmail 
 
         try {
             SimpleMailMessage mensaje = new SimpleMailMessage();
+            mensaje.setFrom(remitente);
             mensaje.setTo(emailDestino);
             mensaje.setSubject("Educoders - Emisión de Compromiso de Pago: " + concepto);
             mensaje.setText(String.format(
@@ -71,6 +78,7 @@ public class ServicioNotificacionEmailImpl implements ServicioNotificacionEmail 
 
         try {
             SimpleMailMessage mensaje = new SimpleMailMessage();
+            mensaje.setFrom(remitente);
             mensaje.setTo(emailDestino);
             mensaje.setSubject("Educoders - Confirmación de Pago Validado: " + concepto);
             mensaje.setText(String.format(
@@ -105,6 +113,7 @@ public class ServicioNotificacionEmailImpl implements ServicioNotificacionEmail 
 
         try {
             SimpleMailMessage mensaje = new SimpleMailMessage();
+            mensaje.setFrom(remitente);
             mensaje.setTo(emailDestino);
             mensaje.setSubject("Educoders - Rechazo de Comprobante de Pago: " + concepto);
             mensaje.setText(String.format(
@@ -122,6 +131,45 @@ public class ServicioNotificacionEmailImpl implements ServicioNotificacionEmail 
             log.info("Correo de rechazo enviado a: {}", emailDestino);
         } catch (Exception e) {
             log.error("No se pudo enviar correo de rechazo a {}: {}", emailDestino, e.getMessage());
+        }
+    }
+
+    @Override
+    public void enviarCorreoRestablecimientoPassword(
+            String emailDestino,
+            String nombreUsuario,
+            String codigo,
+            LocalDateTime fechaExpiracion) {
+
+        if (emailDestino == null || emailDestino.isBlank()) {
+            log.warn("No se pudo enviar correo de restablecimiento: correo vacío.");
+            return;
+        }
+
+        try {
+            SimpleMailMessage mensaje = new SimpleMailMessage();
+            mensaje.setFrom(remitente);
+            mensaje.setTo(emailDestino);
+            mensaje.setSubject("Educoders - Código de restablecimiento de contraseña");
+            mensaje.setText(String.format(
+                    "Hola %s,\n\n" +
+                            "Recibimos una solicitud para definir o restablecer tu contraseña.\n\n" +
+                            "Código de verificación: %s\n" +
+                            "Vence: %s\n\n" +
+                            "Si no solicitaste este cambio, puedes ignorar este mensaje.\n\n" +
+                            "Atentamente,\n" +
+                            "Administración EduCoders",
+                    nombreUsuario,
+                    codigo,
+                    fechaExpiracion.format(DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm"))
+            ));
+
+            mailSender.send(mensaje);
+            log.info("Correo de restablecimiento enviado a: {}", emailDestino);
+        } catch (Exception e) {
+            // El envío no debe tumbar la solicitud; el usuario puede reintentar.
+            log.error("No se pudo enviar correo de restablecimiento a {}: {}",
+                    emailDestino, e.getMessage());
         }
     }
 }
