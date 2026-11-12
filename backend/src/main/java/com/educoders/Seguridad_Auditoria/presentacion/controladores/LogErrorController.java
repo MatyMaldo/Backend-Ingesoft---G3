@@ -33,9 +33,9 @@ public class LogErrorController {
             @RequestParam(defaultValue = "10") int size,
             @RequestParam(defaultValue = "DESC") String sortDirection) {
 
-        Sort sort = sortDirection.equalsIgnoreCase("ASC")
-                ? Sort.by("fechaHora").ascending()
-                : Sort.by("fechaHora").descending();
+        // El id desempata los errores registrados en el mismo segundo, para que el orden sea estable.
+        Sort.Direction direccion = sortDirection.equalsIgnoreCase("ASC") ? Sort.Direction.ASC : Sort.Direction.DESC;
+        Sort sort = Sort.by(direccion, "fechaHora", "id");
 
         Pageable pageable = PageRequest.of(page, size, sort);
 

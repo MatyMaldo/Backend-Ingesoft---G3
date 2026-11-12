@@ -166,7 +166,8 @@ public class CargaMasivaUsuariosService {
     /**
      * Deja UN registro de auditoría de la carga (HU-SAT-04, categoría Usuarios), a nombre de quien la lanzó, con cuántos
      * usuarios se crearon por tipo y cuántas filas se rechazaron. Si no se creó ninguno, no cambió nada y no se registra.
-     * Una falla al auditar no afecta a la carga: el servicio de auditoría la registra en el log y sigue.
+     * Los usuarios ya se confirmaron por lotes, así que esta auditoría resumen no puede ser atómica con ellos: se guarda
+     * en su propia transacción y una falla al auditar no afecta a la carga (solo se deja en el log).
      */
     private void auditar(Long usuarioId, List<Fila> filas, ResultadoFilaUsuario[] resultados) {
         Map<TipoUsuario, Integer> creados = new EnumMap<>(TipoUsuario.class);
@@ -188,8 +189,13 @@ public class CargaMasivaUsuariosService {
                 + creados.getOrDefault(TipoUsuario.DOCENTE, 0) + " docente(s), "
                 + creados.getOrDefault(TipoUsuario.ESTUDIANTE, 0) + " estudiante(s))"
                 + (rechazados > 0 ? ", " + rechazados + " fila(s) rechazada(s)" : "");
-        auditoriaService.registrarAuditoria(new RegistrarAuditoriaRequestDTO(
-                usuarioId, CategoriaAuditoria.USUARIO, TipoAccionAuditoria.CREAR, "Usuario", null, descripcion, List.of()));
+        try {
+            transacciones.executeWithoutResult(estado -> auditoriaService.registrarAuditoria(
+                    new RegistrarAuditoriaRequestDTO(usuarioId, CategoriaAuditoria.USUARIO, TipoAccionAuditoria.CREAR,
+                            "Usuario", null, descripcion, List.of())));
+        } catch (RuntimeException ex) {
+            log.error("No se pudo registrar la auditoría de la carga masiva de usuarios: {}", ex.getMessage(), ex);
+        }
     }
 
     // ───────────────────────────── validación ─────────────────────────────

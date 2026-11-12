@@ -3,6 +3,7 @@ package com.educoders.Seguridad_Auditoria.servicio;
 import com.educoders.Infraestructura_Servicios.enums.CategoriaAuditoria;
 import com.educoders.Infraestructura_Servicios.enums.TipoAccionAuditoria;
 import com.educoders.Infraestructura_Servicios.exception.RecursoNoEncontradoException;
+import com.educoders.Infraestructura_Servicios.util.PatronBusqueda;
 import com.educoders.Seguridad_Auditoria.dominio.Administrador;
 import com.educoders.Seguridad_Auditoria.dominio.Apoderado;
 import com.educoders.Seguridad_Auditoria.dominio.Auditoria;
@@ -37,6 +38,8 @@ import java.util.stream.Collectors;
 public class AuditoriaServiceImpl implements AuditoriaService {
 
     private static final Logger log = LoggerFactory.getLogger(AuditoriaServiceImpl.class);
+    static final String AUTOR_NO_DETERMINADO = "No determinado";
+    static final String ROL_NO_DETERMINADO = "NO_DETERMINADO";
     private final AuditoriaRepository auditoriaRepository;
     private final UsuarioRepository usuarioRepository;
 
@@ -46,44 +49,50 @@ public class AuditoriaServiceImpl implements AuditoriaService {
         this.usuarioRepository = usuarioRepository;
     }
 
+    /**
+     * Regla HU-SAT-04 (Esc. 2, atomicidad): el registro de auditoría se confirma junto con la operación que lo
+     * origina o ninguno de los dos se aplica. Por eso se une a la transacción de quien llama ({@code MANDATORY}:
+     * sin transacción abierta falla, en lugar de guardar la auditoría por separado) y NO captura errores: si no
+     * puede guardarse, la excepción cancela la operación.
+     */
     @Override
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    @Transactional(propagation = Propagation.MANDATORY)
     public void registrarAuditoria(RegistrarAuditoriaRequestDTO dto) {
-        try {
-            Long usuarioIdFinal = obtenerUsuarioIdAutenticado(dto.getUsuarioId());
+        Long usuarioIdFinal = dto.isAutorFijo()
+                ? dto.getUsuarioId()
+                : obtenerUsuarioIdAutenticado(dto.getUsuarioId());
 
-            Auditoria auditoria = new Auditoria();
-            auditoria.setFechaHora(LocalDateTime.now());
-            auditoria.setUsuarioId(usuarioIdFinal);
-            auditoria.setCategoria(dto.getCategoria() != null ? dto.getCategoria() : CategoriaAuditoria.SISTEMA);
-            auditoria.setAccion(dto.getAccion());
-            auditoria.setEntidad(dto.getEntidad());
-            auditoria.setEntidadId(dto.getEntidadId());
-            auditoria.setDescripcion(dto.getDescripcion());
+        Auditoria auditoria = new Auditoria();
+        auditoria.setFechaHora(LocalDateTime.now());
+        auditoria.setUsuarioId(usuarioIdFinal);
+        auditoria.setCategoria(dto.getCategoria() != null ? dto.getCategoria() : CategoriaAuditoria.SISTEMA);
+        auditoria.setAccion(dto.getAccion());
+        auditoria.setEntidad(dto.getEntidad());
+        auditoria.setEntidadId(dto.getEntidadId());
+        auditoria.setDescripcion(dto.getDescripcion());
 
-            if (dto.getDetalles() != null) {
-                for (DetalleAuditoriaDTO detalleDto : dto.getDetalles()) {
-                    DetalleAuditoria detalle = new DetalleAuditoria(
-                            detalleDto.getCampo(),
-                            detalleDto.getValorAnterior(),
-                            detalleDto.getValorNuevo()
-                    );
-                    auditoria.agregarDetalle(detalle);
-                }
+        if (dto.getDetalles() != null) {
+            for (DetalleAuditoriaDTO detalleDto : dto.getDetalles()) {
+                DetalleAuditoria detalle = new DetalleAuditoria(
+                        detalleDto.getCampo(),
+                        detalleDto.getValorAnterior(),
+                        detalleDto.getValorNuevo()
+                );
+                auditoria.agregarDetalle(detalle);
             }
-
-            auditoriaRepository.saveAndFlush(auditoria);
-        } catch (Exception e) {
-            log.error("Fallo al registrar auditoría para la entidad '{}': {}", dto.getEntidad(), e.getMessage(), e);
         }
+
+        auditoriaRepository.saveAndFlush(auditoria);
     }
 
     @Override
     @Transactional(readOnly = true)
     public Page<AuditoriaResponseDTO> listarAuditorias(CategoriaAuditoria categoria,
                                                        TipoAccionAuditoria accion,
-                                                       LocalDateTime fechaInicio, LocalDateTime fechaFin, Pageable pageable) {
-        Page<Auditoria> auditorias = auditoriaRepository.buscarConFiltros(categoria, accion, fechaInicio, fechaFin, pageable);
+                                                       LocalDateTime fechaInicio, LocalDateTime fechaFin,
+                                                       String busqueda, Pageable pageable) {
+        Page<Auditoria> auditorias = auditoriaRepository.buscarConFiltros(
+                categoria, accion, fechaInicio, fechaFin, PatronBusqueda.contiene(busqueda), pageable);
         Map<Long, Usuario> usuarios = cargarUsuarios(auditorias.getContent());
         return auditorias.map(auditoria -> mapearAResponse(auditoria, usuarios));
     }
@@ -108,7 +117,7 @@ public class AuditoriaServiceImpl implements AuditoriaService {
                 ? usuarioRepository.findById(usuarioId).orElse(null)
                 : null;
 
-        return mapearAResponse(auditoria, construirUsuario(usuarioId, usuario));
+        return mapearAResponse(auditoria, construirAutor(auditoria, usuario));
     }
 
     private Long obtenerUsuarioIdAutenticado(Long idProporcionado) {
@@ -158,7 +167,19 @@ public class AuditoriaServiceImpl implements AuditoriaService {
                                                  Map<Long, Usuario> usuarios) {
         Long usuarioId = auditoria.getUsuarioId();
         Usuario usuario = usuarioId != null ? usuarios.get(usuarioId) : null;
-        return mapearAResponse(auditoria, construirUsuario(usuarioId, usuario));
+        return mapearAResponse(auditoria, construirAutor(auditoria, usuario));
+    }
+
+    /**
+     * Autor mostrado de un registro. Sin usuario, una acción de sesión ({@code LOGIN}) solo puede ser un intento
+     * fallido con un correo que no pertenece a ninguna cuenta: el autor es "No determinado" (HU-SAT-04). Cualquier
+     * otro registro sin usuario lo ejecutó el sistema.
+     */
+    private UsuarioAuditoriaDTO construirAutor(Auditoria auditoria, Usuario usuario) {
+        if (auditoria.getUsuarioId() == null && auditoria.getAccion() == TipoAccionAuditoria.LOGIN) {
+            return new UsuarioAuditoriaDTO(null, AUTOR_NO_DETERMINADO, ROL_NO_DETERMINADO);
+        }
+        return construirUsuario(auditoria.getUsuarioId(), usuario);
     }
 
     private AuditoriaResponseDTO mapearAResponse(Auditoria auditoria,

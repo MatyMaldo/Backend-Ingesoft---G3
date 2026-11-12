@@ -3,6 +3,7 @@ package com.educoders.Infraestructura_Servicios.exception;
 import com.educoders.Gestion_Matriz_Horarios.exception.GuardadoBloquesConConflictosException;
 import com.educoders.Gestion_Matriz_Horarios.presentacion.dto.GuardadoSeccionErroresResponse;
 import com.educoders.Infraestructura_Servicios.dto.RespuestaApiResponse;
+import com.educoders.Infraestructura_Servicios.enums.TipoError;
 import com.educoders.Infraestructura_Servicios.operaciones.OperacionMasivaRechazadaException;
 import com.educoders.Seguridad_Auditoria.servicio.LogErrorService;
 import jakarta.servlet.http.HttpServletRequest;
@@ -58,7 +59,7 @@ public class ManejadorGlobalExcepciones {
 
         logErrorService.registrarError(
                 claseOrigen,
-                "Excepción no controlada",
+                TipoError.EXCEPCION_NO_CONTROLADA,
                 excepcion.getMessage() != null ? excepcion.getMessage() : "Error sin mensaje explícito",
                 convertirStackTraceATexto(excepcion),
                 request.getRequestURI(),
@@ -128,21 +129,14 @@ public class ManejadorGlobalExcepciones {
                                 + " conflicto(s)."));
     }
 
-    /** Endpoint inexistente: se registra como 404 y no como error interno 500. */
+    /**
+     * Endpoint inexistente: responde 404 y no 500. NO se registra en el log de errores: es una solicitud a una ruta
+     * que no existe, no una excepción no controlada (HU-SAT-06 solo admite excepciones no controladas, procesos
+     * automáticos y notificaciones por correo).
+     */
     @ExceptionHandler(NoResourceFoundException.class)
-    public ResponseEntity<RespuestaApiResponse<Void>> manejarRutaNoEncontrada(
-            NoResourceFoundException ex, HttpServletRequest request) {
-
-        logErrorService.registrarError(
-                ex.getClass().getName(),
-                "Recurso no encontrado",
-                ex.getMessage(),
-                null,
-                request.getRequestURI(),
-                request.getMethod(),
-                (short) HttpStatus.NOT_FOUND.value(),
-                null
-        );
+    public ResponseEntity<RespuestaApiResponse<Void>> manejarRutaNoEncontrada(NoResourceFoundException ex) {
+        REGISTRO.warn("Ruta inexistente: {}", ex.getResourcePath());
 
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
                 .body(RespuestaApiResponse.crearError(

@@ -47,6 +47,7 @@ class ApoderadoServiceImplTest {
     @Mock private ApoderadoRepository apoderadoRepository;
     @Mock private EstudianteRepository estudianteRepository;
     @Mock private MatriculaRepository matriculaRepository;
+    @Mock private AuditoriaService auditoriaService;
 
     @InjectMocks
     private ApoderadoServiceImpl service;
