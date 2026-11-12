@@ -14,6 +14,12 @@ public class RegistrarAuditoriaRequestDTO {
     private Long entidadId;
     private String descripcion;
     private List<DetalleAuditoriaDTO> detalles = new ArrayList<>();
+    /**
+     * Si es {@code true}, {@link #usuarioId} es el autor definitivo (incluso {@code null}) y NO se sustituye por el
+     * usuario del token. Se usa en los eventos de sesión: quien inicia sesión o falla al hacerlo no es el usuario que
+     * pudiera venir en un token anterior.
+     */
+    private boolean autorFijo;
 
     public RegistrarAuditoriaRequestDTO() {
     }
@@ -47,6 +53,15 @@ public class RegistrarAuditoriaRequestDTO {
 
     public String getDescripcion() { return descripcion; }
     public void setDescripcion(String descripcion) { this.descripcion = descripcion; }
+
+    public boolean isAutorFijo() { return autorFijo; }
+    public void setAutorFijo(boolean autorFijo) { this.autorFijo = autorFijo; }
+
+    /** Marca el autor como definitivo (ver {@link #autorFijo}) y devuelve el mismo DTO. */
+    public RegistrarAuditoriaRequestDTO conAutorFijo() {
+        this.autorFijo = true;
+        return this;
+    }
 
     public List<DetalleAuditoriaDTO> getDetalles() { return detalles; }
     public void setDetalles(List<DetalleAuditoriaDTO> detalles) { this.detalles = detalles; }

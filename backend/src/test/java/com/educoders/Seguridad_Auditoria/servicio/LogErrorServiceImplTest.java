@@ -1,6 +1,7 @@
 package com.educoders.Seguridad_Auditoria.servicio;
 
 import com.educoders.Infraestructura_Servicios.enums.Modulo;
+import com.educoders.Infraestructura_Servicios.enums.TipoError;
 import com.educoders.Infraestructura_Servicios.exception.ReglaNegocioException;
 import com.educoders.Infraestructura_Servicios.servicio.ModuloResolver;
 import com.educoders.Seguridad_Auditoria.dominio.Docente;
@@ -58,7 +59,7 @@ class LogErrorServiceImplTest {
     void registrarError_guardaModuloResuelto() {
         when(moduloResolver.resolver("/api/v1/pagos")).thenReturn(Modulo.PAGOS);
 
-        service.registrarError("PagoService", "Excepción no controlada", "boom", "detalle",
+        service.registrarError("PagoService", TipoError.EXCEPCION_NO_CONTROLADA, "boom", "detalle",
                 "/api/v1/pagos", "POST", (short) 500, null);
 
         ArgumentCaptor<LogError> captor = ArgumentCaptor.forClass(LogError.class);
@@ -72,7 +73,7 @@ class LogErrorServiceImplTest {
         when(moduloResolver.resolver(any())).thenReturn(Modulo.OTROS);
         doThrow(new RuntimeException("db down")).when(logErrorWriter).guardar(any());
 
-        assertDoesNotThrow(() -> service.registrarError("origen", "tipo", "mensaje", null,
+        assertDoesNotThrow(() -> service.registrarError("origen", TipoError.EXCEPCION_NO_CONTROLADA, "mensaje", null,
                 "/api/v1/x", "GET", (short) 500, null));
     }
 
@@ -136,12 +137,51 @@ class LogErrorServiceImplTest {
     @Test
     void mapeoResponseIncluyeModuloYEtiqueta() {
         LogError logError = new LogError(LocalDateTime.now(), null, Modulo.NOTAS,
-                "tipo", "mensaje", null, "/api/v1/evaluaciones", "POST", (short) 500);
+                TipoError.EXCEPCION_NO_CONTROLADA, "mensaje", null, "/api/v1/evaluaciones", "POST", (short) 500);
 
         LogErrorResponse response = LogErrorResponse.desdeEntidad(logError);
 
         assertEquals(Modulo.NOTAS, response.modulo());
         assertEquals("Notas", response.moduloEtiqueta());
+    }
+
+    @Test
+    void mapeoResponseUsuarioNoDeterminadoEnFlujoSinSesion() {
+        LogError logError = new LogError(LocalDateTime.now(), null, Modulo.USUARIOS,
+                TipoError.NOTIFICACION_CORREO, "no se envió el código", null,
+                "/api/v1/auth/olvide-contrasena", "POST", (short) 500);
+
+        LogErrorResponse response = LogErrorResponse.desdeEntidad(logError);
+
+        assertEquals("No determinado", response.nombreUsuario());
+        assertEquals("Notificación por correo", response.tipoError());
+    }
+
+    @Test
+    void mapeoResponseUsuarioSistemaEnProcesoAutomatico() {
+        LogError logError = new LogError(LocalDateTime.now(), null, Modulo.MATRICULA,
+                TipoError.PROCESO_AUTOMATICO, "falló el cierre del periodo", null,
+                "/api/v1/matriculas", null, null);
+
+        LogErrorResponse response = LogErrorResponse.desdeEntidad(logError);
+
+        assertEquals("Sistema", response.nombreUsuario());
+        assertEquals("Proceso automático", response.tipoError());
+    }
+
+    @Test
+    void mapeoResponseConUsuarioMuestraSuNombre() {
+        Docente docente = new Docente();
+        docente.setId(7L);
+        docente.setNombre("Ana");
+        docente.setApellidoPaterno("Rojas");
+        LogError logError = new LogError(LocalDateTime.now(), docente, Modulo.NOTAS,
+                TipoError.EXCEPCION_NO_CONTROLADA, "boom", null, "/api/v1/evaluaciones", "POST", (short) 500);
+
+        LogErrorResponse response = LogErrorResponse.desdeEntidad(logError);
+
+        assertEquals("Ana Rojas", response.nombreUsuario());
+        assertEquals(7L, response.usuarioId());
     }
 
     @Test
@@ -154,7 +194,7 @@ class LogErrorServiceImplTest {
         when(moduloResolver.resolver(any())).thenReturn(Modulo.OTROS);
         when(usuarioRepository.findById(7L)).thenReturn(Optional.of(docente));
 
-        service.registrarError("origen", "tipo", "msg", null,
+        service.registrarError("origen", TipoError.EXCEPCION_NO_CONTROLADA, "msg", null,
                 "/api/v1/xyz", "GET", (short) 404, null);
 
         ArgumentCaptor<LogError> captor = ArgumentCaptor.forClass(LogError.class);
@@ -175,7 +215,7 @@ class LogErrorServiceImplTest {
         when(moduloResolver.resolver(any())).thenReturn(Modulo.OTROS);
         when(usuarioRepository.findById(9L)).thenReturn(Optional.of(explicito));
 
-        service.registrarError("origen", "tipo", "msg", null,
+        service.registrarError("origen", TipoError.EXCEPCION_NO_CONTROLADA, "msg", null,
                 "/api/v1/xyz", "GET", (short) 500, 9L);
 
         ArgumentCaptor<LogError> captor = ArgumentCaptor.forClass(LogError.class);
@@ -188,7 +228,7 @@ class LogErrorServiceImplTest {
         SecurityContextHolder.clearContext();
         when(moduloResolver.resolver(any())).thenReturn(Modulo.OTROS);
 
-        service.registrarError("origen", "tipo", "msg", null,
+        service.registrarError("origen", TipoError.EXCEPCION_NO_CONTROLADA, "msg", null,
                 "/api/v1/xyz", "GET", (short) 500, null);
 
         ArgumentCaptor<LogError> captor = ArgumentCaptor.forClass(LogError.class);

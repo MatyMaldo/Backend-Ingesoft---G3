@@ -23,6 +23,8 @@ import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -30,7 +32,9 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -135,12 +139,12 @@ class AuditoriaServiceImplTest {
     void listarAuditorias_incluyeUsuarioResueltoEnLote() {
         Auditoria auditoria = crearAuditoria(1L);
         PageRequest pageable = PageRequest.of(0, 10);
-        when(auditoriaRepository.buscarConFiltros(null, null, null, null, pageable))
+        when(auditoriaRepository.buscarConFiltros(null, null, null, null, "%", pageable))
                 .thenReturn(new PageImpl<>(List.of(auditoria), pageable, 1));
         when(usuarioRepository.findAllById(any())).thenReturn(List.of(crearAdmin()));
 
         Page<AuditoriaResponseDTO> resultado =
-                auditoriaService.listarAuditorias(null, null, null, null, pageable);
+                auditoriaService.listarAuditorias(null, null, null, null, null, pageable);
 
         AuditoriaResponseDTO dto = resultado.getContent().get(0);
         assertEquals(1L, dto.getUsuarioId());
@@ -148,6 +152,30 @@ class AuditoriaServiceImplTest {
         assertEquals("Admin Sistema", dto.getUsuario().nombre());
         assertEquals("ADMINISTRADOR", dto.getUsuario().rol());
         verify(usuarioRepository).findAllById(any());
+    }
+
+    @Test
+    void listarAuditorias_traduceLaBusquedaAUnPatronLikeEscapado() {
+        PageRequest pageable = PageRequest.of(0, 10);
+        when(auditoriaRepository.buscarConFiltros(null, null, null, null, "%100!%!_pago%", pageable))
+                .thenReturn(new PageImpl<>(List.of(), pageable, 0));
+
+        Page<AuditoriaResponseDTO> resultado =
+                auditoriaService.listarAuditorias(null, null, null, null, "  100%_Pago ", pageable);
+
+        assertEquals(0, resultado.getTotalElements());
+        verify(auditoriaRepository).buscarConFiltros(null, null, null, null, "%100!%!_pago%", pageable);
+    }
+
+    @Test
+    void listarAuditorias_busquedaEnBlancoNoFiltra() {
+        PageRequest pageable = PageRequest.of(0, 10);
+        when(auditoriaRepository.buscarConFiltros(null, null, null, null, "%", pageable))
+                .thenReturn(new PageImpl<>(List.of(), pageable, 0));
+
+        auditoriaService.listarAuditorias(null, null, null, null, "   ", pageable);
+
+        verify(auditoriaRepository).buscarConFiltros(null, null, null, null, "%", pageable);
     }
 
     @Test
@@ -167,11 +195,11 @@ class AuditoriaServiceImplTest {
     void listarAuditorias_sinUsuarioUsaSistema() {
         Auditoria auditoria = crearAuditoria(null);
         PageRequest pageable = PageRequest.of(0, 10);
-        when(auditoriaRepository.buscarConFiltros(null, null, null, null, pageable))
+        when(auditoriaRepository.buscarConFiltros(null, null, null, null, "%", pageable))
                 .thenReturn(new PageImpl<>(List.of(auditoria), pageable, 1));
 
         Page<AuditoriaResponseDTO> resultado =
-                auditoriaService.listarAuditorias(null, null, null, null, pageable);
+                auditoriaService.listarAuditorias(null, null, null, null, null, pageable);
 
         AuditoriaResponseDTO dto = resultado.getContent().get(0);
         assertNull(dto.getUsuarioId());
@@ -184,12 +212,12 @@ class AuditoriaServiceImplTest {
     void listarAuditorias_usuarioNoEncontradoUsaFallback() {
         Auditoria auditoria = crearAuditoria(99L);
         PageRequest pageable = PageRequest.of(0, 10);
-        when(auditoriaRepository.buscarConFiltros(null, null, null, null, pageable))
+        when(auditoriaRepository.buscarConFiltros(null, null, null, null, "%", pageable))
                 .thenReturn(new PageImpl<>(List.of(auditoria), pageable, 1));
         when(usuarioRepository.findAllById(any())).thenReturn(List.of());
 
         Page<AuditoriaResponseDTO> resultado =
-                auditoriaService.listarAuditorias(null, null, null, null, pageable);
+                auditoriaService.listarAuditorias(null, null, null, null, null, pageable);
 
         AuditoriaResponseDTO dto = resultado.getContent().get(0);
         assertEquals("Usuario #99", dto.getUsuario().nombre());
@@ -209,6 +237,56 @@ class AuditoriaServiceImplTest {
                 auditoriaService.obtenerHistorialPorEntidad("BloqueHorario", 10L, pageable);
 
         assertEquals("Admin Sistema", resultado.getContent().get(0).getUsuario().nombre());
+    }
+
+    @Test
+    void registrarAuditoria_conAutorFijoIgnoraAlUsuarioDelToken() {
+        Usuario docente = new Docente();
+        docente.setId(7L);
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken(docente, null, List.of()));
+        when(auditoriaRepository.saveAndFlush(any(Auditoria.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        auditoriaService.registrarAuditoria(dtoConUsuario(null).conAutorFijo());
+        auditoriaService.registrarAuditoria(dtoConUsuario(3L).conAutorFijo());
+
+        ArgumentCaptor<Auditoria> captor = ArgumentCaptor.forClass(Auditoria.class);
+        verify(auditoriaRepository, times(2)).saveAndFlush(captor.capture());
+        assertNull(captor.getAllValues().get(0).getUsuarioId());
+        assertEquals(3L, captor.getAllValues().get(1).getUsuarioId());
+    }
+
+    @Test
+    void listarAuditorias_loginSinUsuarioMuestraAutorNoDeterminado() {
+        Auditoria intento = crearAuditoria(null);
+        intento.setAccion(TipoAccionAuditoria.LOGIN);
+        PageRequest pageable = PageRequest.of(0, 10);
+        when(auditoriaRepository.buscarConFiltros(null, null, null, null, "%", pageable))
+                .thenReturn(new PageImpl<>(List.of(intento), pageable, 1));
+
+        AuditoriaResponseDTO dto = auditoriaService
+                .listarAuditorias(null, null, null, null, null, pageable).getContent().get(0);
+
+        assertNull(dto.getUsuarioId());
+        assertEquals("No determinado", dto.getUsuario().nombre());
+        assertEquals("NO_DETERMINADO", dto.getUsuario().rol());
+    }
+
+    @Test
+    void registrarAuditoria_siNoPuedeGuardarse_propagaElErrorParaCancelarLaOperacion() {
+        when(auditoriaRepository.saveAndFlush(any(Auditoria.class)))
+                .thenThrow(new IllegalStateException("BD caída"));
+
+        assertThrows(IllegalStateException.class, () -> auditoriaService.registrarAuditoria(dtoConUsuario(1L)));
+    }
+
+    @Test
+    void registrarAuditoria_exigeLaTransaccionDeLaOperacionAuditada() throws NoSuchMethodException {
+        Transactional transaccional = AuditoriaServiceImpl.class
+                .getMethod("registrarAuditoria", RegistrarAuditoriaRequestDTO.class)
+                .getAnnotation(Transactional.class);
+
+        assertEquals(Propagation.MANDATORY, transaccional.propagation());
     }
 
     @Test

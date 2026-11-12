@@ -30,8 +30,10 @@ public class AuditoriaController {
             @RequestParam(required = false) TipoAccionAuditoria accion,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime fechaInicio,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime fechaFin,
+            @RequestParam(required = false) String busqueda,
             Pageable pageable) {
-        Page<AuditoriaResponseDTO> resultado = auditoriaService.listarAuditorias(categoria, accion, fechaInicio, fechaFin, pageable);
+        Page<AuditoriaResponseDTO> resultado = auditoriaService.listarAuditorias(
+                categoria, accion, fechaInicio, fechaFin, busqueda, pageable);
         return ResponseEntity.ok(RespuestaApiResponse.crearExito(resultado));
     }
 

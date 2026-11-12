@@ -37,5 +37,26 @@ class LogErrorControllerTest {
         Sort.Order orden = pageableCaptor.getValue().getSort().getOrderFor("fechaHora");
         assertNotNull(orden);
         assertTrue(orden.isAscending());
+
+        // El id desempata en la misma dirección los errores registrados en el mismo segundo.
+        Sort.Order desempate = pageableCaptor.getValue().getSort().getOrderFor("id");
+        assertNotNull(desempate);
+        assertTrue(desempate.isAscending());
+    }
+
+    @Test
+    void porDefectoOrdenaDelMasRecienteAlMasAntiguoYDesempataPorId() {
+        LogErrorService service = mock(LogErrorService.class);
+        when(service.listarErrores(any(), any(), any(), any(), any()))
+                .thenReturn(Page.empty());
+
+        new LogErrorController(service).listarErrores(null, null, null, null, 0, 15, "DESC");
+
+        ArgumentCaptor<Pageable> pageableCaptor = ArgumentCaptor.forClass(Pageable.class);
+        verify(service).listarErrores(isNull(), isNull(), isNull(), isNull(), pageableCaptor.capture());
+
+        Sort sort = pageableCaptor.getValue().getSort();
+        assertTrue(sort.getOrderFor("fechaHora").isDescending());
+        assertTrue(sort.getOrderFor("id").isDescending());
     }
 }

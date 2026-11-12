@@ -1,8 +1,11 @@
 package com.educoders.Seguridad_Auditoria.dominio;
 
 import jakarta.persistence.*;
+import org.hibernate.annotations.Immutable;
 
+/** Valor antes/después de un campo de un {@link Auditoria}; de solo lectura como su registro (HU-SAT-04). */
 @Entity
+@Immutable
 @Table(name = "detalles_auditoria")
 public class DetalleAuditoria {
 
@@ -24,6 +27,16 @@ public class DetalleAuditoria {
     private String valorNuevo;
 
     public DetalleAuditoria() {
+    }
+
+    @PreUpdate
+    void rechazarModificacion() {
+        throw new IllegalStateException("Los detalles de auditoría no pueden modificarse.");
+    }
+
+    @PreRemove
+    void rechazarEliminacion() {
+        throw new IllegalStateException("Los detalles de auditoría no pueden eliminarse.");
     }
 
     public DetalleAuditoria(String campo, String valorAnterior, String valorNuevo) {

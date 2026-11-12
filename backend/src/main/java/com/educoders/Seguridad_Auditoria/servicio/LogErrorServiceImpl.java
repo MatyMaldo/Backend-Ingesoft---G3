@@ -1,8 +1,10 @@
 package com.educoders.Seguridad_Auditoria.servicio;
 
 import com.educoders.Infraestructura_Servicios.enums.Modulo;
+import com.educoders.Infraestructura_Servicios.enums.TipoError;
 import com.educoders.Infraestructura_Servicios.exception.ReglaNegocioException;
 import com.educoders.Infraestructura_Servicios.servicio.ModuloResolver;
+import com.educoders.Infraestructura_Servicios.util.PatronBusqueda;
 import com.educoders.Seguridad_Auditoria.dominio.LogError;
 import com.educoders.Seguridad_Auditoria.dominio.Usuario;
 import com.educoders.Seguridad_Auditoria.persistencia.LogErrorRepository;
@@ -41,7 +43,7 @@ public class LogErrorServiceImpl implements LogErrorService {
     }
 
     @Override
-    public void registrarError(String origen, String tipoError, String mensaje, String detalle,
+    public void registrarError(String origen, TipoError tipoError, String mensaje, String detalle,
                                String endpoint, String metodoHttp, Short codigoEstado, Long usuarioId) {
         try {
             Long idUsuarioFinal = resolverUsuarioId(usuarioId);
@@ -85,20 +87,8 @@ public class LogErrorServiceImpl implements LogErrorService {
             throw new ReglaNegocioException("Módulo no válido: " + modulo);
         }
         return logErrorRepository.buscarConFiltros(fechaInicio, fechaFin, moduloEnum,
-                        construirPatron(busqueda), pageable)
+                        PatronBusqueda.contiene(busqueda), pageable)
                 .map(LogErrorResponse::desdeEntidad);
-    }
-
-    /** Convierte el texto libre en un patrón LIKE en minúsculas, escapando los comodines. */
-    private String construirPatron(String busqueda) {
-        if (busqueda == null || busqueda.isBlank()) {
-            return "%";
-        }
-        String escapado = busqueda.trim().toLowerCase()
-                .replace("!", "!!")
-                .replace("%", "!%")
-                .replace("_", "!_");
-        return "%" + escapado + "%";
     }
 
     /** Si no llega un id explícito, toma el usuario autenticado del SecurityContext. */

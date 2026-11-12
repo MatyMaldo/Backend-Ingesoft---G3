@@ -3,12 +3,20 @@ package com.educoders.Seguridad_Auditoria.dominio;
 import com.educoders.Infraestructura_Servicios.enums.CategoriaAuditoria;
 import com.educoders.Infraestructura_Servicios.enums.TipoAccionAuditoria;
 import jakarta.persistence.*;
+import org.hibernate.annotations.Immutable;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * Registro de auditoría. Regla HU-SAT-04 (Esc. 1): una vez creado es de solo lectura y nadie puede
+ * modificarlo ni eliminarlo, ni siquiera el administrador. {@link Immutable} hace que Hibernate ignore
+ * cualquier cambio posterior, y los callbacks de ciclo de vida rechazan explícitamente la modificación
+ * y la eliminación como defensa adicional.
+ */
 @Entity
+@Immutable
 @Table(name = "auditorias")
 public class Auditoria {
 
@@ -39,10 +47,21 @@ public class Auditoria {
     @Column(name = "descripcion", length = 1000)
     private String descripcion;
 
-    @OneToMany(mappedBy = "auditoria", cascade = CascadeType.ALL, orphanRemoval = true)
+    // Solo se propaga el alta: ni la eliminación ni el borrado de huérfanos pueden tocar los detalles.
+    @OneToMany(mappedBy = "auditoria", cascade = CascadeType.PERSIST)
     private List<DetalleAuditoria> detalles = new ArrayList<>();
 
     public Auditoria() {
+    }
+
+    @PreUpdate
+    void rechazarModificacion() {
+        throw new IllegalStateException("Los registros de auditoría no pueden modificarse.");
+    }
+
+    @PreRemove
+    void rechazarEliminacion() {
+        throw new IllegalStateException("Los registros de auditoría no pueden eliminarse.");
     }
 
     public void agregarDetalle(DetalleAuditoria detalle) {
