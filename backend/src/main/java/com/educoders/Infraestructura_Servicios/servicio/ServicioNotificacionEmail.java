@@ -1,6 +1,7 @@
 package com.educoders.Infraestructura_Servicios.servicio;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 
 public interface ServicioNotificacionEmail {
 
@@ -29,5 +30,15 @@ public interface ServicioNotificacionEmail {
             String nombreEstudiante,
             String concepto,
             String motivo
+    );
+
+    /**
+     * Envía el código de verificación para definir o restablecer la contraseña.
+     */
+    void enviarCorreoRestablecimientoPassword(
+            String emailDestino,
+            String nombreUsuario,
+            String codigo,
+            LocalDateTime fechaExpiracion
     );
 }
