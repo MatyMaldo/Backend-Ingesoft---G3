@@ -16,10 +16,7 @@ import com.educoders.Gestion_Academica_Motor_Evaluacion.presentacion.dto.NotasCo
 import com.educoders.Gestion_Academica_Motor_Evaluacion.presentacion.dto.RegistrarNotasCompetenciasRequest;
 import com.educoders.Gestion_Matricula_Pagos.dominio.Matricula;
 import com.educoders.Gestion_Matricula_Pagos.persistencia.MatriculaRepository;
-import com.educoders.Infraestructura_Servicios.enums.CategoriaAuditoria;
-import com.educoders.Infraestructura_Servicios.enums.EstadoLibreta;
-import com.educoders.Infraestructura_Servicios.enums.EstadoMatricula;
-import com.educoders.Infraestructura_Servicios.enums.TipoAccionAuditoria;
+import com.educoders.Infraestructura_Servicios.enums.*;
 import com.educoders.Infraestructura_Servicios.exception.ReglaNegocioException;
 import com.educoders.Infraestructura_Servicios.exception.RecursoNoEncontradoException;
 import com.educoders.Seguridad_Auditoria.dominio.Docente;
@@ -268,6 +265,9 @@ public class NotasCompetenciasServiceImpl
             nota.setConclusionDescriptiva(conclusion);
             nota.setFechaRegistro(hoy);
 
+            // Generar descripción automática basada en la nota
+            nota.setDescripcion(generarDescripcionAutomatica(calificacion.valorNota()));
+
             NotaCompetencia guardada =
                     notaCompetenciaRepository.saveAndFlush(nota);
 
@@ -321,6 +321,7 @@ public class NotasCompetenciasServiceImpl
     }
 
     @Override
+    @Transactional(readOnly = true)
     public List<NotaCompetenciaResponse> listarNotasCompetencias(
             Optional<Long> idEstudiante,
             Optional<Long> idBimestre,
@@ -348,11 +349,25 @@ public class NotasCompetenciasServiceImpl
 
         return notas.stream()
                 .map(nota -> new NotaCompetenciaResponse(
+                        nota.getCompetencia().getId(),
                         nota.getCompetencia().getNombre(),
                         nota.getBimestre().getNombre().name(),
                         nota.getValor(),
                         nota.getConclusionDescriptiva()
                 ))
                 .collect(Collectors.toList());
+    }
+
+    /**
+     * Genera una descripción automática basada en la nota.
+     * Basado en los patrones de los inserts de la BD.
+     */
+    private String generarDescripcionAutomatica(EscalaNota nota) {
+        return switch (nota) {
+            case AD -> "Logro destacado";
+            case A -> "Logro esperado";
+            case B -> "En proceso";
+            case C -> "En inicio";
+        };
     }
 }

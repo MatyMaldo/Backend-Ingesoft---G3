@@ -131,6 +131,7 @@ public class NotaServiceImpl implements NotaService {
     }
 
     @Override
+    @Transactional(readOnly = true)
     public List<NotaResponse> listarNotasPorEvaluacion(Long idEvaluacion) {
         // Validar que la evaluación existe
         Evaluacion evaluacion = evaluacionRepository.findById(idEvaluacion)

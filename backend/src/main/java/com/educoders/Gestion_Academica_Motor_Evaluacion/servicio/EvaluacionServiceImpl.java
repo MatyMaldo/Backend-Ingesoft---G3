@@ -155,8 +155,9 @@ public class EvaluacionServiceImpl implements EvaluacionService {
 
         AnioAcademico anioVigente = anioVigenteOpt.get();
 
-        // 2. Obtener asignaciones del docente
-        List<AsignacionCurso> asignaciones = asignacionCursoRepository.findByDocenteId(docenteLogueado.getId());
+        // 2. Obtener asignaciones del docente filtradas por año vigente
+        List<AsignacionCurso> asignaciones = asignacionCursoRepository
+                .findByAnioAcademicoIdAndDocenteIdConDetalle(anioVigente.getId(), docenteLogueado.getId());
 
         // 3. Obtener bimestres del año vigente
         List<Bimestre> bimestres = bimestreRepository.findByAnioAcademicoId(anioVigente.getId());

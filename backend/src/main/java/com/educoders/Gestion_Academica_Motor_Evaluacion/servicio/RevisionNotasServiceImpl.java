@@ -115,6 +115,7 @@ public class RevisionNotasServiceImpl implements RevisionNotasService {
 
         List<NotaCompetenciaResponse> notasCompResponse = notasCompetencias.stream()
                 .map(nc -> new NotaCompetenciaResponse(
+                        nc.getCompetencia().getId(),
                         nc.getCompetencia().getNombre(),
                         nc.getBimestre().getNombre().name(),
                         nc.getValor(),

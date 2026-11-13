@@ -274,7 +274,7 @@ public class MatriculaServiceImpl implements MatriculaService {
     @Override
     @Transactional(readOnly = true)
     public List<EstudianteAsignacionResponse> listarEstudiantesActivosPorSeccion(Long seccionId) {
-        List<Matricula> matriculas = matriculaRepository.findBySeccionIdAndEstado(
+        List<Matricula> matriculas = matriculaRepository.buscarPorSeccionYEstadoConEstudiante(
                 seccionId,
                 EstadoMatricula.CONFIRMADA
         );
@@ -282,6 +282,7 @@ public class MatriculaServiceImpl implements MatriculaService {
         return matriculas.stream()
                 .map(m -> new EstudianteAsignacionResponse(
                         m.getEstudiante().getId(),
+                        m.getEstudiante().getCodigo(),
                         m.getEstudiante().getNombre(),
                         m.getEstudiante().getApellidoPaterno(),
                         m.getEstudiante().getApellidoMaterno(),
