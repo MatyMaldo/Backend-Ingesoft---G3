@@ -1,5 +1,7 @@
 package com.educoders.Gestion_Matriz_Horarios.servicio;
 
+import com.educoders.Gestion_Academica_Motor_Evaluacion.dominio.Bimestre;
+import com.educoders.Gestion_Academica_Motor_Evaluacion.persistencia.BimestreRepository;
 import com.educoders.Gestion_Matriz_Horarios.dominio.BloqueHorario;
 import com.educoders.Gestion_Matriz_Horarios.dominio.SesionClase;
 import com.educoders.Gestion_Matriz_Horarios.persistencia.BloqueHorarioRepository;
@@ -7,12 +9,14 @@ import com.educoders.Gestion_Matriz_Horarios.persistencia.SesionClaseRepository;
 import com.educoders.Gestion_Matriz_Horarios.presentacion.dto.*;
 import com.educoders.Gestion_Matricula_Pagos.dominio.Matricula;
 import com.educoders.Gestion_Matricula_Pagos.dominio.PeriodoMatricula;
-import com.educoders.Gestion_Matricula_Pagos.dominio.VentanaMatricula;
 import com.educoders.Gestion_Matricula_Pagos.persistencia.MatriculaRepository;
 import com.educoders.Gestion_Matricula_Pagos.persistencia.PeriodoMatriculaRepository;
+import com.educoders.Infraestructura_Servicios.enums.CategoriaAuditoria;
 import com.educoders.Infraestructura_Servicios.enums.DiaSemana;
 import com.educoders.Infraestructura_Servicios.enums.EstadoMatricula;
 import com.educoders.Infraestructura_Servicios.enums.EstadoSesion;
+import com.educoders.Infraestructura_Servicios.enums.NombreBimestre;
+import com.educoders.Infraestructura_Servicios.enums.TipoAccionAuditoria;
 import com.educoders.Infraestructura_Servicios.exception.RecursoNoEncontradoException;
 import com.educoders.Infraestructura_Servicios.exception.ReglaNegocioException;
 import com.educoders.Infraestructura_Servicios.operaciones.ProgresoLote;
@@ -21,6 +25,8 @@ import com.educoders.Seguridad_Auditoria.dominio.Docente;
 import com.educoders.Seguridad_Auditoria.dominio.Estudiante;
 import com.educoders.Seguridad_Auditoria.dominio.Usuario;
 import com.educoders.Seguridad_Auditoria.persistencia.EstudianteRepository;
+import com.educoders.Seguridad_Auditoria.presentacion.dto.RegistrarAuditoriaRequestDTO;
+import com.educoders.Seguridad_Auditoria.servicio.AuditoriaService;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -44,17 +50,23 @@ public class SesionClaseServiceImpl implements SesionClaseService {
     private final PeriodoMatriculaRepository periodoRepo;
     private final MatriculaRepository matriculaRepo;
     private final EstudianteRepository estudianteRepo;
+    private final BimestreRepository bimestreRepo;
+    private final AuditoriaService auditoriaService;
 
     public SesionClaseServiceImpl(SesionClaseRepository repo,
                                   BloqueHorarioRepository bloqueRepo,
                                   PeriodoMatriculaRepository periodoRepo,
                                   MatriculaRepository matriculaRepo,
-                                  EstudianteRepository estudianteRepo) {
+                                  EstudianteRepository estudianteRepo,
+                                  BimestreRepository bimestreRepo,
+                                  AuditoriaService auditoriaService) {
         this.repo = repo;
         this.bloqueRepo = bloqueRepo;
         this.periodoRepo = periodoRepo;
         this.matriculaRepo = matriculaRepo;
         this.estudianteRepo = estudianteRepo;
+        this.bimestreRepo = bimestreRepo;
+        this.auditoriaService = auditoriaService;
     }
 
     // ------------------------------------------------------------------
@@ -72,7 +84,10 @@ public class SesionClaseServiceImpl implements SesionClaseService {
     public GenerarSesionesResponse generarSesiones(GenerarSesionesRequest request,
                                                    ProgresoLote progreso) {
         validarFechas(request.getFechaInicio(), request.getFechaFin());
-        validarPeriodoCerrado(request.getAnioAcademicoId());
+        validarGeneracionHabilitada(
+                request.getAnioAcademicoId(),
+                request.getFechaInicio(),
+                request.getFechaFin());
 
         List<BloqueHorario> bloques = bloqueRepo.findByAsignacionCursoSeccionId(request.getSeccionId());
 
@@ -100,23 +115,40 @@ public class SesionClaseServiceImpl implements SesionClaseService {
                     if (bloque.getDiaSemana() != dia) {
                         continue;
                     }
-                    if (omitidas.contains(clave(bloque.getId(), fecha))) {
-                        resumen.setSesionesOmitidas(resumen.getSesionesOmitidas() + 1);
+                    boolean solicitadaOmitida = omitidas.contains(clave(bloque.getId(), fecha));
+                    SesionClase existente = buscarSesion(bloque.getId(), fecha);
+
+                    if (existente != null) {
+                        // La generación no sobrescribe sesiones existentes.
+                        if (solicitadaOmitida && existente.getEstado() == EstadoSesion.OMITIDA) {
+                            resumen.setSesionesOmitidas(resumen.getSesionesOmitidas() + 1);
+                            resumen.setSesionesOmitidasExistentes(
+                                    resumen.getSesionesOmitidasExistentes() + 1);
+                        } else {
+                            resumen.setSesionesYaExistentes(
+                                    resumen.getSesionesYaExistentes() + 1);
+                        }
                         continue;
                     }
-                    if (repo.existsByBloqueHorarioIdAndFecha(bloque.getId(), fecha)) {
-                        resumen.setSesionesYaExistentes(resumen.getSesionesYaExistentes() + 1);
-                        continue;
-                    }
+
                     try {
                         SesionClase sesion = new SesionClase();
                         sesion.setFecha(fecha);
                         sesion.setHoraInicio(LocalDateTime.of(fecha, bloque.getHoraInicio()));
                         sesion.setHoraFin(LocalDateTime.of(fecha, bloque.getHoraFin()));
-                        sesion.setEstado(EstadoSesion.PROGRAMADA);
+                        sesion.setEstado(solicitadaOmitida
+                                ? EstadoSesion.OMITIDA
+                                : EstadoSesion.PROGRAMADA);
                         sesion.setBloqueHorario(bloque);
                         repo.save(sesion);
-                        resumen.setSesionesCreadas(resumen.getSesionesCreadas() + 1);
+
+                        if (solicitadaOmitida) {
+                            resumen.setSesionesOmitidas(resumen.getSesionesOmitidas() + 1);
+                            resumen.setSesionesOmitidasCreadas(
+                                    resumen.getSesionesOmitidasCreadas() + 1);
+                        } else {
+                            resumen.setSesionesCreadas(resumen.getSesionesCreadas() + 1);
+                        }
                     } catch (Exception e) {
                         String mensaje = "Error en bloque " + bloque.getId()
                                 + " fecha " + fecha + ": " + e.getMessage();
@@ -132,7 +164,7 @@ public class SesionClaseServiceImpl implements SesionClaseService {
             if (progreso != null) {
                 progreso.actualizar(
                         diasProcesados,
-                        resumen.getSesionesCreadas(),
+                        resumen.getSesionesCreadas() + resumen.getSesionesOmitidasCreadas(),
                         resumen.getSesionesOmitidas() + resumen.getSesionesYaExistentes(),
                         resumen.getErrores().size());
             }
@@ -146,10 +178,51 @@ public class SesionClaseServiceImpl implements SesionClaseService {
     }
 
     @Override
+    @Transactional
+    public SesionClaseResponse cambiarOmision(Long id, boolean omitida) {
+        SesionClase sesion = repo.findById(id)
+                .orElseThrow(() -> RecursoNoEncontradoException.de("sesión de clase", id));
+
+        LocalDateTime inicio = LocalDateTime.of(
+                sesion.getFecha(), sesion.getBloqueHorario().getHoraInicio());
+        if (!inicio.isAfter(LocalDateTime.now())) {
+            throw new ReglaNegocioException(
+                    "Solo se pueden omitir o restaurar sesiones que aún no han comenzado.");
+        }
+
+        if (omitida) {
+            if (sesion.getEstado() == EstadoSesion.OMITIDA) {
+                return mapear(sesion);
+            }
+            if (sesion.getEstado() != EstadoSesion.PROGRAMADA) {
+                throw new ReglaNegocioException(
+                        "Solo una sesión programada puede marcarse como omitida.");
+            }
+            sesion.setEstado(EstadoSesion.OMITIDA);
+        } else {
+            if (sesion.getEstado() == EstadoSesion.PROGRAMADA) {
+                return mapear(sesion);
+            }
+            if (sesion.getEstado() != EstadoSesion.OMITIDA) {
+                throw new ReglaNegocioException(
+                        "Solo una sesión omitida puede restaurarse.");
+            }
+            sesion.setEstado(EstadoSesion.PROGRAMADA);
+        }
+
+        SesionClase guardada = repo.save(sesion);
+        auditarOmision(guardada, omitida);
+        return mapear(guardada);
+    }
+
+    @Override
     @Transactional(readOnly = true)
     public PreviewSesionesResponse previewSesiones(PreviewSesionesRequest request) {
         validarFechas(request.getFechaInicio(), request.getFechaFin());
-        validarPeriodoCerrado(request.getAnioAcademicoId());
+        validarGeneracionHabilitada(
+                request.getAnioAcademicoId(),
+                request.getFechaInicio(),
+                request.getFechaFin());
 
         List<BloqueHorario> bloques = bloqueRepo.findByAsignacionCursoSeccionId(request.getSeccionId());
 
@@ -176,7 +249,11 @@ public class SesionClaseServiceImpl implements SesionClaseService {
                     item.setDocenteId(bloque.getAsignacionCurso().getDocente().getId());
                     item.setDocenteNombre(bloque.getAsignacionCurso().getDocente().getNombre()
                             + " " + bloque.getAsignacionCurso().getDocente().getApellidoPaterno());
-                    item.setYaExiste(repo.existsByBloqueHorarioIdAndFecha(bloque.getId(), fecha));
+                    SesionClase existente = buscarSesion(bloque.getId(), fecha);
+                    item.setYaExiste(existente != null);
+                    if (existente != null) {
+                        item.setEstado(existente.getEstado());
+                    }
                     respuesta.getSesiones().add(item);
                 }
             }
@@ -277,6 +354,25 @@ public class SesionClaseServiceImpl implements SesionClaseService {
     // HELPERS
     // ------------------------------------------------------------------
 
+    private SesionClase buscarSesion(Long bloqueId, LocalDate fecha) {
+        return repo.findByBloqueHorarioIdAndFecha(bloqueId, fecha)
+                .stream()
+                .findFirst()
+                .orElse(null);
+    }
+
+    private void auditarOmision(SesionClase sesion, boolean omitida) {
+        auditoriaService.registrarAuditoria(new RegistrarAuditoriaRequestDTO(
+                null,
+                CategoriaAuditoria.HORARIOS,
+                TipoAccionAuditoria.ACTUALIZAR,
+                "SesionClase",
+                sesion.getId(),
+                omitida ? "Sesión marcada como omitida" : "Sesión restaurada",
+                List.of()
+        ));
+    }
+
     private void validarFechas(LocalDate inicio, LocalDate fin) {
         if (inicio == null || fin == null) {
             throw new ReglaNegocioException("Las fechas de inicio y fin son obligatorias.");
@@ -286,13 +382,42 @@ public class SesionClaseServiceImpl implements SesionClaseService {
         }
     }
 
-    private void validarPeriodoCerrado(Long anioAcademicoId) {
+    private void validarGeneracionHabilitada(Long anioAcademicoId,
+                                             LocalDate fechaInicio,
+                                             LocalDate fechaFin) {
         PeriodoMatricula periodo = periodoRepo.findByAnioAcademicoId(anioAcademicoId)
                 .orElseThrow(() -> new ReglaNegocioException(
                         "No existe un periodo de matrícula registrado para este año académico."));
-        if (!VentanaMatricula.generacionSesionesAbierta(periodo, LocalDate.now())) {
+
+        Bimestre primerBimestre = bimestreRepo
+                .findFirstByNombreAndAnioAcademicoIdOrderByAnioAcademicoAnioDesc(
+                        NombreBimestre.BIM_1, anioAcademicoId)
+                .orElseThrow(() -> new ReglaNegocioException(
+                        "No se encontró el primer bimestre del año académico."));
+
+        if (!primerBimestre.getFechaInicio().isAfter(periodo.getFechaFin())) {
             throw new ReglaNegocioException(
-                    "La generación de sesiones solo se habilita después de que termine el periodo de matrícula.");
+                    "Configuración inválida: el primer bimestre debe iniciar después del fin del periodo de matrícula.");
+        }
+
+        if (LocalDate.now().isBefore(primerBimestre.getFechaInicio())) {
+            throw new ReglaNegocioException(
+                    "La generación de sesiones se habilita desde el inicio del primer bimestre ("
+                            + primerBimestre.getFechaInicio() + ").");
+        }
+
+        if (fechaInicio.isBefore(primerBimestre.getFechaInicio())) {
+            throw new ReglaNegocioException(
+                    "La generación no puede empezar antes del primer bimestre ("
+                            + primerBimestre.getFechaInicio() + ").");
+        }
+
+        if (primerBimestre.getAnioAcademico() != null
+                && primerBimestre.getAnioAcademico().getFechaFin() != null
+                && fechaFin.isAfter(primerBimestre.getAnioAcademico().getFechaFin())) {
+            throw new ReglaNegocioException(
+                    "La generación no puede terminar después del año académico ("
+                            + primerBimestre.getAnioAcademico().getFechaFin() + ").");
         }
     }
 

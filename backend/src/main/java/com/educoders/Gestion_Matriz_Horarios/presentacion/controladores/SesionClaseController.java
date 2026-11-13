@@ -62,6 +62,14 @@ public class SesionClaseController {
                         IniciarOperacionResponse.desde(operacion)));
     }
 
+    @PatchMapping("/{id}/omision")
+    public ResponseEntity<RespuestaApiResponse<SesionClaseResponse>> cambiarOmision(
+            @PathVariable Long id,
+            @Valid @RequestBody CambiarOmisionRequest request) {
+        return ResponseEntity.ok(RespuestaApiResponse.crearExito(
+                service.cambiarOmision(id, request.omitida())));
+    }
+
     @GetMapping
     public ResponseEntity<RespuestaApiResponse<List<SesionClaseResponse>>> listar(
             @RequestParam Long seccionId,

@@ -4,6 +4,7 @@ import com.educoders.Gestion_Academica_Motor_Evaluacion.presentacion.controlador
 import com.educoders.Gestion_Academica_Motor_Evaluacion.servicio.AsignacionCursoService;
 import com.educoders.Gestion_Matriz_Horarios.presentacion.controladores.BloqueHorarioController;
 import com.educoders.Gestion_Matriz_Horarios.presentacion.controladores.SesionClaseController;
+import com.educoders.Gestion_Matriz_Horarios.presentacion.dto.SesionClaseResponse;
 import com.educoders.Gestion_Matriz_Horarios.servicio.BloqueHorarioService;
 import com.educoders.Gestion_Matriz_Horarios.servicio.HorarioCargaMasivaService;
 import com.educoders.Gestion_Matriz_Horarios.servicio.HorarioCsvService;
@@ -26,6 +27,8 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -72,6 +75,27 @@ class SeguridadEscrituraHorariosTest {
             {"anioAcademicoId":1,"seccionId":1,
              "fechaInicio":"2027-03-02","fechaFin":"2027-03-06"}
             """;
+
+    @Test
+    @WithMockUser(roles = "ADMINISTRADOR")
+    void adminPuedeCambiarOmisionDeSesion() throws Exception {
+        when(sesionClaseService.cambiarOmision(1L, true))
+                .thenReturn(new SesionClaseResponse());
+
+        mvc.perform(patch("/api/v1/sesiones-clase/1/omision")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"omitida\":true}"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    @WithMockUser(roles = "DOCENTE")
+    void docenteNoPuedeCambiarOmisionDeSesion() throws Exception {
+        mvc.perform(patch("/api/v1/sesiones-clase/1/omision")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"omitida\":true}"))
+                .andExpect(status().isForbidden());
+    }
 
     @Test
     @WithMockUser(roles = "ADMINISTRADOR")

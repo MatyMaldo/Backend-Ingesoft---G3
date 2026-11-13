@@ -4,6 +4,7 @@ import com.educoders.Gestion_Academica_Motor_Evaluacion.dominio.Bimestre;
 import com.educoders.Infraestructura_Servicios.enums.NombreBimestre;
 import org.springframework.data.jpa.repository.JpaRepository;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Optional;
 
 public interface BimestreRepository extends JpaRepository<Bimestre, Long> {
@@ -19,4 +20,5 @@ public interface BimestreRepository extends JpaRepository<Bimestre, Long> {
     // Busca el bimestre vigente para una fecha específica en un año académico específico
     Optional<Bimestre> findByAnioAcademicoIdAndFechaInicioLessThanEqualAndFechaFinGreaterThanEqual(Long anioAcademicoId, LocalDate fechaInicio, LocalDate fechaFin);
 
+    List<Bimestre> findByAnioAcademicoIdOrderByFechaInicioAsc(Long anioAcademicoId);
 }

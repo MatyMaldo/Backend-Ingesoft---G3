@@ -1,6 +1,7 @@
 package com.educoders.Gestion_Matriz_Horarios.presentacion.dto;
 
 import com.educoders.Infraestructura_Servicios.enums.DiaSemana;
+import com.educoders.Infraestructura_Servicios.enums.EstadoSesion;
 
 import java.time.LocalDate;
 import java.time.LocalTime;
@@ -19,6 +20,7 @@ public class SesionPreviewItem {
     private Long docenteId;
     private String docenteNombre;
     private boolean yaExiste;
+    private EstadoSesion estado;
 
     public SesionPreviewItem() {
     }
@@ -47,4 +49,6 @@ public class SesionPreviewItem {
     public void setDocenteNombre(String docenteNombre) { this.docenteNombre = docenteNombre; }
     public boolean isYaExiste() { return yaExiste; }
     public void setYaExiste(boolean yaExiste) { this.yaExiste = yaExiste; }
+    public EstadoSesion getEstado() { return estado; }
+    public void setEstado(EstadoSesion estado) { this.estado = estado; }
 }

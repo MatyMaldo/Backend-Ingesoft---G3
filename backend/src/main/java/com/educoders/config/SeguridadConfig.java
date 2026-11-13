@@ -237,6 +237,11 @@ public class SeguridadConfig {
                                 ).hasRole("ADMINISTRADOR")
 
                                 .requestMatchers(
+                                        HttpMethod.PATCH,
+                                        "/api/v1/sesiones-clase/*/omision"
+                                ).hasRole("ADMINISTRADOR")
+
+                                .requestMatchers(
                                         HttpMethod.PUT,
                                         "/api/v1/asignaciones-curso/**",
                                         "/api/v1/bloques-horario/**",
