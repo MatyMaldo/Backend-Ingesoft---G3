@@ -6,6 +6,7 @@ import com.educoders.Seguridad_Auditoria.dominio.Estudiante;
 import com.educoders.Seguridad_Auditoria.dominio.Usuario;
 import com.educoders.Seguridad_Auditoria.persistencia.UsuarioRepository;
 import com.educoders.Seguridad_Auditoria.presentacion.dto.ActualizarUsuarioRequest;
+import com.educoders.Seguridad_Auditoria.presentacion.dto.RegistrarAuditoriaRequestDTO;
 import com.educoders.Seguridad_Auditoria.presentacion.dto.UsuarioResponse;
 import com.educoders.Infraestructura_Servicios.exception.ConflictoException;
 import com.educoders.Infraestructura_Servicios.exception.RecursoNoEncontradoException;
@@ -35,13 +36,16 @@ public class UsuarioServiceImpl implements UsuarioService {
     private final UsuarioRepository usuarioRepository;
     private final SeccionRepository seccionRepository;
     private final BimestreRepository bimestreRepository;
+    private final AuditoriaService auditoriaService;
 
     public UsuarioServiceImpl(UsuarioRepository usuarioRepository,
                               SeccionRepository seccionRepository,
-                              BimestreRepository bimestreRepository) {
+                              BimestreRepository bimestreRepository,
+                              AuditoriaService auditoriaService) {
         this.usuarioRepository = usuarioRepository;
         this.seccionRepository = seccionRepository;
         this.bimestreRepository = bimestreRepository;
+        this.auditoriaService = auditoriaService;
     }
 
     @Override
@@ -95,6 +99,8 @@ public class UsuarioServiceImpl implements UsuarioService {
             throw new ReglaNegocioException("No se pueden modificar usuarios administrador.");
         }
 
+        AuditoriaUsuarios.DatosEditables antes = AuditoriaUsuarios.datosEditables(usuario);
+
         if (tieneTexto(solicitud.nombre())) {
             usuario.setNombre(solicitud.nombre());
         }
@@ -127,7 +133,16 @@ public class UsuarioServiceImpl implements UsuarioService {
             usuario.setTelefono(solicitud.telefono());
         }
 
-        return convertirARespuesta(usuarioRepository.save(usuario));
+        Usuario guardado = usuarioRepository.save(usuario);
+
+        // HU-SAT-04: un único registro con los campos que cambiaron (antes y después), en la misma transacción.
+        RegistrarAuditoriaRequestDTO auditoria = AuditoriaUsuarios.edicion(
+                guardado, antes, AuditoriaUsuarios.datosEditables(guardado));
+        if (auditoria != null) {
+            auditoriaService.registrarAuditoria(auditoria);
+        }
+
+        return convertirARespuesta(guardado);
     }
 
     /**
@@ -157,6 +172,7 @@ public class UsuarioServiceImpl implements UsuarioService {
                 // Desactivar usuario
                 usuario.setActivo(false);
                 usuarioRepository.save(usuario);
+                auditoriaService.registrarAuditoria(AuditoriaUsuarios.cambioDeEstado(usuario, false));
 
                 // Solo remover tutor de secciones cuyo año académico esté abierto
                 List<UsuarioResponse.SeccionAfectadaInfo> seccionesInfo = new java.util.ArrayList<>();
@@ -211,7 +227,9 @@ public class UsuarioServiceImpl implements UsuarioService {
         }
 
         usuario.setActivo(false);
-        return convertirARespuesta(usuarioRepository.save(usuario));
+        Usuario guardado = usuarioRepository.save(usuario);
+        auditoriaService.registrarAuditoria(AuditoriaUsuarios.cambioDeEstado(guardado, false));
+        return convertirARespuesta(guardado);
     }
 
     @Override
@@ -228,7 +246,9 @@ public class UsuarioServiceImpl implements UsuarioService {
         }
 
         usuario.setActivo(true);
-        return convertirARespuesta(usuarioRepository.save(usuario));
+        Usuario guardado = usuarioRepository.save(usuario);
+        auditoriaService.registrarAuditoria(AuditoriaUsuarios.cambioDeEstado(guardado, true));
+        return convertirARespuesta(guardado);
     }
 
     private Usuario obtenerEntidad(Long idUsuario) {

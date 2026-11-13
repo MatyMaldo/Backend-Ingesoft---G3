@@ -1,10 +1,19 @@
 package com.educoders.Seguridad_Auditoria.dominio;
 
 import com.educoders.Infraestructura_Servicios.enums.Modulo;
+import com.educoders.Infraestructura_Servicios.enums.TipoError;
 import jakarta.persistence.*;
+import org.hibernate.annotations.Immutable;
+
 import java.time.LocalDateTime;
 
+/**
+ * Error registrado por el sistema (HU-SAT-06). Una vez creado es de solo lectura: nadie puede modificarlo ni
+ * eliminarlo, ni siquiera el administrador (Esc. 5). {@link Immutable} hace que Hibernate ignore cualquier cambio y los
+ * callbacks de ciclo de vida lo rechazan explícitamente; en la base lo refuerzan los triggers de {@code logs_error}.
+ */
 @Entity
+@Immutable
 @Table(name = "logs_error")
 public class LogError {
 
@@ -23,8 +32,9 @@ public class LogError {
     @Column(name = "modulo", nullable = false, length = 60)
     private Modulo modulo;
 
+    @Convert(converter = TipoErrorConverter.class)
     @Column(name = "tipo_error", nullable = false, length = 160)
-    private String tipoError;
+    private TipoError tipoError;
 
     @Column(nullable = false, length = 2000)
     private String mensaje;
@@ -43,7 +53,17 @@ public class LogError {
 
     public LogError() {}
 
-    public LogError(LocalDateTime fechaHora, Usuario usuario, Modulo modulo, String tipoError,
+    @PreUpdate
+    void rechazarModificacion() {
+        throw new IllegalStateException("Los registros del log de errores no pueden modificarse.");
+    }
+
+    @PreRemove
+    void rechazarEliminacion() {
+        throw new IllegalStateException("Los registros del log de errores no pueden eliminarse.");
+    }
+
+    public LogError(LocalDateTime fechaHora, Usuario usuario, Modulo modulo, TipoError tipoError,
                     String mensaje, String detalle, String endpoint, String metodoHttp, Short codigoEstado) {
         this.fechaHora = fechaHora;
         this.usuario = usuario;
@@ -68,8 +88,8 @@ public class LogError {
     public Modulo getModulo() { return modulo; }
     public void setModulo(Modulo modulo) { this.modulo = modulo; }
 
-    public String getTipoError() { return tipoError; }
-    public void setTipoError(String tipoError) { this.tipoError = tipoError; }
+    public TipoError getTipoError() { return tipoError; }
+    public void setTipoError(TipoError tipoError) { this.tipoError = tipoError; }
 
     public String getMensaje() { return mensaje; }
     public void setMensaje(String mensaje) { this.mensaje = mensaje; }

@@ -11,10 +11,15 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 public interface AuditoriaService {
+    /**
+     * Registra una auditoría dentro de la transacción de la operación auditada (HU-SAT-04, atomicidad).
+     * Debe llamarse con una transacción abierta; si no puede guardarse lanza una excepción, que cancela la operación.
+     */
     void registrarAuditoria(RegistrarAuditoriaRequestDTO dto);
     Page<AuditoriaResponseDTO> listarAuditorias(CategoriaAuditoria categoria,
                                                 TipoAccionAuditoria accion,
-                                                LocalDateTime fechaInicio, LocalDateTime fechaFin, Pageable pageable);
+                                                LocalDateTime fechaInicio, LocalDateTime fechaFin,
+                                                String busqueda, Pageable pageable);
     Page<AuditoriaResponseDTO> obtenerHistorialPorEntidad(String entidad, Long entidadId, Pageable pageable);
     AuditoriaResponseDTO obtenerPorId(Long id);
 }

@@ -5,12 +5,13 @@ import com.educoders.Gestion_Academica_Motor_Evaluacion.dominio.Bimestre;
 import com.educoders.Gestion_Academica_Motor_Evaluacion.persistencia.AnioAcademicoRepository;
 import com.educoders.Gestion_Academica_Motor_Evaluacion.persistencia.BimestreRepository;
 import com.educoders.Gestion_Academica_Motor_Evaluacion.presentacion.dto.AnioAcademicoResponse;
-import com.educoders.Gestion_Academica_Motor_Evaluacion.presentacion.dto.ContextoDocenteResponse;
+import com.educoders.Gestion_Academica_Motor_Evaluacion.presentacion.dto.BimestreResponse;
 import com.educoders.Gestion_Academica_Motor_Evaluacion.presentacion.dto.PeriodoMatriculaEstadoResponse;
 import com.educoders.Gestion_Matricula_Pagos.dominio.PeriodoMatricula;
 import com.educoders.Gestion_Matricula_Pagos.dominio.VentanaMatricula;
 import com.educoders.Gestion_Matricula_Pagos.persistencia.PeriodoMatriculaRepository;
 import com.educoders.Infraestructura_Servicios.enums.EstadoPeriodoMatricula;
+import com.educoders.Infraestructura_Servicios.enums.NombreBimestre;
 import com.educoders.Infraestructura_Servicios.exception.RecursoNoEncontradoException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -88,6 +89,15 @@ public class AnioAcademicoServiceImpl implements AnioAcademicoService {
         LocalDate hoy = LocalDate.now();
         EstadoPeriodoMatricula estado = VentanaMatricula.estado(periodo, hoy);
 
+        Bimestre primerBimestre = bimestreRepository
+                .findFirstByNombreAndAnioAcademicoIdOrderByAnioAcademicoAnioDesc(
+                        NombreBimestre.BIM_1, anioId)
+                .orElse(null);
+
+        boolean generacionSesionesAbierta = primerBimestre != null
+                && VentanaMatricula.generacionSesionesAbierta(
+                        periodo.getFechaFin(), primerBimestre.getFechaInicio(), hoy);
+
         return new PeriodoMatriculaEstadoResponse(
                 periodo.getId(),
                 anio.getId(),
@@ -97,25 +107,23 @@ public class AnioAcademicoServiceImpl implements AnioAcademicoService {
                 estado,
                 VentanaMatricula.asignacionCursoDocenteAbierta(periodo, hoy),
                 VentanaMatricula.crudBloquesHorarioAbierta(periodo, hoy),
-                VentanaMatricula.generacionSesionesAbierta(periodo, hoy)
+                generacionSesionesAbierta
         );
     }
 
     @Override
     @Transactional(readOnly = true)
-    public List<ContextoDocenteResponse.BimestreInfo> listarBimestres(Long idAnio) {
-        LocalDate hoy = LocalDate.now();
+    public List<BimestreResponse> listarBimestres(Long anioId) {
+        anioAcademicoRepository.findById(anioId)
+                .orElseThrow(() -> RecursoNoEncontradoException.de("Año académico", anioId));
 
-        List<Bimestre> bimestres = bimestreRepository.findByAnioAcademicoId(idAnio);
-
-        return bimestres.stream()
-                .map(b -> new ContextoDocenteResponse.BimestreInfo(
-                        b.getId(),
-                        b.getNombre(),
-                        b.getFechaInicio().toString(),
-                        b.getFechaFin().toString(),
-                        hoy.isAfter(b.getFechaFin())
-                ))
-                .collect(Collectors.toList());
+        return bimestreRepository.findByAnioAcademicoIdOrderByFechaInicioAsc(anioId)
+                .stream()
+                .map(bimestre -> new BimestreResponse(
+                        bimestre.getId(),
+                        bimestre.getNombre(),
+                        bimestre.getFechaInicio(),
+                        bimestre.getFechaFin()))
+                .toList();
     }
 }

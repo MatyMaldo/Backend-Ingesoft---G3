@@ -35,17 +35,20 @@ public class ApoderadoServiceImpl implements ApoderadoService {
     private final ApoderadoRepository apoderadoRepository;
     private final EstudianteRepository estudianteRepository;
     private final MatriculaRepository matriculaRepository;
+    private final AuditoriaService auditoriaService;
 
     public ApoderadoServiceImpl(
             UsuarioRepository usuarioRepository,
             ApoderadoRepository apoderadoRepository,
             EstudianteRepository estudianteRepository,
-            MatriculaRepository matriculaRepository) {
+            MatriculaRepository matriculaRepository,
+            AuditoriaService auditoriaService) {
 
         this.usuarioRepository = usuarioRepository;
         this.apoderadoRepository = apoderadoRepository;
         this.estudianteRepository = estudianteRepository;
         this.matriculaRepository = matriculaRepository;
+        this.auditoriaService = auditoriaService;
     }
 
     /**
@@ -81,6 +84,8 @@ public class ApoderadoServiceImpl implements ApoderadoService {
 
         Apoderado apoderadoGuardado =
                 apoderadoRepository.save(apoderado);
+        // HU-SAT-04: el alta y su registro de auditoría se confirman juntos (misma transacción).
+        auditoriaService.registrarAuditoria(AuditoriaUsuarios.registro(apoderadoGuardado));
 
         return convertirARespuesta(apoderadoGuardado);
     }

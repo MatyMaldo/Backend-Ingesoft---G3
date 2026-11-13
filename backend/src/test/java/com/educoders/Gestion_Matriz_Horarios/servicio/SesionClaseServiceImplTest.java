@@ -1,12 +1,15 @@
 package com.educoders.Gestion_Matriz_Horarios.servicio;
 
+import com.educoders.Gestion_Academica_Motor_Evaluacion.dominio.AnioAcademico;
 import com.educoders.Gestion_Academica_Motor_Evaluacion.dominio.AsignacionCurso;
+import com.educoders.Gestion_Academica_Motor_Evaluacion.dominio.Bimestre;
 import com.educoders.Gestion_Academica_Motor_Evaluacion.dominio.Curso;
 import com.educoders.Gestion_Academica_Motor_Evaluacion.dominio.Grado;
 import com.educoders.Gestion_Academica_Motor_Evaluacion.dominio.Seccion;
 import com.educoders.Gestion_Matriz_Horarios.dominio.Aula;
 import com.educoders.Gestion_Matriz_Horarios.dominio.BloqueHorario;
 import com.educoders.Gestion_Matriz_Horarios.dominio.SesionClase;
+import com.educoders.Gestion_Academica_Motor_Evaluacion.persistencia.BimestreRepository;
 import com.educoders.Gestion_Matriz_Horarios.persistencia.BloqueHorarioRepository;
 import com.educoders.Gestion_Matriz_Horarios.persistencia.SesionClaseRepository;
 import com.educoders.Gestion_Matriz_Horarios.presentacion.dto.GenerarSesionesRequest;
@@ -22,6 +25,7 @@ import com.educoders.Gestion_Matricula_Pagos.persistencia.PeriodoMatriculaReposi
 import com.educoders.Infraestructura_Servicios.enums.EstadoMatricula;
 import com.educoders.Infraestructura_Servicios.enums.DiaSemana;
 import com.educoders.Infraestructura_Servicios.enums.EstadoSesion;
+import com.educoders.Infraestructura_Servicios.enums.NombreBimestre;
 import com.educoders.Infraestructura_Servicios.exception.ReglaNegocioException;
 import com.educoders.Infraestructura_Servicios.operaciones.ProgresoLote;
 import com.educoders.Seguridad_Auditoria.dominio.Apoderado;
@@ -29,8 +33,10 @@ import com.educoders.Seguridad_Auditoria.dominio.Docente;
 import com.educoders.Seguridad_Auditoria.dominio.Estudiante;
 import com.educoders.Seguridad_Auditoria.dominio.Usuario;
 import com.educoders.Seguridad_Auditoria.persistencia.EstudianteRepository;
+import com.educoders.Seguridad_Auditoria.servicio.AuditoriaService;
 
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -54,6 +60,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -79,13 +86,46 @@ class SesionClaseServiceImplTest {
     @Mock
     private EstudianteRepository estudianteRepo;
 
+    @Mock
+    private BimestreRepository bimestreRepo;
+
+    @Mock
+    private AuditoriaService auditoriaService;
+
     @InjectMocks
     private SesionClaseServiceImpl sesionService;
 
     private static final LocalDate LUNES_1 = LocalDate.of(2027, 3, 1);
     private static final LocalDate LUNES_2 = LocalDate.of(2027, 3, 8);
 
+    @BeforeEach
+    void configurarVentanaGeneracion() {
+        lenient().when(bimestreRepo
+                        .findFirstByNombreAndAnioAcademicoIdOrderByAnioAcademicoAnioDesc(
+                                NombreBimestre.BIM_1, 1L))
+                .thenReturn(Optional.of(primerBimestre(LocalDate.now())));
+    }
+
     // --- Helpers ---
+
+    private Bimestre primerBimestre(LocalDate inicio) {
+        return primerBimestre(inicio, inicio.plusYears(1));
+    }
+
+    private Bimestre primerBimestre(LocalDate inicio, LocalDate finAnio) {
+        AnioAcademico anio = new AnioAcademico();
+        anio.setId(1L);
+        anio.setAnio(2027);
+        anio.setFechaInicio(inicio.minusMonths(1));
+        anio.setFechaFin(finAnio);
+
+        Bimestre bimestre = new Bimestre();
+        bimestre.setNombre(NombreBimestre.BIM_1);
+        bimestre.setFechaInicio(inicio);
+        bimestre.setFechaFin(inicio.plusMonths(2));
+        bimestre.setAnioAcademico(anio);
+        return bimestre;
+    }
 
     private BloqueHorario crearBloque(Long id, DiaSemana dia, LocalTime inicio, LocalTime fin) {
         Aula aula = new Aula();
@@ -176,7 +216,8 @@ class SesionClaseServiceImplTest {
 
         when(periodoRepo.findByAnioAcademicoId(1L)).thenReturn(Optional.of(crearPeriodoCerrado()));
         when(bloqueRepo.findByAsignacionCursoSeccionId(1L)).thenReturn(List.of(bloque));
-        when(repo.existsByBloqueHorarioIdAndFecha(10L, LUNES_1)).thenReturn(false);
+        when(repo.findByBloqueHorarioIdAndFecha(10L, LUNES_1))
+                .thenReturn(List.of());
 
         PreviewSesionesResponse r = sesionService.previewSesiones(previewReq(LUNES_1, LUNES_1));
 
@@ -197,7 +238,8 @@ class SesionClaseServiceImplTest {
 
         when(periodoRepo.findByAnioAcademicoId(1L)).thenReturn(Optional.of(crearPeriodoCerrado()));
         when(bloqueRepo.findByAsignacionCursoSeccionId(1L)).thenReturn(List.of(bloque));
-        when(repo.existsByBloqueHorarioIdAndFecha(10L, LUNES_1)).thenReturn(true);
+        when(repo.findByBloqueHorarioIdAndFecha(10L, LUNES_1))
+                .thenReturn(List.of(crearSesion(100L, bloque, LUNES_1)));
 
         PreviewSesionesResponse r = sesionService.previewSesiones(previewReq(LUNES_1, LUNES_1));
 
@@ -208,10 +250,13 @@ class SesionClaseServiceImplTest {
     @Test
     void previewSesiones_periodoAbierto() {
         when(periodoRepo.findByAnioAcademicoId(1L)).thenReturn(Optional.of(crearPeriodoAbierto()));
+        when(bimestreRepo.findFirstByNombreAndAnioAcademicoIdOrderByAnioAcademicoAnioDesc(
+                NombreBimestre.BIM_1, 1L))
+                .thenReturn(Optional.of(primerBimestre(LocalDate.now().plusMonths(4))));
 
         ReglaNegocioException ex = assertThrows(ReglaNegocioException.class,
                 () -> sesionService.previewSesiones(previewReq(LUNES_1, LUNES_1)));
-        assertEquals("La generación de sesiones solo se habilita después de que termine el periodo de matrícula.", ex.getMessage());
+        assertTrue(ex.getMessage().contains("primer bimestre"));
     }
 
     @Test
@@ -245,7 +290,8 @@ class SesionClaseServiceImplTest {
 
         when(periodoRepo.findByAnioAcademicoId(1L)).thenReturn(Optional.of(crearPeriodoCerrado()));
         when(bloqueRepo.findByAsignacionCursoSeccionId(1L)).thenReturn(List.of(bloque));
-        when(repo.existsByBloqueHorarioIdAndFecha(10L, LUNES_1)).thenReturn(false);
+        when(repo.findByBloqueHorarioIdAndFecha(10L, LUNES_1))
+                .thenReturn(List.of());
         when(repo.save(any(SesionClase.class))).thenAnswer(inv -> inv.getArgument(0));
 
         GenerarSesionesResponse r = sesionService.generarSesiones(generarReq(LUNES_1, LUNES_1));
@@ -264,7 +310,8 @@ class SesionClaseServiceImplTest {
 
         when(periodoRepo.findByAnioAcademicoId(1L)).thenReturn(Optional.of(crearPeriodoCerrado()));
         when(bloqueRepo.findByAsignacionCursoSeccionId(1L)).thenReturn(List.of(bloque));
-        when(repo.existsByBloqueHorarioIdAndFecha(any(), any())).thenReturn(false);
+        when(repo.findByBloqueHorarioIdAndFecha(any(), any()))
+                .thenReturn(List.of());
         when(repo.save(any(SesionClase.class))).thenAnswer(inv -> inv.getArgument(0));
 
         ProgresoGrabado progreso = new ProgresoGrabado();
@@ -283,7 +330,8 @@ class SesionClaseServiceImplTest {
 
         when(periodoRepo.findByAnioAcademicoId(1L)).thenReturn(Optional.of(crearPeriodoCerrado()));
         when(bloqueRepo.findByAsignacionCursoSeccionId(1L)).thenReturn(List.of(bloque));
-        when(repo.existsByBloqueHorarioIdAndFecha(10L, LUNES_1)).thenReturn(true);
+        when(repo.findByBloqueHorarioIdAndFecha(10L, LUNES_1))
+                .thenReturn(List.of(crearSesion(100L, bloque, LUNES_1)));
 
         GenerarSesionesResponse r = sesionService.generarSesiones(generarReq(LUNES_1, LUNES_1));
 
@@ -298,7 +346,8 @@ class SesionClaseServiceImplTest {
 
         when(periodoRepo.findByAnioAcademicoId(1L)).thenReturn(Optional.of(crearPeriodoCerrado()));
         when(bloqueRepo.findByAsignacionCursoSeccionId(1L)).thenReturn(List.of(bloque));
-        when(repo.existsByBloqueHorarioIdAndFecha(10L, LUNES_1)).thenReturn(false);
+        when(repo.findByBloqueHorarioIdAndFecha(10L, LUNES_1))
+                .thenReturn(List.of());
         when(repo.save(any(SesionClase.class))).thenAnswer(inv -> inv.getArgument(0));
 
         GenerarSesionesRequest req = generarReq(LUNES_1, LUNES_2);
@@ -308,7 +357,160 @@ class SesionClaseServiceImplTest {
 
         assertEquals(1, r.getSesionesCreadas());
         assertEquals(1, r.getSesionesOmitidas());
-        verify(repo).save(any(SesionClase.class));
+        assertEquals(1, r.getSesionesOmitidasCreadas());
+        verify(repo, times(2)).save(any(SesionClase.class));
+    }
+
+    @Test
+    void generarSesiones_sinPrimerBimestre_rechaza() {
+        when(periodoRepo.findByAnioAcademicoId(1L)).thenReturn(Optional.of(crearPeriodoCerrado()));
+        when(bimestreRepo.findFirstByNombreAndAnioAcademicoIdOrderByAnioAcademicoAnioDesc(
+                NombreBimestre.BIM_1, 1L)).thenReturn(Optional.empty());
+
+        ReglaNegocioException ex = assertThrows(ReglaNegocioException.class,
+                () -> sesionService.generarSesiones(generarReq(LUNES_1, LUNES_1)));
+        assertTrue(ex.getMessage().contains("primer bimestre"));
+    }
+
+    @Test
+    void generarSesiones_bimestreAntesDelFinDelPeriodo_rechaza() {
+        PeriodoMatricula periodo = crearPeriodoCerrado();
+        when(periodoRepo.findByAnioAcademicoId(1L)).thenReturn(Optional.of(periodo));
+        when(bimestreRepo.findFirstByNombreAndAnioAcademicoIdOrderByAnioAcademicoAnioDesc(
+                NombreBimestre.BIM_1, 1L))
+                .thenReturn(Optional.of(primerBimestre(periodo.getFechaFin().minusDays(1))));
+
+        ReglaNegocioException ex = assertThrows(ReglaNegocioException.class,
+                () -> sesionService.generarSesiones(generarReq(LUNES_1, LUNES_1)));
+        assertTrue(ex.getMessage().contains("después del fin del periodo"));
+    }
+
+    @Test
+    void generarSesiones_inicioAntesDelPrimerBimestre_rechaza() {
+        when(periodoRepo.findByAnioAcademicoId(1L)).thenReturn(Optional.of(crearPeriodoCerrado()));
+
+        GenerarSesionesRequest req = generarReq(
+                LocalDate.now().minusDays(1), LocalDate.now());
+
+        ReglaNegocioException ex = assertThrows(ReglaNegocioException.class,
+                () -> sesionService.generarSesiones(req));
+        assertTrue(ex.getMessage().contains("empezar antes del primer bimestre"));
+    }
+
+    @Test
+    void previewSesiones_inicioAntesDelPrimerBimestre_rechaza() {
+        when(periodoRepo.findByAnioAcademicoId(1L)).thenReturn(Optional.of(crearPeriodoCerrado()));
+
+        PreviewSesionesRequest req = previewReq(
+                LocalDate.now().minusDays(1), LocalDate.now());
+
+        ReglaNegocioException ex = assertThrows(ReglaNegocioException.class,
+                () -> sesionService.previewSesiones(req));
+        assertTrue(ex.getMessage().contains("empezar antes del primer bimestre"));
+    }
+
+    @Test
+    void generarSesiones_finDespuesDelAnioAcademico_rechaza() {
+        LocalDate hoy = LocalDate.now();
+        when(periodoRepo.findByAnioAcademicoId(1L)).thenReturn(Optional.of(crearPeriodoCerrado()));
+        when(bimestreRepo.findFirstByNombreAndAnioAcademicoIdOrderByAnioAcademicoAnioDesc(
+                NombreBimestre.BIM_1, 1L))
+                .thenReturn(Optional.of(primerBimestre(hoy, hoy.plusDays(10))));
+
+        GenerarSesionesRequest req = generarReq(hoy, hoy.plusDays(20));
+
+        ReglaNegocioException ex = assertThrows(ReglaNegocioException.class,
+                () -> sesionService.generarSesiones(req));
+        assertTrue(ex.getMessage().contains("terminar después del año académico"));
+    }
+
+    @Test
+    void generarSesiones_existenteOmitida_noSeDuplica() {
+        BloqueHorario bloque = crearBloque(10L, DiaSemana.LUNES, LocalTime.of(8, 0), LocalTime.of(10, 0));
+        SesionClase existente = crearSesion(100L, bloque, LUNES_1);
+        existente.setEstado(EstadoSesion.OMITIDA);
+
+        when(periodoRepo.findByAnioAcademicoId(1L)).thenReturn(Optional.of(crearPeriodoCerrado()));
+        when(bloqueRepo.findByAsignacionCursoSeccionId(1L)).thenReturn(List.of(bloque));
+        when(repo.findByBloqueHorarioIdAndFecha(10L, LUNES_1)).thenReturn(List.of(existente));
+
+        GenerarSesionesRequest req = generarReq(LUNES_1, LUNES_1);
+        req.setSesionesOmitidas(List.of(new SesionOmitida(10L, LUNES_1)));
+
+        GenerarSesionesResponse r = sesionService.generarSesiones(req);
+
+        assertEquals(0, r.getSesionesCreadas());
+        assertEquals(1, r.getSesionesOmitidas());
+        assertEquals(1, r.getSesionesOmitidasExistentes());
+        verify(repo, never()).save(any(SesionClase.class));
+    }
+
+    @Test
+    void previewSesiones_muestraEstadoExistente() {
+        BloqueHorario bloque = crearBloque(10L, DiaSemana.LUNES, LocalTime.of(8, 0), LocalTime.of(10, 0));
+        SesionClase existente = crearSesion(100L, bloque, LUNES_1);
+        existente.setEstado(EstadoSesion.OMITIDA);
+
+        when(periodoRepo.findByAnioAcademicoId(1L)).thenReturn(Optional.of(crearPeriodoCerrado()));
+        when(bloqueRepo.findByAsignacionCursoSeccionId(1L)).thenReturn(List.of(bloque));
+        when(repo.findByBloqueHorarioIdAndFecha(10L, LUNES_1)).thenReturn(List.of(existente));
+
+        PreviewSesionesResponse r = sesionService.previewSesiones(previewReq(LUNES_1, LUNES_1));
+
+        assertTrue(r.getSesiones().get(0).isYaExiste());
+        assertEquals(EstadoSesion.OMITIDA, r.getSesiones().get(0).getEstado());
+    }
+
+    @Test
+    void cambiarOmision_futura_programadaAOmitida() {
+        BloqueHorario bloque = crearBloque(10L, DiaSemana.LUNES, LocalTime.of(8, 0), LocalTime.of(10, 0));
+        SesionClase sesion = crearSesion(100L, bloque, LUNES_1);
+
+        when(repo.findById(100L)).thenReturn(Optional.of(sesion));
+        when(repo.save(any(SesionClase.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        SesionClaseResponse r = sesionService.cambiarOmision(100L, true);
+
+        assertEquals(EstadoSesion.OMITIDA, r.getEstado());
+        verify(auditoriaService).registrarAuditoria(any());
+    }
+
+    @Test
+    void cambiarOmision_futura_omitidaAProgramada() {
+        BloqueHorario bloque = crearBloque(10L, DiaSemana.LUNES, LocalTime.of(8, 0), LocalTime.of(10, 0));
+        SesionClase sesion = crearSesion(100L, bloque, LUNES_1);
+        sesion.setEstado(EstadoSesion.OMITIDA);
+
+        when(repo.findById(100L)).thenReturn(Optional.of(sesion));
+        when(repo.save(any(SesionClase.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        SesionClaseResponse r = sesionService.cambiarOmision(100L, false);
+
+        assertEquals(EstadoSesion.PROGRAMADA, r.getEstado());
+        verify(auditoriaService).registrarAuditoria(any());
+    }
+
+    @Test
+    void cambiarOmision_sesionIniciada_rechaza() {
+        BloqueHorario bloque = crearBloque(10L, DiaSemana.LUNES, LocalTime.of(8, 0), LocalTime.of(10, 0));
+        SesionClase sesion = crearSesion(100L, bloque, LocalDate.now().minusDays(1));
+
+        when(repo.findById(100L)).thenReturn(Optional.of(sesion));
+
+        assertThrows(ReglaNegocioException.class,
+                () -> sesionService.cambiarOmision(100L, true));
+    }
+
+    @Test
+    void cambiarOmision_sesionActiva_rechaza() {
+        BloqueHorario bloque = crearBloque(10L, DiaSemana.LUNES, LocalTime.of(8, 0), LocalTime.of(10, 0));
+        SesionClase sesion = crearSesion(100L, bloque, LUNES_1);
+        sesion.setEstado(EstadoSesion.ACTIVA);
+
+        when(repo.findById(100L)).thenReturn(Optional.of(sesion));
+
+        assertThrows(ReglaNegocioException.class,
+                () -> sesionService.cambiarOmision(100L, true));
     }
 
     @Test
@@ -335,10 +537,13 @@ class SesionClaseServiceImplTest {
     @Test
     void generarSesiones_periodoAbierto() {
         when(periodoRepo.findByAnioAcademicoId(1L)).thenReturn(Optional.of(crearPeriodoAbierto()));
+        when(bimestreRepo.findFirstByNombreAndAnioAcademicoIdOrderByAnioAcademicoAnioDesc(
+                NombreBimestre.BIM_1, 1L))
+                .thenReturn(Optional.of(primerBimestre(LocalDate.now().plusMonths(4))));
 
         ReglaNegocioException ex = assertThrows(ReglaNegocioException.class,
                 () -> sesionService.generarSesiones(generarReq(LUNES_1, LUNES_1)));
-        assertEquals("La generación de sesiones solo se habilita después de que termine el periodo de matrícula.", ex.getMessage());
+        assertTrue(ex.getMessage().contains("primer bimestre"));
     }
 
     @Test

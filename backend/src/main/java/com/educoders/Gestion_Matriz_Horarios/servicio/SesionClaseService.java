@@ -20,6 +20,12 @@ public interface SesionClaseService {
     GenerarSesionesResponse generarSesiones(GenerarSesionesRequest request,
                                             ProgresoLote progreso);
 
+    /**
+     * Omite o restaura una sesión programada. Solo se permite antes de que
+     * empiece; las sesiones activas o finalizadas no se modifican.
+     */
+    SesionClaseResponse cambiarOmision(Long id, boolean omitida);
+
     List<SesionClaseResponse> listarPorSeccion(Long seccionId, LocalDate fechaInicio, LocalDate fechaFin);
     List<SesionClaseResponse> listarPorDocente(Long docenteId, LocalDate fechaInicio, LocalDate fechaFin);
     List<SesionClaseResponse> listarMiHorarioDocente(LocalDate fechaInicio, LocalDate fechaFin);

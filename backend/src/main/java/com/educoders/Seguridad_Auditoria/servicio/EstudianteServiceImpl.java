@@ -22,15 +22,18 @@ public class EstudianteServiceImpl implements EstudianteService {
     private final UsuarioRepository usuarioRepository;
     private final EstudianteRepository estudianteRepository;
     private final ApoderadoRepository apoderadoRepository;
+    private final AuditoriaService auditoriaService;
 
     public EstudianteServiceImpl(
             UsuarioRepository usuarioRepository,
             EstudianteRepository estudianteRepository,
-            ApoderadoRepository apoderadoRepository) {
+            ApoderadoRepository apoderadoRepository,
+            AuditoriaService auditoriaService) {
 
         this.usuarioRepository = usuarioRepository;
         this.estudianteRepository = estudianteRepository;
         this.apoderadoRepository = apoderadoRepository;
+        this.auditoriaService = auditoriaService;
     }
 
     @Override
@@ -55,6 +58,8 @@ public class EstudianteServiceImpl implements EstudianteService {
 
         Estudiante estudianteGuardado =
                 estudianteRepository.save(construirEstudiante(solicitud, apoderado));
+        // HU-SAT-04: el alta y su registro de auditoría se confirman juntos (misma transacción).
+        auditoriaService.registrarAuditoria(AuditoriaUsuarios.registro(estudianteGuardado));
 
         return convertirARespuesta(estudianteGuardado);
     }

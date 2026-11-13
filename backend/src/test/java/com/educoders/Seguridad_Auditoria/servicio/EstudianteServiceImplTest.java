@@ -34,6 +34,7 @@ class EstudianteServiceImplTest {
     @Mock private UsuarioRepository usuarioRepository;
     @Mock private EstudianteRepository estudianteRepository;
     @Mock private ApoderadoRepository apoderadoRepository;
+    @Mock private AuditoriaService auditoriaService;
 
     @InjectMocks
     private EstudianteServiceImpl service;

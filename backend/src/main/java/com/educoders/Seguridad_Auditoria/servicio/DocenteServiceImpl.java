@@ -20,11 +20,14 @@ public class DocenteServiceImpl implements DocenteService {
 
     private final UsuarioRepository usuarioRepository;
     private final DocenteRepository docenteRepository;
+    private final AuditoriaService auditoriaService;
 
     public DocenteServiceImpl(UsuarioRepository usuarioRepository,
-                              DocenteRepository docenteRepository) {
+                              DocenteRepository docenteRepository,
+                              AuditoriaService auditoriaService) {
         this.usuarioRepository = usuarioRepository;
         this.docenteRepository = docenteRepository;
+        this.auditoriaService = auditoriaService;
     }
 
     /**
@@ -54,6 +57,8 @@ public class DocenteServiceImpl implements DocenteService {
         docente.setFechaCreacion(LocalDateTime.now());
 
         Docente docenteGuardado = docenteRepository.save(docente);
+        // HU-SAT-04: el alta y su registro de auditoría se confirman juntos (misma transacción).
+        auditoriaService.registrarAuditoria(AuditoriaUsuarios.registro(docenteGuardado));
 
         return convertirARespuesta(docenteGuardado);
     }

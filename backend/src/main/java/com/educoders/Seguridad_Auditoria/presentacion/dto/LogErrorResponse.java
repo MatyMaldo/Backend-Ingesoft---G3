@@ -1,6 +1,7 @@
 package com.educoders.Seguridad_Auditoria.presentacion.dto;
 
 import com.educoders.Infraestructura_Servicios.enums.Modulo;
+import com.educoders.Infraestructura_Servicios.enums.TipoError;
 import com.educoders.Seguridad_Auditoria.dominio.LogError;
 import java.time.LocalDateTime;
 
@@ -18,8 +19,18 @@ public record LogErrorResponse(
         String metodoHttp,
         Short codigoEstado
 ) {
+    public static final String USUARIO_SISTEMA = "Sistema";
+    public static final String USUARIO_NO_DETERMINADO = "No determinado";
+
+    /**
+     * Usuario involucrado (HU-SAT-06): el usuario autenticado cuando se pudo determinar; "Sistema" en los procesos
+     * automáticos; y "No determinado" cuando el error ocurre en un flujo sin sesión (sin usuario y sin ser un proceso
+     * automático, por ejemplo "¿Olvidaste tu contraseña?").
+     */
     public static LogErrorResponse desdeEntidad(LogError entidad) {
-        String nombreUsr = "Sistema";
+        String nombreUsr = entidad.getTipoError() == TipoError.PROCESO_AUTOMATICO
+                ? USUARIO_SISTEMA
+                : USUARIO_NO_DETERMINADO;
         Long usrId = null;
 
         if (entidad.getUsuario() != null) {
@@ -36,7 +47,7 @@ public record LogErrorResponse(
                 nombreUsr,
                 modulo,
                 modulo != null ? modulo.getEtiqueta() : null,
-                entidad.getTipoError(),
+                entidad.getTipoError() != null ? entidad.getTipoError().getEtiqueta() : null,
                 entidad.getMensaje(),
                 entidad.getDetalle(),
                 entidad.getEndpoint(),
