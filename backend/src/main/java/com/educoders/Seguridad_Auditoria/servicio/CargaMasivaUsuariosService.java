@@ -23,6 +23,7 @@ import jakarta.validation.ConstraintViolation;
 import jakarta.validation.Validator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -55,8 +56,13 @@ public class CargaMasivaUsuariosService {
 
     private static final Logger log = LoggerFactory.getLogger(CargaMasivaUsuariosService.class);
 
-    /** Filas por transacción al guardar: acota lo que se pierde si un lote falla y permite informar el avance. */
-    static final int TAMANO_LOTE = 100;
+    /**
+     * Filas por transacción al guardar. Cada transacción paga varios viajes a la BD (begin, inserts, lectura de ids,
+     * commit), así que con la BD remota el costo es casi fijo por lote: menos lotes, menos tiempo (medido en RDS:
+     * ~0.6 s por lote tanto con 18 como con 100 filas). Contrapartida: si un lote falla se reintenta fila por fila, y
+     * un lote mayor significa más filas por reintentar; por eso no se sube de 500 (las filas por sentencia INSERT).
+     */
+    static final int TAMANO_LOTE = 500;
 
     private static final ProgresoLote SIN_PROGRESO = new ProgresoLote() {
         @Override
@@ -137,13 +143,17 @@ public class CargaMasivaUsuariosService {
         List<Fila> filas = solicitud.filas();
         ResultadoFilaUsuario[] resultados = new ResultadoFilaUsuario[filas.size()];
         int[] rechazadas = {0};
+        long inicioTotal = System.nanoTime();
 
         avance.iniciar(filas.size());
         avance.fase("VALIDANDO");
 
         List<Aceptada> aceptadas = validar(filas, resultados, rechazadas, avance);
         avance.actualizar(rechazadas[0], 0, 0, rechazadas[0]);
+        log.info("[carga-masiva] validación: {} filas, {} aceptadas, {} rechazadas, {} ms",
+                filas.size(), aceptadas.size(), rechazadas[0], milisDesde(inicioTotal));
 
+        long inicioGuardado = System.nanoTime();
         avance.fase("GUARDANDO");
         // Id de cada apoderado del archivo ya guardado, por su DNI, para vincularle sus estudiantes.
         Map<String, Long> idPorDniApoderado = new HashMap<>();
@@ -155,12 +165,21 @@ public class CargaMasivaUsuariosService {
 
         guardar(primera, idPorDniApoderado, resultados, rechazadas, creadas, avance);
         guardar(segunda, idPorDniApoderado, resultados, rechazadas, creadas, avance);
+        log.info("[carga-masiva] guardado: {} creadas, {} rechazadas en total, {} ms",
+                creadas[0], rechazadas[0], milisDesde(inicioGuardado));
 
+        long inicioAuditoria = System.nanoTime();
         auditar(usuarioId, filas, resultados);
+        log.info("[carga-masiva] auditoría: {} ms", milisDesde(inicioAuditoria));
 
         List<ResultadoFilaUsuario> ordenados = new ArrayList<>(List.of(resultados));
         ordenados.sort(Comparator.comparingInt(ResultadoFilaUsuario::linea));
         avance.resultado(ordenados);
+        log.info("[carga-masiva] total: {} ms", milisDesde(inicioTotal));
+    }
+
+    private static long milisDesde(long inicioNanos) {
+        return (System.nanoTime() - inicioNanos) / 1_000_000L;
     }
 
     /**
@@ -409,9 +428,16 @@ public class CargaMasivaUsuariosService {
             List<Aceptada> lote = porGuardar.subList(desde, Math.min(desde + TAMANO_LOTE, porGuardar.size()));
 
             boolean guardadoEnConjunto = true;
+            long inicioLote = System.nanoTime();
             try {
-                transacciones.executeWithoutResult(estado -> guardarLote(lote, idPorDniApoderado));
+                guardarLoteConReintento(lote, idPorDniApoderado);
+                log.info("[carga-masiva] lote de {} filas guardado en {} ms", lote.size(), milisDesde(inicioLote));
             } catch (RuntimeException ex) {
+                if (!esErrorDeDatos(ex)) {
+                    // Una falla de infraestructura (sin conexión con la BD) no es culpa de ninguna fila: reintentar
+                    // fila por fila solo multiplicaría la espera. La operación termina como fallida.
+                    throw ex;
+                }
                 guardadoEnConjunto = false;
                 log.warn("Falló el guardado de un lote de {} usuarios; se reintenta fila por fila: {}",
                         lote.size(), ex.getMessage());
@@ -436,6 +462,29 @@ public class CargaMasivaUsuariosService {
             }
             avance.actualizar(rechazadas[0] + creadas[0], creadas[0], 0, rechazadas[0]);
         }
+    }
+
+    /**
+     * Guarda el lote en su propia transacción. Si falla por algo que no son los datos (por ejemplo, una conexión del
+     * pool que ya estaba cerrada), lo reintenta una vez entero; un error de datos se propaga para que el llamador
+     * aísle la fila culpable.
+     */
+    private void guardarLoteConReintento(List<Aceptada> lote, Map<String, Long> idPorDniApoderado) {
+        try {
+            transacciones.executeWithoutResult(estado -> guardarLote(lote, idPorDniApoderado));
+        } catch (RuntimeException ex) {
+            if (esErrorDeDatos(ex)) {
+                throw ex;
+            }
+            log.warn("Falló el guardado de un lote de {} usuarios por un error ajeno a los datos; "
+                    + "se reintenta el lote completo una vez: {}", lote.size(), ex.getMessage());
+            transacciones.executeWithoutResult(estado -> guardarLote(lote, idPorDniApoderado));
+        }
+    }
+
+    /** Violación de una restricción (DNI, correo, código…) o fila recién insertada que no se puede leer de vuelta. */
+    private static boolean esErrorDeDatos(RuntimeException ex) {
+        return ex instanceof DataIntegrityViolationException || ex instanceof IllegalStateException;
     }
 
     /** Guarda un lote dentro de la transacción en curso: una sentencia por tabla en vez de dos por usuario. */

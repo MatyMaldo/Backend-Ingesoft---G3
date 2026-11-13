@@ -9,6 +9,8 @@ import com.educoders.Infraestructura_Servicios.operaciones.dto.IniciarOperacionR
 import com.educoders.Seguridad_Auditoria.presentacion.dto.CargaMasivaUsuariosRequest;
 import com.educoders.Seguridad_Auditoria.servicio.CargaMasivaUsuariosService;
 import jakarta.validation.Valid;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -24,6 +26,8 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/v1/usuarios/carga-masiva")
 public class CargaMasivaUsuariosController {
+
+    private static final Logger log = LoggerFactory.getLogger(CargaMasivaUsuariosController.class);
 
     private final CargaMasivaUsuariosService cargaMasivaService;
     private final OperacionMasivaService operacionMasivaService;
@@ -43,12 +47,17 @@ public class CargaMasivaUsuariosController {
             @Valid @RequestBody CargaMasivaUsuariosRequest solicitud,
             @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey) {
 
+        long inicio = System.nanoTime();
         Long usuarioId = usuarioAutenticadoResolver.idActual();
+        long milisResolver = (System.nanoTime() - inicio) / 1_000_000L;
         OperacionMasiva operacion = operacionMasivaService.iniciar(
                 TipoOperacionMasiva.CARGA_USUARIOS_LOTE,
                 usuarioId,
                 idempotencyKey,
                 progreso -> cargaMasivaService.cargar(solicitud, usuarioId, progreso));
+        log.info("[carga-masiva] petición recibida con {} filas: resolver usuario {} ms, encolar {} ms",
+                solicitud.filas().size(), milisResolver,
+                (System.nanoTime() - inicio) / 1_000_000L - milisResolver);
 
         return ResponseEntity.status(HttpStatus.ACCEPTED)
                 .body(RespuestaApiResponse.crearExito(IniciarOperacionResponse.desde(operacion)));
