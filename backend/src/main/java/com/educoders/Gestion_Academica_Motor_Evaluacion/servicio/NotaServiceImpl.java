@@ -19,6 +19,8 @@ import com.educoders.Gestion_Matricula_Pagos.dominio.Matricula;
 import com.educoders.Gestion_Matricula_Pagos.persistencia.MatriculaRepository;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.List;
+import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -126,5 +128,29 @@ public class NotaServiceImpl implements NotaService {
                 notaGuardada.getValor(),
                 notaGuardada.getFechaRegistro()
         );
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<NotaResponse> listarNotasPorEvaluacion(Long idEvaluacion) {
+        // Validar que la evaluación existe
+        Evaluacion evaluacion = evaluacionRepository.findById(idEvaluacion)
+                .orElseThrow(() -> new ReglaNegocioException("La evaluación no existe."));
+
+        // Obtener todas las notas de la evaluación
+        List<Nota> notas = notaRepository.findByEvaluacionId(idEvaluacion);
+
+        // Convertir a DTOs
+        return notas.stream()
+                .map(nota -> new NotaResponse(
+                        nota.getId(),
+                        evaluacion.getId(),
+                        evaluacion.getNombre(),
+                        nota.getEstudiante().getId(),
+                        nota.getEstudiante().getNombre() + " " + nota.getEstudiante().getApellidoPaterno(),
+                        nota.getValor(),
+                        nota.getFechaRegistro()
+                ))
+                .collect(Collectors.toList());
     }
 }

@@ -1,13 +1,18 @@
 package com.educoders.Gestion_Academica_Motor_Evaluacion.servicio;
 
 import com.educoders.Gestion_Academica_Motor_Evaluacion.dominio.AsignacionCurso;
+import com.educoders.Gestion_Academica_Motor_Evaluacion.dominio.AnioAcademico;
 import com.educoders.Gestion_Academica_Motor_Evaluacion.dominio.Bimestre;
 import com.educoders.Gestion_Academica_Motor_Evaluacion.dominio.Competencia;
 import com.educoders.Gestion_Academica_Motor_Evaluacion.dominio.Evaluacion;
+import com.educoders.Gestion_Academica_Motor_Evaluacion.dominio.Seccion;
 import com.educoders.Gestion_Academica_Motor_Evaluacion.persistencia.AsignacionCursoRepository;
+import com.educoders.Gestion_Academica_Motor_Evaluacion.persistencia.AnioAcademicoRepository;
 import com.educoders.Gestion_Academica_Motor_Evaluacion.persistencia.BimestreRepository;
 import com.educoders.Gestion_Academica_Motor_Evaluacion.persistencia.CompetenciaRepository;
 import com.educoders.Gestion_Academica_Motor_Evaluacion.persistencia.EvaluacionRepository;
+import com.educoders.Gestion_Academica_Motor_Evaluacion.persistencia.SeccionRepository;
+import com.educoders.Gestion_Academica_Motor_Evaluacion.presentacion.dto.ContextoDocenteResponse;
 import com.educoders.Gestion_Academica_Motor_Evaluacion.presentacion.dto.EvaluacionRequest;
 import com.educoders.Gestion_Academica_Motor_Evaluacion.presentacion.dto.EvaluacionResponse;
 import com.educoders.Seguridad_Auditoria.dominio.Docente;
@@ -15,7 +20,10 @@ import com.educoders.Infraestructura_Servicios.exception.ReglaNegocioException; 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
+import java.util.List;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 @Service
 public class EvaluacionServiceImpl implements EvaluacionService {
@@ -24,15 +32,21 @@ public class EvaluacionServiceImpl implements EvaluacionService {
     private final BimestreRepository bimestreRepository;
     private final CompetenciaRepository competenciaRepository;
     private final AsignacionCursoRepository asignacionCursoRepository;
+    private final AnioAcademicoRepository anioAcademicoRepository;
+    private final SeccionRepository seccionRepository;
 
     public EvaluacionServiceImpl(EvaluacionRepository evaluacionRepository,
                                  BimestreRepository bimestreRepository,
                                  CompetenciaRepository competenciaRepository,
-                                 AsignacionCursoRepository asignacionCursoRepository) {
+                                 AsignacionCursoRepository asignacionCursoRepository,
+                                 AnioAcademicoRepository anioAcademicoRepository,
+                                 SeccionRepository seccionRepository) {
         this.evaluacionRepository = evaluacionRepository;
         this.bimestreRepository = bimestreRepository;
         this.competenciaRepository = competenciaRepository;
         this.asignacionCursoRepository = asignacionCursoRepository;
+        this.anioAcademicoRepository = anioAcademicoRepository;
+        this.seccionRepository = seccionRepository;
     }
 
     /**
@@ -96,6 +110,125 @@ public class EvaluacionServiceImpl implements EvaluacionService {
                 evaluacionGuardada.getCompetencia().getNombre(),
                 evaluacionGuardada.getAsignacionCurso().getCurso().getNombre(),
                 evaluacionGuardada.getAsignacionCurso().getSeccion().getNombre()
+        );
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<EvaluacionResponse> listarEvaluaciones(Optional<Long> idAsignacionCurso, Optional<Long> idSeccion, Optional<Long> idCurso) {
+        List<Evaluacion> evaluaciones;
+
+        if (idAsignacionCurso.isPresent()) {
+            evaluaciones = evaluacionRepository.findByAsignacionCursoId(idAsignacionCurso.get());
+        } else if (idSeccion.isPresent() && idCurso.isPresent()) {
+            evaluaciones = evaluacionRepository.buscarEvaluacionesConDetalles(idSeccion.get(), idCurso.get());
+        } else {
+            throw new ReglaNegocioException("Debe proporcionar al menos idAsignacionCurso o ambos idSeccion e idCurso");
+        }
+
+        return evaluaciones.stream()
+                .map(e -> new EvaluacionResponse(
+                        e.getId(),
+                        e.getNombre(),
+                        e.getDescripcion(),
+                        e.getFecha(),
+                        e.getBimestre().getNombre().name(),
+                        e.getCompetencia().getNombre(),
+                        e.getAsignacionCurso().getCurso().getNombre(),
+                        e.getAsignacionCurso().getSeccion().getNombre()
+                ))
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public ContextoDocenteResponse obtenerContextoDocente(Docente docenteLogueado) {
+        LocalDate hoy = LocalDate.now();
+
+        // 1. Obtener año académico vigente
+        Optional<AnioAcademico> anioVigenteOpt = anioAcademicoRepository
+                .findByFechaInicioLessThanEqualAndFechaFinGreaterThanEqual(hoy, hoy);
+
+        if (anioVigenteOpt.isEmpty()) {
+            throw new ReglaNegocioException("No hay un año académico vigente.");
+        }
+
+        AnioAcademico anioVigente = anioVigenteOpt.get();
+
+        // 2. Obtener asignaciones del docente filtradas por año vigente
+        List<AsignacionCurso> asignaciones = asignacionCursoRepository
+                .findByAnioAcademicoIdAndDocenteIdConDetalle(anioVigente.getId(), docenteLogueado.getId());
+
+        // 3. Obtener bimestres del año vigente
+        List<Bimestre> bimestres = bimestreRepository.findByAnioAcademicoId(anioVigente.getId());
+
+        // 4. Obtener secciones del año vigente
+        List<Seccion> secciones = seccionRepository.findByAnioAcademicoId(anioVigente.getId());
+
+        // 5. Obtener competencias de todos los cursos del docente
+        List<Long> idsCursos = asignaciones.stream()
+                .map(a -> a.getCurso().getId())
+                .distinct()
+                .toList();
+
+        List<Competencia> competencias = idsCursos.stream()
+                .flatMap(idCurso -> competenciaRepository.findByCursoId(idCurso).stream())
+                .distinct()
+                .toList();
+
+        // 6. Construir la respuesta
+        ContextoDocenteResponse.AnioAcademicoInfo anioInfo = new ContextoDocenteResponse.AnioAcademicoInfo(
+                anioVigente.getId(),
+                anioVigente.getAnio(),
+                anioVigente.getFechaInicio().toString(),
+                anioVigente.getFechaFin().toString()
+        );
+
+        List<ContextoDocenteResponse.AsignacionInfo> asignacionesInfo = asignaciones.stream()
+                .map(a -> new ContextoDocenteResponse.AsignacionInfo(
+                        a.getId(),
+                        a.getCurso().getId(),
+                        a.getCurso().getNombre(),
+                        a.getSeccion().getId(),
+                        a.getSeccion().getNombre(),
+                        a.getSeccion().getGrado().getId(),
+                        a.getSeccion().getGrado().getNombre()
+                ))
+                .toList();
+
+        List<ContextoDocenteResponse.BimestreInfo> bimestresInfo = bimestres.stream()
+                .map(b -> new ContextoDocenteResponse.BimestreInfo(
+                        b.getId(),
+                        b.getNombre(),
+                        b.getFechaInicio().toString(),
+                        b.getFechaFin().toString(),
+                        hoy.isAfter(b.getFechaFin())
+                ))
+                .toList();
+
+        List<ContextoDocenteResponse.SeccionInfo> seccionesInfo = secciones.stream()
+                .map(s -> new ContextoDocenteResponse.SeccionInfo(
+                        s.getId(),
+                        s.getNombre(),
+                        s.getGrado().getId(),
+                        s.getGrado().getNombre()
+                ))
+                .toList();
+
+        List<ContextoDocenteResponse.CompetenciaInfo> competenciasInfo = competencias.stream()
+                .map(c -> new ContextoDocenteResponse.CompetenciaInfo(
+                        c.getId(),
+                        c.getNombre(),
+                        c.getCurso().getId()
+                ))
+                .toList();
+
+        return new ContextoDocenteResponse(
+                anioInfo,
+                asignacionesInfo,
+                bimestresInfo,
+                seccionesInfo,
+                competenciasInfo
         );
     }
 }

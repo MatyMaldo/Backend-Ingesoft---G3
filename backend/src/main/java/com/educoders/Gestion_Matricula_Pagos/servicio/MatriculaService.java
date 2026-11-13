@@ -1,5 +1,6 @@
 package com.educoders.Gestion_Matricula_Pagos.servicio;
 
+import com.educoders.Gestion_Academica_Motor_Evaluacion.presentacion.dto.EstudianteAsignacionResponse;
 import com.educoders.Gestion_Matricula_Pagos.presentacion.dto.MatriculaAdminListResponse;
 import com.educoders.Gestion_Matricula_Pagos.presentacion.dto.MatriculasPorEstadoResponse;
 import com.educoders.Gestion_Matricula_Pagos.presentacion.dto.MatriculaResponse;
@@ -8,6 +9,8 @@ import com.educoders.Gestion_Matricula_Pagos.presentacion.dto.SeccionEstudianteR
 import com.educoders.Infraestructura_Servicios.enums.EstadoMatricula;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+
+import java.util.List;
 
 public interface MatriculaService {
 
@@ -54,4 +57,9 @@ public interface MatriculaService {
      * @return cantidad de matrículas canceladas
      */
     int cancelarPendientesPorPeriodoVencido();
+
+    /**
+     * Lista estudiantes activos con matrícula confirmada para una sección específica.
+     */
+    List<EstudianteAsignacionResponse> listarEstudiantesActivosPorSeccion(Long seccionId);
 }

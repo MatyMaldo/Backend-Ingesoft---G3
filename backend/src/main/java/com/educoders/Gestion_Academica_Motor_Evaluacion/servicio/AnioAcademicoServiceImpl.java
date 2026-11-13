@@ -117,13 +117,16 @@ public class AnioAcademicoServiceImpl implements AnioAcademicoService {
         anioAcademicoRepository.findById(anioId)
                 .orElseThrow(() -> RecursoNoEncontradoException.de("Año académico", anioId));
 
+        LocalDate hoy = LocalDate.now();
+
         return bimestreRepository.findByAnioAcademicoIdOrderByFechaInicioAsc(anioId)
                 .stream()
                 .map(bimestre -> new BimestreResponse(
                         bimestre.getId(),
                         bimestre.getNombre(),
                         bimestre.getFechaInicio(),
-                        bimestre.getFechaFin()))
+                        bimestre.getFechaFin(),
+                        hoy.isAfter(bimestre.getFechaFin())))
                 .toList();
     }
 }

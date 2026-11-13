@@ -8,6 +8,7 @@ public record BimestreResponse(
         Long id,
         NombreBimestre nombre,
         LocalDate fechaInicio,
-        LocalDate fechaFin
+        LocalDate fechaFin,
+        boolean finalizado
 ) {
 }

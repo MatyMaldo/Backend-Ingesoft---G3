@@ -11,14 +11,12 @@ import com.educoders.Gestion_Academica_Motor_Evaluacion.persistencia.Competencia
 import com.educoders.Gestion_Academica_Motor_Evaluacion.persistencia.LibretaNotasRepository;
 import com.educoders.Gestion_Academica_Motor_Evaluacion.persistencia.NotaCompetenciaRepository;
 import com.educoders.Gestion_Academica_Motor_Evaluacion.presentacion.dto.CalificacionCompetenciaRequest;
+import com.educoders.Gestion_Academica_Motor_Evaluacion.presentacion.dto.NotaCompetenciaResponse;
 import com.educoders.Gestion_Academica_Motor_Evaluacion.presentacion.dto.NotasCompetenciasResponse;
 import com.educoders.Gestion_Academica_Motor_Evaluacion.presentacion.dto.RegistrarNotasCompetenciasRequest;
 import com.educoders.Gestion_Matricula_Pagos.dominio.Matricula;
 import com.educoders.Gestion_Matricula_Pagos.persistencia.MatriculaRepository;
-import com.educoders.Infraestructura_Servicios.enums.CategoriaAuditoria;
-import com.educoders.Infraestructura_Servicios.enums.EstadoLibreta;
-import com.educoders.Infraestructura_Servicios.enums.EstadoMatricula;
-import com.educoders.Infraestructura_Servicios.enums.TipoAccionAuditoria;
+import com.educoders.Infraestructura_Servicios.enums.*;
 import com.educoders.Infraestructura_Servicios.exception.ReglaNegocioException;
 import com.educoders.Infraestructura_Servicios.exception.RecursoNoEncontradoException;
 import com.educoders.Seguridad_Auditoria.dominio.Docente;
@@ -33,6 +31,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -266,6 +265,9 @@ public class NotasCompetenciasServiceImpl
             nota.setConclusionDescriptiva(conclusion);
             nota.setFechaRegistro(hoy);
 
+            // Generar descripción automática basada en la nota
+            nota.setDescripcion(generarDescripcionAutomatica(calificacion.valorNota()));
+
             NotaCompetencia guardada =
                     notaCompetenciaRepository.saveAndFlush(nota);
 
@@ -316,5 +318,56 @@ public class NotasCompetenciasServiceImpl
                 bimestre.getId(),
                 resultados
         );
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<NotaCompetenciaResponse> listarNotasCompetencias(
+            Optional<Long> idEstudiante,
+            Optional<Long> idBimestre,
+            Optional<Long> idCurso) {
+
+        List<NotaCompetencia> notas;
+
+        if (idEstudiante.isPresent() && idBimestre.isPresent() && idCurso.isPresent()) {
+            notas = notaCompetenciaRepository.findByEstudianteIdAndBimestreIdAndCompetenciaCursoId(
+                    idEstudiante.get(),
+                    idBimestre.get(),
+                    idCurso.get()
+            );
+        } else if (idEstudiante.isPresent() && idCurso.isPresent()) {
+            notas = notaCompetenciaRepository.findByEstudianteIdAndCompetenciaCursoIdAndBimestreAnioAcademicoId(
+                    idEstudiante.get(),
+                    idCurso.get(),
+                    null
+            );
+        } else {
+            throw new ReglaNegocioException(
+                    "Debe proporcionar al menos idEstudiante, idBimestre e idCurso juntos, o idEstudiante e idCurso"
+            );
+        }
+
+        return notas.stream()
+                .map(nota -> new NotaCompetenciaResponse(
+                        nota.getCompetencia().getId(),
+                        nota.getCompetencia().getNombre(),
+                        nota.getBimestre().getNombre().name(),
+                        nota.getValor(),
+                        nota.getConclusionDescriptiva()
+                ))
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Genera una descripción automática basada en la nota.
+     * Basado en los patrones de los inserts de la BD.
+     */
+    private String generarDescripcionAutomatica(EscalaNota nota) {
+        return switch (nota) {
+            case AD -> "Logro destacado";
+            case A -> "Logro esperado";
+            case B -> "En proceso";
+            case C -> "En inicio";
+        };
     }
 }

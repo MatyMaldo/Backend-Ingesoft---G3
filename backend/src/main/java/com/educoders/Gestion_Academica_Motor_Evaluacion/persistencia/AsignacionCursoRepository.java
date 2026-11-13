@@ -30,4 +30,22 @@ public interface AsignacionCursoRepository extends JpaRepository<AsignacionCurso
         WHERE s.anioAcademico.id = :anioId
         """)
     List<AsignacionCurso> findByAnioAcademicoIdConDetalle(@Param("anioId") Long anioId);
+
+    /**
+     * Asignaciones de un docente filtradas por año académico.
+     * Evita duplicados en el contexto docente cuando el docente tiene asignaciones
+     * en múltiples años académicos.
+     */
+    @Query("""
+        SELECT a FROM AsignacionCurso a
+        JOIN FETCH a.curso
+        JOIN FETCH a.seccion s
+        JOIN FETCH s.grado
+        WHERE s.anioAcademico.id = :anioId
+        AND a.docente.id = :docenteId
+        """)
+    List<AsignacionCurso> findByAnioAcademicoIdAndDocenteIdConDetalle(
+            @Param("anioId") Long anioId,
+            @Param("docenteId") Long docenteId
+    );
 }

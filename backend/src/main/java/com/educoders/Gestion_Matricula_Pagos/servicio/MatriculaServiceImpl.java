@@ -3,6 +3,7 @@ package com.educoders.Gestion_Matricula_Pagos.servicio;
 import com.educoders.Gestion_Academica_Motor_Evaluacion.dominio.AnioAcademico;
 import com.educoders.Gestion_Academica_Motor_Evaluacion.dominio.Seccion;
 import com.educoders.Gestion_Academica_Motor_Evaluacion.persistencia.SeccionRepository;
+import com.educoders.Gestion_Academica_Motor_Evaluacion.presentacion.dto.EstudianteAsignacionResponse;
 import com.educoders.Gestion_Matricula_Pagos.dominio.Matricula;
 import com.educoders.Gestion_Matricula_Pagos.dominio.PeriodoMatricula;
 import com.educoders.Gestion_Matricula_Pagos.persistencia.MatriculaRepository;
@@ -39,6 +40,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Service
 public class MatriculaServiceImpl implements MatriculaService {
@@ -267,6 +269,26 @@ public class MatriculaServiceImpl implements MatriculaService {
         }
 
         return canceladas;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<EstudianteAsignacionResponse> listarEstudiantesActivosPorSeccion(Long seccionId) {
+        List<Matricula> matriculas = matriculaRepository.buscarPorSeccionYEstadoConEstudiante(
+                seccionId,
+                EstadoMatricula.CONFIRMADA
+        );
+
+        return matriculas.stream()
+                .map(m -> new EstudianteAsignacionResponse(
+                        m.getEstudiante().getId(),
+                        m.getEstudiante().getCodigo(),
+                        m.getEstudiante().getNombre(),
+                        m.getEstudiante().getApellidoPaterno(),
+                        m.getEstudiante().getApellidoMaterno(),
+                        m.getEstado()
+                ))
+                .collect(Collectors.toList());
     }
 
     private void exigirAdministrador() {
