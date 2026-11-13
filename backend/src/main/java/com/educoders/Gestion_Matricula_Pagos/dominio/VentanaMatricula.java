@@ -28,11 +28,18 @@ public final class VentanaMatricula {
         return periodo != null && periodo.estaVigente(hoy);
     }
 
-    /** Generación de sesiones: solo después de que termine el periodo de matrícula. */
-    public static boolean generacionSesionesAbierta(PeriodoMatricula periodo, LocalDate hoy) {
-        return periodo != null
-                && periodo.getFechaFin() != null
-                && hoy.isAfter(periodo.getFechaFin());
+    /**
+     * Generación de sesiones: desde el inicio del primer bimestre, siempre que
+     * el primer bimestre empiece después de que termine el periodo de matrícula.
+     */
+    public static boolean generacionSesionesAbierta(
+            LocalDate fechaFinPeriodo,
+            LocalDate fechaInicioPrimerBimestre,
+            LocalDate hoy) {
+        return fechaFinPeriodo != null
+                && fechaInicioPrimerBimestre != null
+                && fechaInicioPrimerBimestre.isAfter(fechaFinPeriodo)
+                && !hoy.isBefore(fechaInicioPrimerBimestre);
     }
 
     public static EstadoPeriodoMatricula estado(PeriodoMatricula periodo, LocalDate hoy) {

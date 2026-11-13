@@ -26,7 +26,8 @@ class VentanaMatriculaTest {
 
         assertTrue(VentanaMatricula.asignacionCursoDocenteAbierta(p, hoy));
         assertFalse(VentanaMatricula.crudBloquesHorarioAbierta(p, hoy));
-        assertFalse(VentanaMatricula.generacionSesionesAbierta(p, hoy));
+        assertFalse(VentanaMatricula.generacionSesionesAbierta(
+                p.getFechaFin(), LocalDate.of(2027, 4, 1), hoy));
         assertEquals(EstadoPeriodoMatricula.SIN_INICIAR, VentanaMatricula.estado(p, hoy));
     }
 
@@ -37,7 +38,8 @@ class VentanaMatriculaTest {
 
         assertFalse(VentanaMatricula.asignacionCursoDocenteAbierta(p, hoy));
         assertTrue(VentanaMatricula.crudBloquesHorarioAbierta(p, hoy));
-        assertFalse(VentanaMatricula.generacionSesionesAbierta(p, hoy));
+        assertFalse(VentanaMatricula.generacionSesionesAbierta(
+                p.getFechaFin(), LocalDate.of(2027, 4, 1), hoy));
         assertEquals(EstadoPeriodoMatricula.VIGENTE, VentanaMatricula.estado(p, hoy));
     }
 
@@ -48,19 +50,47 @@ class VentanaMatriculaTest {
 
         assertFalse(VentanaMatricula.asignacionCursoDocenteAbierta(p, hoy));
         assertTrue(VentanaMatricula.crudBloquesHorarioAbierta(p, hoy));
-        assertFalse(VentanaMatricula.generacionSesionesAbierta(p, hoy));
+        assertFalse(VentanaMatricula.generacionSesionesAbierta(
+                p.getFechaFin(), LocalDate.of(2027, 4, 1), hoy));
         assertEquals(EstadoPeriodoMatricula.VIGENTE, VentanaMatricula.estado(p, hoy));
     }
 
     @Test
-    void despuesDelFin_soloGeneracionAbierta() {
+    void despuesDelFin_generacionAbiertaDesdePrimerBimestre() {
         LocalDate hoy = LocalDate.of(2027, 4, 1);
         PeriodoMatricula p = periodo(LocalDate.of(2027, 2, 1), LocalDate.of(2027, 3, 31));
 
         assertFalse(VentanaMatricula.asignacionCursoDocenteAbierta(p, hoy));
         assertFalse(VentanaMatricula.crudBloquesHorarioAbierta(p, hoy));
-        assertTrue(VentanaMatricula.generacionSesionesAbierta(p, hoy));
+        assertTrue(VentanaMatricula.generacionSesionesAbierta(
+                p.getFechaFin(), LocalDate.of(2027, 4, 1), hoy));
         assertEquals(EstadoPeriodoMatricula.FINALIZADO, VentanaMatricula.estado(p, hoy));
+    }
+
+    @Test
+    void primerBimestreIgualAlFinDelPeriodo_noHabilitaGeneracion() {
+        LocalDate hoy = LocalDate.of(2027, 4, 1);
+        PeriodoMatricula p = periodo(LocalDate.of(2027, 2, 1), LocalDate.of(2027, 3, 31));
+
+        assertFalse(VentanaMatricula.generacionSesionesAbierta(
+                p.getFechaFin(), p.getFechaFin(), hoy));
+    }
+
+    @Test
+    void primerBimestreAntesDelFinDelPeriodo_noHabilitaGeneracion() {
+        LocalDate hoy = LocalDate.of(2027, 4, 1);
+        PeriodoMatricula p = periodo(LocalDate.of(2027, 2, 1), LocalDate.of(2027, 3, 31));
+
+        assertFalse(VentanaMatricula.generacionSesionesAbierta(
+                p.getFechaFin(), p.getFechaFin().minusDays(1), hoy));
+    }
+
+    @Test
+    void despuesDelPeriodoPeroAntesDelBimestre_noHabilitaGeneracion() {
+        PeriodoMatricula p = periodo(LocalDate.of(2027, 2, 1), LocalDate.of(2027, 3, 31));
+
+        assertFalse(VentanaMatricula.generacionSesionesAbierta(
+                p.getFechaFin(), LocalDate.of(2027, 4, 5), LocalDate.of(2027, 4, 1)));
     }
 
     @Test
@@ -69,7 +99,16 @@ class VentanaMatriculaTest {
 
         assertFalse(VentanaMatricula.asignacionCursoDocenteAbierta(null, hoy));
         assertFalse(VentanaMatricula.crudBloquesHorarioAbierta(null, hoy));
-        assertFalse(VentanaMatricula.generacionSesionesAbierta(null, hoy));
+        assertFalse(VentanaMatricula.generacionSesionesAbierta(
+                null, LocalDate.of(2027, 4, 1), hoy));
         assertNull(VentanaMatricula.estado(null, hoy));
+    }
+
+    @Test
+    void primerBimestreNulo_noHabilitaGeneracion() {
+        PeriodoMatricula p = periodo(LocalDate.of(2027, 2, 1), LocalDate.of(2027, 3, 31));
+
+        assertFalse(VentanaMatricula.generacionSesionesAbierta(
+                p.getFechaFin(), null, LocalDate.of(2027, 4, 1)));
     }
 }
