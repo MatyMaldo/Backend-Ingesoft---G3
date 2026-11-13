@@ -6,5 +6,6 @@ package com.educoders.Infraestructura_Servicios.enums;
 public enum EstadoAsistencia {
     PRESENTE,
     TARDANZA,
-    FALTA
+    FALTA,
+    JUSTIFICADA
 }
