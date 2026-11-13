@@ -25,16 +25,19 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.transaction.PlatformTransactionManager;
 
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.IntStream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyCollection;
@@ -123,6 +126,42 @@ class CargaMasivaUsuariosServiceTest {
         lenient().when(usuarioLoteRepository.insertarUsuarios(argThat(
                 usuarios -> usuarios != null && usuarios.stream().anyMatch(u -> correo.equals(u.email())))))
                 .thenThrow(new IllegalStateException("violación UNIQUE"));
+    }
+
+    @Test
+    void fallaDeConexionAlGuardar_seReintentaElLoteEnteroUnaVezSinCaerAFilaPorFila() {
+        AtomicInteger intentos = new AtomicInteger();
+        lenient().when(usuarioLoteRepository.insertarUsuarios(any())).thenAnswer(invocacion -> {
+            List<NuevoUsuario> usuarios = invocacion.getArgument(0);
+            if (usuarios == null) {
+                return List.of();
+            }
+            if (intentos.getAndIncrement() == 0) {
+                throw new DataAccessResourceFailureException("No operations allowed after connection closed.");
+            }
+            return usuarios.stream().map(u -> siguienteId.getAndIncrement()).toList();
+        });
+
+        servicio.cargar(lote(
+                apoderado(2, "71000001", "rosa@x.com"),
+                docente(3, "72000001", "luis@x.com")), ADMIN_ID, progreso);
+
+        assertTrue(progreso.resultado.stream().allMatch(r -> ResultadoFilaUsuario.CREADO.equals(r.estado())));
+        // Un intento fallido y uno bueno, los dos con el lote completo (no una llamada por fila).
+        assertEquals(2, intentos.get());
+    }
+
+    @Test
+    void fallaDeConexionPersistente_terminaLaOperacionSinReintentarFilaPorFila() {
+        lenient().when(usuarioLoteRepository.insertarUsuarios(argThat(usuarios -> usuarios != null)))
+                .thenThrow(new DataAccessResourceFailureException("No operations allowed after connection closed."));
+
+        assertThrows(DataAccessResourceFailureException.class, () -> servicio.cargar(lote(
+                apoderado(2, "71000001", "rosa@x.com"),
+                docente(3, "72000001", "luis@x.com")), ADMIN_ID, progreso));
+
+        // Solo el intento inicial y el reintento del lote: nada de una transacción por fila.
+        verify(usuarioLoteRepository, times(2)).insertarUsuarios(any());
     }
 
     @Test

@@ -39,6 +39,7 @@ Thumbs.db
 
 # Variables de entorno locales
 env-local.ps1
+env-aws.ps1
 
 # Configuración local por desarrollador (perfil dev)
 application-dev.properties
