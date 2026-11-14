@@ -32,7 +32,7 @@ public record CargaMasivaUsuariosRequest(
 
     /**
      * Una fila del archivo. {@code linea} es el número de línea del archivo (para devolver el resultado de cada fila).
-     * {@code edad} solo aplica a apoderados; {@code fechaNacimiento}, {@code dniApoderado} y {@code codigo}, a
+     * {@code fechaNacimiento} aplica a apoderados y estudiantes; {@code dniApoderado} y {@code codigo}, solo a
      * estudiantes. El teléfono va como 9 dígitos, sin prefijo.
      */
     public record Fila(
@@ -44,7 +44,6 @@ public record CargaMasivaUsuariosRequest(
             String dni,
             String email,
             String telefono,
-            Integer edad,
             LocalDate fechaNacimiento,
             String dniApoderado,
             String codigo

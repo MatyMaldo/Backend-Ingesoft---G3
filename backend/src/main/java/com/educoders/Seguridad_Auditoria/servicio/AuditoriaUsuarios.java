@@ -54,7 +54,8 @@ public final class AuditoriaUsuarios {
 
         Object real = Hibernate.unproxy(usuario);
         if (real instanceof Apoderado apoderado) {
-            agregarAlta(detalles, "Edad", apoderado.getEdad() == null ? null : String.valueOf(apoderado.getEdad()));
+            agregarAlta(detalles, "Fecha de nacimiento",
+                    apoderado.getFechaNacimiento() == null ? null : apoderado.getFechaNacimiento().toString());
         } else if (real instanceof Estudiante estudiante) {
             agregarAlta(detalles, "Código", estudiante.getCodigo());
             agregarAlta(detalles, "Fecha de nacimiento",

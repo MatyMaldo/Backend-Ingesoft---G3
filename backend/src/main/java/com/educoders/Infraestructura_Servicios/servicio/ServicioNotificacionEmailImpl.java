@@ -2,14 +2,19 @@ package com.educoders.Infraestructura_Servicios.servicio;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.concurrent.Executor;
+import java.util.concurrent.RejectedExecutionException;
 
 @Service
 public class ServicioNotificacionEmailImpl implements ServicioNotificacionEmail {
@@ -17,12 +22,51 @@ public class ServicioNotificacionEmailImpl implements ServicioNotificacionEmail 
     private static final Logger log = LoggerFactory.getLogger(ServicioNotificacionEmailImpl.class);
 
     private final JavaMailSender mailSender;
+    private final Executor ejecutorCorreos;
 
     @Value("${MAIL_FROM}")
     private String remitente;
 
-    public ServicioNotificacionEmailImpl(JavaMailSender mailSender) {
+    public ServicioNotificacionEmailImpl(JavaMailSender mailSender,
+                                         @Qualifier("correosExecutor") Executor ejecutorCorreos) {
         this.mailSender = mailSender;
+        this.ejecutorCorreos = ejecutorCorreos;
+    }
+
+    /**
+     * Envía el correo sin hacer esperar a quien lo pidió. El SMTP tarda segundos; si se enviara dentro de la
+     * petición, emitir un compromiso o validar un pago esperaría a que el servidor de correo responda (y, sin
+     * tiempo límite, podría quedar colgado). Si hay una transacción en curso, el envío se programa para después
+     * del commit: no se avisa de algo que luego se revierte. Un fallo del envío solo se registra: la operación
+     * de negocio ya terminó.
+     */
+    private void enviarSinEsperar(SimpleMailMessage mensaje, String descripcion, String emailDestino) {
+        Runnable envio = () -> {
+            try {
+                mailSender.send(mensaje);
+                log.info("Correo de {} enviado a: {}", descripcion, emailDestino);
+            } catch (Exception e) {
+                log.error("No se pudo enviar correo de {} a {}: {}", descripcion, emailDestino, e.getMessage());
+            }
+        };
+        Runnable programar = () -> {
+            try {
+                ejecutorCorreos.execute(envio);
+            } catch (RejectedExecutionException e) {
+                log.error("Cola de correos llena: no se envió el correo de {} a {}", descripcion, emailDestino);
+            }
+        };
+
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    programar.run();
+                }
+            });
+        } else {
+            programar.run();
+        }
     }
 
     @Override
@@ -54,12 +98,11 @@ public class ServicioNotificacionEmailImpl implements ServicioNotificacionEmail 
                     nombreApoderado, nombreEstudiante, concepto, monto
             ));
 
-            mailSender.send(mensaje);
-            log.info("Correo de notificación enviado exitosamente a: {}", emailDestino);
+            enviarSinEsperar(mensaje, "compromiso de pago", emailDestino);
 
         } catch (Exception e) {
             // Se registra el error en consola pero NO se interrumpe la transacción del negocio
-            log.error("No se pudo enviar el correo a {}: {}", emailDestino, e.getMessage());
+            log.error("No se pudo preparar el correo a {}: {}", emailDestino, e.getMessage());
         }
     }
 
@@ -91,10 +134,9 @@ public class ServicioNotificacionEmailImpl implements ServicioNotificacionEmail 
                     nombreApoderado, nombreEstudiante, concepto, monto
             ));
 
-            mailSender.send(mensaje);
-            log.info("Correo de validación enviado a: {}", emailDestino);
+            enviarSinEsperar(mensaje, "validación de pago", emailDestino);
         } catch (Exception e) {
-            log.error("No se pudo enviar correo de validación a {}: {}", emailDestino, e.getMessage());
+            log.error("No se pudo preparar el correo de validación a {}: {}", emailDestino, e.getMessage());
         }
     }
 
@@ -127,10 +169,9 @@ public class ServicioNotificacionEmailImpl implements ServicioNotificacionEmail 
                     nombreApoderado, nombreEstudiante, concepto, motivo
             ));
 
-            mailSender.send(mensaje);
-            log.info("Correo de rechazo enviado a: {}", emailDestino);
+            enviarSinEsperar(mensaje, "rechazo de pago", emailDestino);
         } catch (Exception e) {
-            log.error("No se pudo enviar correo de rechazo a {}: {}", emailDestino, e.getMessage());
+            log.error("No se pudo preparar el correo de rechazo a {}: {}", emailDestino, e.getMessage());
         }
     }
 
