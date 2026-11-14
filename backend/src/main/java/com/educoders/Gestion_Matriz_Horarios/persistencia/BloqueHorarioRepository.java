@@ -13,6 +13,20 @@ public interface BloqueHorarioRepository
         extends JpaRepository<BloqueHorario, Long>, BloqueHorarioRepositoryCustom {
 
     List<BloqueHorario> findByAsignacionCursoSeccionId(Long seccionId);
+
+    /**
+     * Bloques de una sección con aula, curso y docente ya cargados: la vista previa de sesiones los recorre por
+     * cada fecha y, sin esto, cada bloque dispararía varias consultas perezosas.
+     */
+    @Query("""
+        SELECT b FROM BloqueHorario b
+        JOIN FETCH b.asignacionCurso a
+        JOIN FETCH a.curso c
+        JOIN FETCH a.docente d
+        JOIN FETCH b.aula au
+        WHERE a.seccion.id = :seccionId
+        """)
+    List<BloqueHorario> findDeSeccionConDetalle(@Param("seccionId") Long seccionId);
     List<BloqueHorario> findByAsignacionCursoSeccionGradoIdAndAsignacionCursoSeccionAnioAcademicoId(Long gradoId, Long anioId);
     List<BloqueHorario> findByAsignacionCursoDocenteIdAndAsignacionCursoSeccionAnioAcademicoId(Long docenteId, Long anioId);
 

@@ -6,6 +6,7 @@ import com.educoders.Gestion_Matriz_Horarios.dominio.BloqueHorario;
 import com.educoders.Gestion_Matriz_Horarios.dominio.SesionClase;
 import com.educoders.Gestion_Matriz_Horarios.persistencia.BloqueHorarioRepository;
 import com.educoders.Gestion_Matriz_Horarios.persistencia.SesionClaseRepository;
+import com.educoders.Gestion_Matriz_Horarios.persistencia.SesionExistente;
 import com.educoders.Gestion_Matriz_Horarios.presentacion.dto.*;
 import com.educoders.Gestion_Matricula_Pagos.dominio.Matricula;
 import com.educoders.Gestion_Matricula_Pagos.dominio.PeriodoMatricula;
@@ -38,8 +39,11 @@ import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 @Service
@@ -90,6 +94,8 @@ public class SesionClaseServiceImpl implements SesionClaseService {
                 request.getFechaFin());
 
         List<BloqueHorario> bloques = bloqueRepo.findByAsignacionCursoSeccionId(request.getSeccionId());
+        Map<String, EstadoSesion> existentes = cargarExistentes(
+                bloques, request.getFechaInicio(), request.getFechaFin());
 
         Set<String> omitidas = new HashSet<>();
         for (SesionOmitida o : request.getSesionesOmitidas()) {
@@ -107,6 +113,7 @@ public class SesionClaseServiceImpl implements SesionClaseService {
             progreso.fase("GENERANDO");
         }
 
+        List<SesionClase> nuevas = new ArrayList<>();
         LocalDate fecha = request.getFechaInicio();
         while (!fecha.isAfter(request.getFechaFin())) {
             DiaSemana dia = toDiaSemana(fecha.getDayOfWeek());
@@ -115,12 +122,13 @@ public class SesionClaseServiceImpl implements SesionClaseService {
                     if (bloque.getDiaSemana() != dia) {
                         continue;
                     }
-                    boolean solicitadaOmitida = omitidas.contains(clave(bloque.getId(), fecha));
-                    SesionClase existente = buscarSesion(bloque.getId(), fecha);
+                    String clave = clave(bloque.getId(), fecha);
+                    boolean solicitadaOmitida = omitidas.contains(clave);
+                    EstadoSesion estadoExistente = existentes.get(clave);
 
-                    if (existente != null) {
+                    if (estadoExistente != null) {
                         // La generación no sobrescribe sesiones existentes.
-                        if (solicitadaOmitida && existente.getEstado() == EstadoSesion.OMITIDA) {
+                        if (solicitadaOmitida && estadoExistente == EstadoSesion.OMITIDA) {
                             resumen.setSesionesOmitidas(resumen.getSesionesOmitidas() + 1);
                             resumen.setSesionesOmitidasExistentes(
                                     resumen.getSesionesOmitidasExistentes() + 1);
@@ -131,31 +139,22 @@ public class SesionClaseServiceImpl implements SesionClaseService {
                         continue;
                     }
 
-                    try {
-                        SesionClase sesion = new SesionClase();
-                        sesion.setFecha(fecha);
-                        sesion.setHoraInicio(LocalDateTime.of(fecha, bloque.getHoraInicio()));
-                        sesion.setHoraFin(LocalDateTime.of(fecha, bloque.getHoraFin()));
-                        sesion.setEstado(solicitadaOmitida
-                                ? EstadoSesion.OMITIDA
-                                : EstadoSesion.PROGRAMADA);
-                        sesion.setBloqueHorario(bloque);
-                        repo.save(sesion);
+                    SesionClase sesion = new SesionClase();
+                    sesion.setFecha(fecha);
+                    sesion.setHoraInicio(LocalDateTime.of(fecha, bloque.getHoraInicio()));
+                    sesion.setHoraFin(LocalDateTime.of(fecha, bloque.getHoraFin()));
+                    sesion.setEstado(solicitadaOmitida
+                            ? EstadoSesion.OMITIDA
+                            : EstadoSesion.PROGRAMADA);
+                    sesion.setBloqueHorario(bloque);
+                    nuevas.add(sesion);
 
-                        if (solicitadaOmitida) {
-                            resumen.setSesionesOmitidas(resumen.getSesionesOmitidas() + 1);
-                            resumen.setSesionesOmitidasCreadas(
-                                    resumen.getSesionesOmitidasCreadas() + 1);
-                        } else {
-                            resumen.setSesionesCreadas(resumen.getSesionesCreadas() + 1);
-                        }
-                    } catch (Exception e) {
-                        String mensaje = "Error en bloque " + bloque.getId()
-                                + " fecha " + fecha + ": " + e.getMessage();
-                        resumen.getErrores().add(mensaje);
-                        if (progreso != null) {
-                            progreso.registrarError(mensaje);
-                        }
+                    if (solicitadaOmitida) {
+                        resumen.setSesionesOmitidas(resumen.getSesionesOmitidas() + 1);
+                        resumen.setSesionesOmitidasCreadas(
+                                resumen.getSesionesOmitidasCreadas() + 1);
+                    } else {
+                        resumen.setSesionesCreadas(resumen.getSesionesCreadas() + 1);
                     }
                 }
             }
@@ -169,6 +168,12 @@ public class SesionClaseServiceImpl implements SesionClaseService {
                         resumen.getErrores().size());
             }
         }
+
+        // Todas las sesiones nuevas se guardan juntas y en la misma transacción: o se crean todas o ninguna.
+        if (progreso != null) {
+            progreso.fase("GUARDANDO");
+        }
+        repo.insertarEnLotes(nuevas);
 
         if (progreso != null) {
             progreso.fase("FINALIZANDO");
@@ -224,7 +229,9 @@ public class SesionClaseServiceImpl implements SesionClaseService {
                 request.getFechaInicio(),
                 request.getFechaFin());
 
-        List<BloqueHorario> bloques = bloqueRepo.findByAsignacionCursoSeccionId(request.getSeccionId());
+        List<BloqueHorario> bloques = bloqueRepo.findDeSeccionConDetalle(request.getSeccionId());
+        Map<String, EstadoSesion> existentes = cargarExistentes(
+                bloques, request.getFechaInicio(), request.getFechaFin());
 
         PreviewSesionesResponse respuesta = new PreviewSesionesResponse();
 
@@ -249,10 +256,10 @@ public class SesionClaseServiceImpl implements SesionClaseService {
                     item.setDocenteId(bloque.getAsignacionCurso().getDocente().getId());
                     item.setDocenteNombre(bloque.getAsignacionCurso().getDocente().getNombre()
                             + " " + bloque.getAsignacionCurso().getDocente().getApellidoPaterno());
-                    SesionClase existente = buscarSesion(bloque.getId(), fecha);
-                    item.setYaExiste(existente != null);
-                    if (existente != null) {
-                        item.setEstado(existente.getEstado());
+                    EstadoSesion estadoExistente = existentes.get(clave(bloque.getId(), fecha));
+                    item.setYaExiste(estadoExistente != null);
+                    if (estadoExistente != null) {
+                        item.setEstado(estadoExistente);
                     }
                     respuesta.getSesiones().add(item);
                 }
@@ -354,11 +361,20 @@ public class SesionClaseServiceImpl implements SesionClaseService {
     // HELPERS
     // ------------------------------------------------------------------
 
-    private SesionClase buscarSesion(Long bloqueId, LocalDate fecha) {
-        return repo.findByBloqueHorarioIdAndFecha(bloqueId, fecha)
-                .stream()
-                .findFirst()
-                .orElse(null);
+    /**
+     * Estado de las sesiones que ya existen para esos bloques en el rango, por clave (bloque|fecha). Una sola
+     * consulta en lugar de una por cada bloque y fecha. Si hubiera duplicados, vale el primero.
+     */
+    private Map<String, EstadoSesion> cargarExistentes(List<BloqueHorario> bloques, LocalDate inicio, LocalDate fin) {
+        Map<String, EstadoSesion> existentes = new HashMap<>();
+        if (bloques.isEmpty()) {
+            return existentes;
+        }
+        List<Long> ids = bloques.stream().map(BloqueHorario::getId).toList();
+        for (SesionExistente existente : repo.findExistentes(ids, inicio, fin)) {
+            existentes.putIfAbsent(clave(existente.bloqueHorarioId(), existente.fecha()), existente.estado());
+        }
+        return existentes;
     }
 
     private void auditarOmision(SesionClase sesion, boolean omitida) {
