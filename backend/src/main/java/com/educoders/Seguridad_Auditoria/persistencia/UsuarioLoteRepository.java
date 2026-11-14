@@ -47,7 +47,7 @@ public class UsuarioLoteRepository {
     }
 
     /** Datos propios de un apoderado ya insertado en {@code usuarios}. */
-    public record DatosApoderado(long usuarioId, Integer edad) {
+    public record DatosApoderado(long usuarioId, LocalDate fechaNacimiento) {
     }
 
     /** Datos propios de un estudiante ya insertado en {@code usuarios}. */
@@ -81,8 +81,9 @@ public class UsuarioLoteRepository {
 
     @Transactional(propagation = Propagation.MANDATORY)
     public void insertarApoderados(List<DatosApoderado> apoderados) {
-        insertarPorLotes("INSERT INTO apoderados (id, edad) VALUES ", "(?, ?)", apoderados, 2,
-                a -> new Object[]{a.usuarioId(), a.edad()});
+        insertarPorLotes("INSERT INTO apoderados (id, fecha_nacimiento) VALUES ", "(?, ?)", apoderados, 2,
+                a -> new Object[]{a.usuarioId(),
+                        a.fechaNacimiento() == null ? null : Date.valueOf(a.fechaNacimiento())});
     }
 
     @Transactional(propagation = Propagation.MANDATORY)

@@ -283,7 +283,7 @@ public class CargaMasivaUsuariosService {
         return switch (fila.tipoUsuario()) {
             case APODERADO -> {
                 RegistrarApoderadoRequest solicitud = new RegistrarApoderadoRequest(fila.nombre(),
-                        fila.apellidoPaterno(), apellidoMaterno, fila.dni(), fila.email(), telefono, fila.edad());
+                        fila.apellidoPaterno(), apellidoMaterno, fila.dni(), fila.email(), telefono, fila.fechaNacimiento());
                 String error = primerError(solicitud);
                 yield error != null ? new Candidata(null, error)
                         : new Candidata(new Aceptada(posicion, fila, solicitud, null, null, null, null), null);
@@ -502,7 +502,7 @@ public class CargaMasivaUsuariosService {
             switch (a.fila.tipoUsuario()) {
                 case DOCENTE -> docentes.add(id);
                 case APODERADO -> {
-                    apoderados.add(new UsuarioLoteRepository.DatosApoderado(id, a.apoderado.edad()));
+                    apoderados.add(new UsuarioLoteRepository.DatosApoderado(id, a.apoderado.fechaNacimiento()));
                     a.idGuardado = id;
                 }
                 case ESTUDIANTE -> estudiantes.add(new UsuarioLoteRepository.DatosEstudiante(id, a.estudiante.codigo(),
