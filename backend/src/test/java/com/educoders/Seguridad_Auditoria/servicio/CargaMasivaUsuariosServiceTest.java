@@ -93,16 +93,16 @@ class CargaMasivaUsuariosServiceTest {
     }
 
     private static Fila apoderado(int linea, String dni, String email) {
-        return new Fila(linea, TipoUsuario.APODERADO, "Rosa", "Quispe", "Mamani", dni, email, "981001001", 41,
-                null, null, null);
+        return new Fila(linea, TipoUsuario.APODERADO, "Rosa", "Quispe", "Mamani", dni, email, "981001001",
+                LocalDate.of(1985, 3, 12), null, null);
     }
 
     private static Fila docente(int linea, String dni, String email) {
-        return new Fila(linea, TipoUsuario.DOCENTE, "Luis", "Huamán", null, dni, email, null, null, null, null, null);
+        return new Fila(linea, TipoUsuario.DOCENTE, "Luis", "Huamán", null, dni, email, null, null, null, null);
     }
 
     private static Fila estudiante(int linea, String dni, String email, String dniApoderado, String codigo) {
-        return new Fila(linea, TipoUsuario.ESTUDIANTE, "Ana", "Pérez", null, dni, email, null, null,
+        return new Fila(linea, TipoUsuario.ESTUDIANTE, "Ana", "Pérez", null, dni, email, null,
                 LocalDate.of(2012, 5, 10), dniApoderado, codigo);
     }
 
@@ -181,7 +181,7 @@ class CargaMasivaUsuariosServiceTest {
         verify(usuarioLoteRepository).insertarEstudiantes(estudiantes.capture());
         assertEquals(List.of(new DatosEstudiante(102L, "EST001", LocalDate.of(2012, 5, 10), 100L)),
                 estudiantes.getValue());
-        verify(usuarioLoteRepository).insertarApoderados(List.of(new DatosApoderado(100L, 41)));
+        verify(usuarioLoteRepository).insertarApoderados(List.of(new DatosApoderado(100L, LocalDate.of(1985, 3, 12))));
         verify(usuarioLoteRepository).insertarDocentes(List.of(101L));
         assertEquals(3, progreso.total);
         assertEquals(List.of("VALIDANDO", "GUARDANDO"), progreso.fases);
@@ -190,7 +190,7 @@ class CargaMasivaUsuariosServiceTest {
     @Test
     void losDatosDeCadaUsuarioSeEnviananNormalizados() {
         servicio.cargar(lote(new Fila(2, TipoUsuario.DOCENTE, "Luis", "Huamán", "  ", "72000001", "luis@x.com", "",
-                null, null, null, null)), ADMIN_ID, progreso);
+                null, null, null)), ADMIN_ID, progreso);
 
         ArgumentCaptor<List<NuevoUsuario>> captura = ArgumentCaptor.forClass(List.class);
         verify(usuarioLoteRepository).insertarUsuarios(captura.capture());
@@ -243,7 +243,7 @@ class CargaMasivaUsuariosServiceTest {
     @Test
     void unaFilaRechazadaNoOcupaSuDniNiSuCorreo() {
         // La fila 2 se rechaza (teléfono inválido); la 3 usa el mismo DNI y correo y debe poder crearse.
-        Fila invalida = new Fila(2, TipoUsuario.DOCENTE, "Luis", "Huamán", null, "72000001", "a@x.com", "12", null,
+        Fila invalida = new Fila(2, TipoUsuario.DOCENTE, "Luis", "Huamán", null, "72000001", "a@x.com", "12",
                 null, null, null);
 
         servicio.cargar(lote(invalida, docente(3, "72000001", "a@x.com")), ADMIN_ID, progreso);
@@ -328,7 +328,7 @@ class CargaMasivaUsuariosServiceTest {
     void siElApoderadoDelArchivoEsRechazado_suEstudianteTambien() {
         // Apoderado con correo inválido: se rechaza, y su estudiante ya no tiene a quién vincularse.
         Fila apoderadoMalo = new Fila(2, TipoUsuario.APODERADO, "Rosa", "Quispe", null, "71000001", "sin-arroba", null,
-                41, null, null, null);
+                LocalDate.of(1985, 3, 12), null, null);
 
         servicio.cargar(lote(apoderadoMalo, estudiante(3, "73000001", "ana@x.com", "71000001", "EST001")), ADMIN_ID, progreso);
 

@@ -74,11 +74,10 @@ public class ApoderadoServiceImpl implements ApoderadoService {
         apoderado.setTelefono(solicitud.telefono());
 
         // La cuenta nace SIN contraseña (passwordHash nulo): el administrador no la conoce ni la define.
-        // TODO(HU-SAT-03, 2026-11-08): al crear la cuenta, solicitar el envío del código de verificación al correo
-        // para que el usuario defina su contraseña. Pendiente del servicio de restablecimiento (otro integrante);
-        // debe ejecutarse de forma asíncrona y su falla no debe revertir el registro.
+        // Decisión de alcance: al registrar no se envía ningún correo. El usuario decide cuándo ingresar y, como no
+        // tiene contraseña, la obtiene con el restablecimiento (HU-SAT-03).
 
-        apoderado.setEdad(solicitud.edad());
+        apoderado.setFechaNacimiento(solicitud.fechaNacimiento());
         apoderado.setActivo(true);
         apoderado.setFechaCreacion(LocalDateTime.now());
 
@@ -185,6 +184,7 @@ public class ApoderadoServiceImpl implements ApoderadoService {
                 apoderado.getUsername(),
                 apoderado.getEmail(),
                 apoderado.getTelefono(),
+                apoderado.getFechaNacimiento(),
                 apoderado.getEdad(),
                 apoderado.isActivo(),
                 apoderado.getFechaCreacion()

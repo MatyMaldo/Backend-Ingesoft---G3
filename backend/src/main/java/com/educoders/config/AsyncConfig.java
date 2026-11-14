@@ -26,4 +26,21 @@ public class AsyncConfig {
         executor.initialize();
         return executor;
     }
+
+    /**
+     * Executor para enviar correos sin hacer esperar la petición HTTP: el SMTP (conexión, STARTTLS y
+     * autenticación) tarda segundos, y emitir un compromiso o validar un pago no debe esperarlo.
+     */
+    @Bean(name = "correosExecutor")
+    public ThreadPoolTaskExecutor correosExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(2);
+        executor.setMaxPoolSize(4);
+        executor.setQueueCapacity(200);
+        executor.setThreadNamePrefix("correo-");
+        executor.setWaitForTasksToCompleteOnShutdown(true);
+        executor.setAwaitTerminationSeconds(30);
+        executor.initialize();
+        return executor;
+    }
 }

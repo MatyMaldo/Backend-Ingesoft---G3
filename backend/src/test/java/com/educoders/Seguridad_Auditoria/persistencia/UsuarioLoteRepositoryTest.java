@@ -139,7 +139,7 @@ class UsuarioLoteRepositoryTest {
     @Test
     void insertaDocentesApoderadosYEstudiantesConSusColumnasPropias() {
         repositorio().insertarDocentes(List.of(11L, 12L));
-        repositorio().insertarApoderados(List.of(new DatosApoderado(21L, 40), new DatosApoderado(22L, null)));
+        repositorio().insertarApoderados(List.of(new DatosApoderado(21L, LocalDate.of(1985, 3, 12)), new DatosApoderado(22L, null)));
         repositorio().insertarEstudiantes(List.of(
                 new DatosEstudiante(31L, "EST001", LocalDate.of(2012, 5, 10), 21L)));
 
@@ -147,9 +147,9 @@ class UsuarioLoteRepositoryTest {
         assertEquals("INSERT INTO docentes (id) VALUES (?), (?)", sql.getAllValues().get(0));
         assertEquals(List.of(11L, 12L), List.of(parametros.getAllValues().get(0)));
 
-        assertEquals("INSERT INTO apoderados (id, edad) VALUES (?, ?), (?, ?)", sql.getAllValues().get(1));
+        assertEquals("INSERT INTO apoderados (id, fecha_nacimiento) VALUES (?, ?), (?, ?)", sql.getAllValues().get(1));
         assertEquals(21L, parametros.getAllValues().get(1)[0]);
-        assertEquals(40, parametros.getAllValues().get(1)[1]);
+        assertEquals(java.sql.Date.valueOf(LocalDate.of(1985, 3, 12)), parametros.getAllValues().get(1)[1]);
         assertEquals(null, parametros.getAllValues().get(1)[3]);
 
         assertEquals("INSERT INTO estudiantes (id, codigo, fecha_nacimiento, apoderado_id) VALUES (?, ?, ?, ?)",

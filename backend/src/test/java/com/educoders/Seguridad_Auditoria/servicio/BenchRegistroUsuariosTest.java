@@ -58,10 +58,10 @@ class BenchRegistroUsuariosTest {
                         "bench-b" + i + "@bench-registro.test", "900000000")));
         medir("apoderado (1.ª vez, en frío)", 1, st, i -> apoderadoService.registrarApoderado(
                 new RegistrarApoderadoRequest("Bench" + i, "Prueba", "Uno", "6" + String.format("%07d", i),
-                        "benchap" + i + "@bench-registro.test", "900000000", 40)));
+                        "benchap" + i + "@bench-registro.test", "900000000", java.time.LocalDate.of(1985, 3, 12))));
         medir("apoderados (30 siguientes)", 30, st, i -> apoderadoService.registrarApoderado(
                 new RegistrarApoderadoRequest("Bench" + i, "Prueba", "Uno", "5" + String.format("%07d", i),
-                        "benchap-b" + i + "@bench-registro.test", "900000000", 40)));
+                        "benchap-b" + i + "@bench-registro.test", "900000000", java.time.LocalDate.of(1985, 3, 12))));
 
         Integer filasDespues = jdbc.queryForObject("SELECT COUNT(*) FROM usuarios", Integer.class);
         if (!filasAntes.equals(filasDespues)) {
@@ -88,17 +88,17 @@ class BenchRegistroUsuariosTest {
             for (int i = 0; i < apoderados; i++) {
                 filas.add(new CargaMasivaUsuariosRequest.Fila(linea++, CargaMasivaUsuariosRequest.TipoUsuario.APODERADO,
                         "Ap" + i, "Prueba", "Lote", "6" + String.format("%07d", i), "bench-lote-ap" + i + "@bench-lote.test",
-                        "900000000", 40, null, null, null));
+                        "900000000", java.time.LocalDate.of(1985, 3, 12), null, null));
             }
             for (int i = 0; i < docentes; i++) {
                 filas.add(new CargaMasivaUsuariosRequest.Fila(linea++, CargaMasivaUsuariosRequest.TipoUsuario.DOCENTE,
                         "Doc" + i, "Prueba", "Lote", "7" + String.format("%07d", i), "bench-lote-doc" + i + "@bench-lote.test",
-                        null, null, null, null, null));
+                        null, null, null, null));
             }
             for (int i = 0; i < estudiantes; i++) {
                 filas.add(new CargaMasivaUsuariosRequest.Fila(linea++, CargaMasivaUsuariosRequest.TipoUsuario.ESTUDIANTE,
                         "Est" + i, "Prueba", "Lote", "5" + String.format("%07d", i), "bench-lote-est" + i + "@bench-lote.test",
-                        null, null, java.time.LocalDate.of(2012, 1, 1), "6" + String.format("%07d", i % apoderados),
+                        null, java.time.LocalDate.of(2012, 1, 1), "6" + String.format("%07d", i % apoderados),
                         "BLT" + i));
             }
 
@@ -127,7 +127,7 @@ class BenchRegistroUsuariosTest {
                     var u = org.hibernate.Hibernate.unproxy(usuarioRepository.findByEmail(correo).orElse(null));
                     String extra = u instanceof com.educoders.Seguridad_Auditoria.dominio.Estudiante e
                             ? "|codigo=" + e.getCodigo() + "|nac=" + e.getFechaNacimiento() + "|apoderadoId=" + e.getApoderado().getId()
-                            : u instanceof com.educoders.Seguridad_Auditoria.dominio.Apoderado a ? "|edad=" + a.getEdad() : "";
+                            : u instanceof com.educoders.Seguridad_Auditoria.dominio.Apoderado a ? "|nac=" + a.getFechaNacimiento() + "|edad=" + a.getEdad() : "";
                     com.educoders.Seguridad_Auditoria.dominio.Usuario usr = (com.educoders.Seguridad_Auditoria.dominio.Usuario) u;
                     System.out.println("BENCHL|jpa|" + u.getClass().getSimpleName() + "|activo=" + usr.isActivo()
                             + "|password=" + usr.getPasswordHash() + "|username=" + usr.getUsername()

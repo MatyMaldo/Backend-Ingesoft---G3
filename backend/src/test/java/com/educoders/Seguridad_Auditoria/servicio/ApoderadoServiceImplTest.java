@@ -190,7 +190,7 @@ class ApoderadoServiceImplTest {
         when(apoderadoRepository.save(any(Apoderado.class))).thenAnswer(inv -> inv.getArgument(0));
 
         service.registrarApoderado(new RegistrarApoderadoRequest(
-                "Rosa", "Apoderado", null, "11000001", "rosa@example.com", "910000001", 36));
+                "Rosa", "Apoderado", null, "11000001", "rosa@example.com", "910000001", java.time.LocalDate.of(1990, 5, 20)));
 
         ArgumentCaptor<Apoderado> captor = ArgumentCaptor.forClass(Apoderado.class);
         verify(apoderadoRepository).save(captor.capture());

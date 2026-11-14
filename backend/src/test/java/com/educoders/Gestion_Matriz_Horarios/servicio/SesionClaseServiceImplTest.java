@@ -12,6 +12,7 @@ import com.educoders.Gestion_Matriz_Horarios.dominio.SesionClase;
 import com.educoders.Gestion_Academica_Motor_Evaluacion.persistencia.BimestreRepository;
 import com.educoders.Gestion_Matriz_Horarios.persistencia.BloqueHorarioRepository;
 import com.educoders.Gestion_Matriz_Horarios.persistencia.SesionClaseRepository;
+import com.educoders.Gestion_Matriz_Horarios.persistencia.SesionExistente;
 import com.educoders.Gestion_Matriz_Horarios.presentacion.dto.GenerarSesionesRequest;
 import com.educoders.Gestion_Matriz_Horarios.presentacion.dto.GenerarSesionesResponse;
 import com.educoders.Gestion_Matriz_Horarios.presentacion.dto.PreviewSesionesRequest;
@@ -39,6 +40,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -208,6 +210,14 @@ class SesionClaseServiceImplTest {
         return r;
     }
 
+    /** Sesiones que el servicio entregó a la inserción en lote (una sola llamada por generación). */
+    private List<SesionClase> sesionesGuardadas() {
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<SesionClase>> captor = ArgumentCaptor.forClass(List.class);
+        verify(repo).insertarEnLotes(captor.capture());
+        return captor.getValue();
+    }
+
     // --- Tests: preview ---
 
     @Test
@@ -215,9 +225,7 @@ class SesionClaseServiceImplTest {
         BloqueHorario bloque = crearBloque(10L, DiaSemana.LUNES, LocalTime.of(8, 0), LocalTime.of(10, 0));
 
         when(periodoRepo.findByAnioAcademicoId(1L)).thenReturn(Optional.of(crearPeriodoCerrado()));
-        when(bloqueRepo.findByAsignacionCursoSeccionId(1L)).thenReturn(List.of(bloque));
-        when(repo.findByBloqueHorarioIdAndFecha(10L, LUNES_1))
-                .thenReturn(List.of());
+        when(bloqueRepo.findDeSeccionConDetalle(1L)).thenReturn(List.of(bloque));
 
         PreviewSesionesResponse r = sesionService.previewSesiones(previewReq(LUNES_1, LUNES_1));
 
@@ -237,9 +245,9 @@ class SesionClaseServiceImplTest {
         BloqueHorario bloque = crearBloque(10L, DiaSemana.LUNES, LocalTime.of(8, 0), LocalTime.of(10, 0));
 
         when(periodoRepo.findByAnioAcademicoId(1L)).thenReturn(Optional.of(crearPeriodoCerrado()));
-        when(bloqueRepo.findByAsignacionCursoSeccionId(1L)).thenReturn(List.of(bloque));
-        when(repo.findByBloqueHorarioIdAndFecha(10L, LUNES_1))
-                .thenReturn(List.of(crearSesion(100L, bloque, LUNES_1)));
+        when(bloqueRepo.findDeSeccionConDetalle(1L)).thenReturn(List.of(bloque));
+        when(repo.findExistentes(any(), any(), any()))
+                .thenReturn(List.of(new SesionExistente(10L, LUNES_1, EstadoSesion.PROGRAMADA)));
 
         PreviewSesionesResponse r = sesionService.previewSesiones(previewReq(LUNES_1, LUNES_1));
 
@@ -273,13 +281,32 @@ class SesionClaseServiceImplTest {
         BloqueHorario bloque = crearBloque(10L, DiaSemana.LUNES, LocalTime.of(8, 0), LocalTime.of(10, 0));
 
         when(periodoRepo.findByAnioAcademicoId(1L)).thenReturn(Optional.of(crearPeriodoCerrado()));
-        when(bloqueRepo.findByAsignacionCursoSeccionId(1L)).thenReturn(List.of(bloque));
+        when(bloqueRepo.findDeSeccionConDetalle(1L)).thenReturn(List.of(bloque));
 
         LocalDate sabado = LocalDate.of(2027, 3, 6);
         LocalDate domingo = LocalDate.of(2027, 3, 7);
         PreviewSesionesResponse r = sesionService.previewSesiones(previewReq(sabado, domingo));
 
         assertEquals(0, r.getTotal());
+    }
+
+    @Test
+    void previewYGenerar_consultanLasExistentesUnaSolaVezPorRango() {
+        BloqueHorario bloque = crearBloque(10L, DiaSemana.LUNES, LocalTime.of(8, 0), LocalTime.of(10, 0));
+        LocalDate fin = LUNES_1.plusWeeks(20);
+
+        when(periodoRepo.findByAnioAcademicoId(1L)).thenReturn(Optional.of(crearPeriodoCerrado()));
+        when(bloqueRepo.findDeSeccionConDetalle(1L)).thenReturn(List.of(bloque));
+        when(bloqueRepo.findByAsignacionCursoSeccionId(1L)).thenReturn(List.of(bloque));
+
+        PreviewSesionesResponse preview = sesionService.previewSesiones(previewReq(LUNES_1, fin));
+        sesionService.generarSesiones(generarReq(LUNES_1, fin));
+
+        assertEquals(21, preview.getTotal());
+        // Una consulta por operación, no una por cada fecha y bloque.
+        verify(repo, times(2)).findExistentes(any(), any(), any());
+        verify(repo, never()).findByBloqueHorarioIdAndFecha(any(), any());
+        verify(repo, never()).save(any(SesionClase.class));
     }
 
     // --- Tests: generar ---
@@ -290,9 +317,6 @@ class SesionClaseServiceImplTest {
 
         when(periodoRepo.findByAnioAcademicoId(1L)).thenReturn(Optional.of(crearPeriodoCerrado()));
         when(bloqueRepo.findByAsignacionCursoSeccionId(1L)).thenReturn(List.of(bloque));
-        when(repo.findByBloqueHorarioIdAndFecha(10L, LUNES_1))
-                .thenReturn(List.of());
-        when(repo.save(any(SesionClase.class))).thenAnswer(inv -> inv.getArgument(0));
 
         GenerarSesionesResponse r = sesionService.generarSesiones(generarReq(LUNES_1, LUNES_1));
 
@@ -301,7 +325,7 @@ class SesionClaseServiceImplTest {
         assertEquals(0, r.getSesionesYaExistentes());
         assertEquals(0, r.getSesionesOmitidas());
         assertEquals(0, r.getErrores().size());
-        verify(repo).save(any(SesionClase.class));
+        assertEquals(1, sesionesGuardadas().size());
     }
 
     @Test
@@ -310,9 +334,6 @@ class SesionClaseServiceImplTest {
 
         when(periodoRepo.findByAnioAcademicoId(1L)).thenReturn(Optional.of(crearPeriodoCerrado()));
         when(bloqueRepo.findByAsignacionCursoSeccionId(1L)).thenReturn(List.of(bloque));
-        when(repo.findByBloqueHorarioIdAndFecha(any(), any()))
-                .thenReturn(List.of());
-        when(repo.save(any(SesionClase.class))).thenAnswer(inv -> inv.getArgument(0));
 
         ProgresoGrabado progreso = new ProgresoGrabado();
         GenerarSesionesResponse r = sesionService.generarSesiones(
@@ -330,14 +351,14 @@ class SesionClaseServiceImplTest {
 
         when(periodoRepo.findByAnioAcademicoId(1L)).thenReturn(Optional.of(crearPeriodoCerrado()));
         when(bloqueRepo.findByAsignacionCursoSeccionId(1L)).thenReturn(List.of(bloque));
-        when(repo.findByBloqueHorarioIdAndFecha(10L, LUNES_1))
-                .thenReturn(List.of(crearSesion(100L, bloque, LUNES_1)));
+        when(repo.findExistentes(any(), any(), any()))
+                .thenReturn(List.of(new SesionExistente(10L, LUNES_1, EstadoSesion.PROGRAMADA)));
 
         GenerarSesionesResponse r = sesionService.generarSesiones(generarReq(LUNES_1, LUNES_1));
 
         assertEquals(0, r.getSesionesCreadas());
         assertEquals(1, r.getSesionesYaExistentes());
-        verify(repo, never()).save(any(SesionClase.class));
+        assertEquals(0, sesionesGuardadas().size());
     }
 
     @Test
@@ -346,9 +367,6 @@ class SesionClaseServiceImplTest {
 
         when(periodoRepo.findByAnioAcademicoId(1L)).thenReturn(Optional.of(crearPeriodoCerrado()));
         when(bloqueRepo.findByAsignacionCursoSeccionId(1L)).thenReturn(List.of(bloque));
-        when(repo.findByBloqueHorarioIdAndFecha(10L, LUNES_1))
-                .thenReturn(List.of());
-        when(repo.save(any(SesionClase.class))).thenAnswer(inv -> inv.getArgument(0));
 
         GenerarSesionesRequest req = generarReq(LUNES_1, LUNES_2);
         req.setSesionesOmitidas(List.of(new SesionOmitida(10L, LUNES_2)));
@@ -358,7 +376,9 @@ class SesionClaseServiceImplTest {
         assertEquals(1, r.getSesionesCreadas());
         assertEquals(1, r.getSesionesOmitidas());
         assertEquals(1, r.getSesionesOmitidasCreadas());
-        verify(repo, times(2)).save(any(SesionClase.class));
+        assertEquals(2, sesionesGuardadas().size());
+        assertEquals(1, sesionesGuardadas().stream()
+                .filter(sesion -> sesion.getEstado() == EstadoSesion.OMITIDA).count());
     }
 
     @Test
@@ -432,7 +452,8 @@ class SesionClaseServiceImplTest {
 
         when(periodoRepo.findByAnioAcademicoId(1L)).thenReturn(Optional.of(crearPeriodoCerrado()));
         when(bloqueRepo.findByAsignacionCursoSeccionId(1L)).thenReturn(List.of(bloque));
-        when(repo.findByBloqueHorarioIdAndFecha(10L, LUNES_1)).thenReturn(List.of(existente));
+        when(repo.findExistentes(any(), any(), any()))
+                .thenReturn(List.of(new SesionExistente(10L, LUNES_1, existente.getEstado())));
 
         GenerarSesionesRequest req = generarReq(LUNES_1, LUNES_1);
         req.setSesionesOmitidas(List.of(new SesionOmitida(10L, LUNES_1)));
@@ -442,7 +463,7 @@ class SesionClaseServiceImplTest {
         assertEquals(0, r.getSesionesCreadas());
         assertEquals(1, r.getSesionesOmitidas());
         assertEquals(1, r.getSesionesOmitidasExistentes());
-        verify(repo, never()).save(any(SesionClase.class));
+        assertEquals(0, sesionesGuardadas().size());
     }
 
     @Test
@@ -452,8 +473,9 @@ class SesionClaseServiceImplTest {
         existente.setEstado(EstadoSesion.OMITIDA);
 
         when(periodoRepo.findByAnioAcademicoId(1L)).thenReturn(Optional.of(crearPeriodoCerrado()));
-        when(bloqueRepo.findByAsignacionCursoSeccionId(1L)).thenReturn(List.of(bloque));
-        when(repo.findByBloqueHorarioIdAndFecha(10L, LUNES_1)).thenReturn(List.of(existente));
+        when(bloqueRepo.findDeSeccionConDetalle(1L)).thenReturn(List.of(bloque));
+        when(repo.findExistentes(any(), any(), any()))
+                .thenReturn(List.of(new SesionExistente(10L, LUNES_1, existente.getEstado())));
 
         PreviewSesionesResponse r = sesionService.previewSesiones(previewReq(LUNES_1, LUNES_1));
 

@@ -30,10 +30,10 @@ class BenchCargaMasivaUsuariosHttpTest {
     private static final String CUERPO = """
             {"filas": [
               {"linea": 2, "tipoUsuario": "APODERADO", "nombre": "Rosa", "apellidoPaterno": "Quispe", "apellidoMaterno": null,
-               "dni": "123", "email": "rosa@http-prueba.test", "telefono": "981001001", "edad": 41,
-               "fechaNacimiento": null, "dniApoderado": null, "codigo": null},
+               "dni": "123", "email": "rosa@http-prueba.test", "telefono": "981001001",
+               "fechaNacimiento": "1985-03-12", "dniApoderado": null, "codigo": null},
               {"linea": 3, "tipoUsuario": "ESTUDIANTE", "nombre": "Ana", "apellidoPaterno": "Pérez", "apellidoMaterno": "Ruiz",
-               "dni": "456", "email": "ana@http-prueba.test", "telefono": null, "edad": null,
+               "dni": "456", "email": "ana@http-prueba.test", "telefono": null,
                "fechaNacimiento": "2012-05-10", "dniApoderado": "123", "codigo": "EST001"}
             ]}
             """;

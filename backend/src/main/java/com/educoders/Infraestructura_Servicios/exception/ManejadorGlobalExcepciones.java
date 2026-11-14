@@ -12,6 +12,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.server.ResponseStatusException;
@@ -47,6 +49,26 @@ public class ManejadorGlobalExcepciones {
                 .body(RespuestaApiResponse.crearError(mensaje));
     }
 
+    /**
+     * Parámetro obligatorio ausente: es un error de quien llama, no una excepción no controlada, así que responde
+     * 400 y NO se registra en el log de errores (HU-SAT-06 solo admite excepciones no controladas, procesos
+     * automáticos y notificaciones por correo).
+     */
+    @ExceptionHandler(MissingServletRequestParameterException.class)
+    public ResponseEntity<RespuestaApiResponse<Void>> manejarParametroFaltante(
+            MissingServletRequestParameterException excepcion) {
+        return ResponseEntity.badRequest().body(RespuestaApiResponse.crearError(
+                "Falta el parámetro obligatorio '" + excepcion.getParameterName() + "'."));
+    }
+
+    /** Parámetro con un valor del tipo equivocado (por ejemplo, una fecha mal escrita): 400, sin registrar en el log. */
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<RespuestaApiResponse<Void>> manejarParametroInvalido(
+            MethodArgumentTypeMismatchException excepcion) {
+        return ResponseEntity.badRequest().body(RespuestaApiResponse.crearError(
+                "El valor del parámetro '" + excepcion.getName() + "' no es válido."));
+    }
+
     // 2. Método actualizado agregando HttpServletRequest para capturar URI y Método HTTP
     @ExceptionHandler(Exception.class)
     public ResponseEntity<RespuestaApiResponse<Void>> manejarErrorInesperado(
@@ -70,7 +92,7 @@ public class ManejadorGlobalExcepciones {
 
         return ResponseEntity
                 .status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(RespuestaApiResponse.crearError("Ocurrió un error inesperado"));
+                .body(RespuestaApiResponse.crearError("Se registró un error inesperado"));
     }
     private String obtenerClaseOrigen(Throwable throwable) {
         if (throwable.getStackTrace() != null) {

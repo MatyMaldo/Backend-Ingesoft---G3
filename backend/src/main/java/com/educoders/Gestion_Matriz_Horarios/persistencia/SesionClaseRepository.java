@@ -9,9 +9,10 @@ import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.List;
 
-public interface SesionClaseRepository extends JpaRepository<SesionClase, Long> {
+public interface SesionClaseRepository extends JpaRepository<SesionClase, Long>, SesionClaseRepositoryCustom {
     List<SesionClase> findByBloqueHorarioId(Long bloqueHorarioId);
     List<SesionClase> findByBloqueHorarioAsignacionCursoSeccionIdAndFechaBetween(Long seccionId, LocalDate inicio, LocalDate fin);
     List<SesionClase> findByBloqueHorarioAsignacionCursoDocenteIdAndFechaBetween(Long docenteId, LocalDate inicio, LocalDate fin);
@@ -35,4 +36,19 @@ public interface SesionClaseRepository extends JpaRepository<SesionClase, Long> 
             @Param("programada") EstadoSesion programada,
             @Param("ahora") LocalDateTime ahora,
             Pageable pageable);
+
+    /**
+     * Sesiones que ya existen para esos bloques en el rango, en una sola consulta. Sustituye a consultar bloque por
+     * bloque y fecha por fecha (una consulta por cada sesión de la vista previa o de la generación).
+     */
+    @Query("""
+        SELECT new com.educoders.Gestion_Matriz_Horarios.persistencia.SesionExistente(
+                   s.bloqueHorario.id, s.fecha, s.estado)
+        FROM SesionClase s
+        WHERE s.bloqueHorario.id IN :bloqueIds
+          AND s.fecha BETWEEN :inicio AND :fin
+        """)
+    List<SesionExistente> findExistentes(@Param("bloqueIds") Collection<Long> bloqueIds,
+                                         @Param("inicio") LocalDate inicio,
+                                         @Param("fin") LocalDate fin);
 }

@@ -25,7 +25,7 @@ class AuditoriaUsuariosTest {
         apoderado.setDni("11111111");
         apoderado.setEmail("rosa@gmail.com");
         apoderado.setTelefono("900000000");
-        apoderado.setEdad(40);
+        apoderado.setFechaNacimiento(java.time.LocalDate.of(1985, 3, 12));
         apoderado.setActivo(true);
         return apoderado;
     }
@@ -47,7 +47,7 @@ class AuditoriaUsuariosTest {
         assertEquals("Rosa", valorNuevo(auditoria, "Nombre"));
         assertEquals("Apoderado", valorNuevo(auditoria, "Rol"));
         assertEquals("Activo", valorNuevo(auditoria, "Estado"));
-        assertEquals("40", valorNuevo(auditoria, "Edad"));
+        assertEquals("1985-03-12", valorNuevo(auditoria, "Fecha de nacimiento"));
     }
 
     @Test
