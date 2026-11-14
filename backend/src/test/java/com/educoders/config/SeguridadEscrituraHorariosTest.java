@@ -1,10 +1,12 @@
 package com.educoders.config;
 
 import com.educoders.Gestion_Academica_Motor_Evaluacion.presentacion.controladores.AsignacionCursoController;
+import com.educoders.Gestion_Academica_Motor_Evaluacion.persistencia.AsignacionCursoRepository;
 import com.educoders.Gestion_Academica_Motor_Evaluacion.servicio.AsignacionCursoService;
 import com.educoders.Gestion_Matriz_Horarios.presentacion.controladores.BloqueHorarioController;
 import com.educoders.Gestion_Matriz_Horarios.presentacion.controladores.SesionClaseController;
 import com.educoders.Gestion_Matriz_Horarios.presentacion.dto.SesionClaseResponse;
+import com.educoders.Gestion_Matricula_Pagos.servicio.MatriculaService;
 import com.educoders.Gestion_Matriz_Horarios.servicio.BloqueHorarioService;
 import com.educoders.Gestion_Matriz_Horarios.servicio.HorarioCargaMasivaService;
 import com.educoders.Gestion_Matriz_Horarios.servicio.HorarioCsvService;
@@ -46,6 +48,8 @@ class SeguridadEscrituraHorariosTest {
     private MockMvc mvc;
 
     @MockBean private AsignacionCursoService asignacionCursoService;
+    @MockBean private MatriculaService matriculaService;
+    @MockBean private AsignacionCursoRepository asignacionCursoRepository;
     @MockBean private BloqueHorarioService bloqueHorarioService;
     @MockBean private HorarioCsvService horarioCsvService;
     @MockBean private HorarioCargaMasivaService horarioCargaMasivaService;

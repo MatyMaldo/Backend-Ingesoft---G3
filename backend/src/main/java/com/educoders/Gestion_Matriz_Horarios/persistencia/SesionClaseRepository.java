@@ -8,11 +8,8 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDate;
-<<<<<<< Updated upstream
 import java.time.LocalDateTime;
-=======
 import java.util.Collection;
->>>>>>> Stashed changes
 import java.util.List;
 
 public interface SesionClaseRepository extends JpaRepository<SesionClase, Long>, SesionClaseRepositoryCustom {
@@ -22,7 +19,6 @@ public interface SesionClaseRepository extends JpaRepository<SesionClase, Long>,
     boolean existsByBloqueHorarioIdAndFecha(Long bloqueHorarioId, LocalDate fecha);
     List<SesionClase> findByBloqueHorarioIdAndFecha(Long bloqueHorarioId, LocalDate fecha);
 
-<<<<<<< Updated upstream
     @Query("""
             SELECT s FROM SesionClase s
             JOIN FETCH s.bloqueHorario b
@@ -40,8 +36,7 @@ public interface SesionClaseRepository extends JpaRepository<SesionClase, Long>,
             @Param("programada") EstadoSesion programada,
             @Param("ahora") LocalDateTime ahora,
             Pageable pageable);
-}
-=======
+
     /**
      * Sesiones que ya existen para esos bloques en el rango, en una sola consulta. Sustituye a consultar bloque por
      * bloque y fecha por fecha (una consulta por cada sesión de la vista previa o de la generación).
@@ -57,4 +52,3 @@ public interface SesionClaseRepository extends JpaRepository<SesionClase, Long>,
                                          @Param("inicio") LocalDate inicio,
                                          @Param("fin") LocalDate fin);
 }
->>>>>>> Stashed changes
