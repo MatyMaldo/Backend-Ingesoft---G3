@@ -7,10 +7,10 @@ import jakarta.validation.constraints.Pattern;
 public record LoginRequest(
 
 
-        @NotBlank(message = "El correo electrónico o DNI es obligatorio.")
+        @NotBlank(message = "El correo electrónico es obligatorio.")
         @Pattern(
-                regexp = "^(?:[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}|[0-9]{8})$",
-                message = "Ingrese un correo electrónico válido o un DNI de 8 dígitos."
+                regexp = "^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$",
+                message = "Ingrese un correo electrónico válido."
         )
         String identificador,
 

@@ -8,16 +8,21 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDate;
+<<<<<<< Updated upstream
 import java.time.LocalDateTime;
+=======
+import java.util.Collection;
+>>>>>>> Stashed changes
 import java.util.List;
 
-public interface SesionClaseRepository extends JpaRepository<SesionClase, Long> {
+public interface SesionClaseRepository extends JpaRepository<SesionClase, Long>, SesionClaseRepositoryCustom {
     List<SesionClase> findByBloqueHorarioId(Long bloqueHorarioId);
     List<SesionClase> findByBloqueHorarioAsignacionCursoSeccionIdAndFechaBetween(Long seccionId, LocalDate inicio, LocalDate fin);
     List<SesionClase> findByBloqueHorarioAsignacionCursoDocenteIdAndFechaBetween(Long docenteId, LocalDate inicio, LocalDate fin);
     boolean existsByBloqueHorarioIdAndFecha(Long bloqueHorarioId, LocalDate fecha);
     List<SesionClase> findByBloqueHorarioIdAndFecha(Long bloqueHorarioId, LocalDate fecha);
 
+<<<<<<< Updated upstream
     @Query("""
             SELECT s FROM SesionClase s
             JOIN FETCH s.bloqueHorario b
@@ -36,3 +41,20 @@ public interface SesionClaseRepository extends JpaRepository<SesionClase, Long> 
             @Param("ahora") LocalDateTime ahora,
             Pageable pageable);
 }
+=======
+    /**
+     * Sesiones que ya existen para esos bloques en el rango, en una sola consulta. Sustituye a consultar bloque por
+     * bloque y fecha por fecha (una consulta por cada sesión de la vista previa o de la generación).
+     */
+    @Query("""
+        SELECT new com.educoders.Gestion_Matriz_Horarios.persistencia.SesionExistente(
+                   s.bloqueHorario.id, s.fecha, s.estado)
+        FROM SesionClase s
+        WHERE s.bloqueHorario.id IN :bloqueIds
+          AND s.fecha BETWEEN :inicio AND :fin
+        """)
+    List<SesionExistente> findExistentes(@Param("bloqueIds") Collection<Long> bloqueIds,
+                                         @Param("inicio") LocalDate inicio,
+                                         @Param("fin") LocalDate fin);
+}
+>>>>>>> Stashed changes

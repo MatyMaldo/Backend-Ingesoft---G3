@@ -27,7 +27,6 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.web.server.ResponseStatusException;
 
-import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -62,66 +61,29 @@ class AutenticacionServiceImplTest {
     }
 
     @Test
-    void iniciarSesionConDniCorrecto() {
-        when(usuarioRepository.findAllByDni("12345678"))
-                .thenReturn(List.of(docente));
-
-        when(docente.getPasswordHash()).thenReturn("hash");
-        when(docente.isActivo()).thenReturn(true);
-        when(docente.getId()).thenReturn(1L);
-        when(docente.getNombre()).thenReturn("Carlos");
-
-        when(passwordEncoder.matches("clave123", "hash"))
-                .thenReturn(true);
-
-        when(jwtService.generarToken(docente, "DOCENTE"))
-                .thenReturn("token-prueba");
-
-        LoginResponse respuesta = autenticacionService.iniciarSesion(
-                new LoginRequest("12345678", "clave123")
-        );
-
-        assertEquals("token-prueba", respuesta.token());
-        assertEquals("DOCENTE", respuesta.usuario().rol());
-
-        verify(usuarioRepository).findAllByDni("12345678");
-    }
-
-    @Test
     void rechazarContrasenaIncorrecta() {
-        when(usuarioRepository.findAllByDni("12345678"))
-                .thenReturn(List.of(docente));
-
+        when(usuarioRepository.findByEmail("docente@educoders.com")).thenReturn(Optional.of(docente));
         when(docente.getPasswordHash()).thenReturn("hash");
-
-        when(passwordEncoder.matches("incorrecta", "hash"))
-                .thenReturn(false);
+        when(passwordEncoder.matches("incorrecta", "hash")).thenReturn(false);
 
         ResponseStatusException error = assertThrows(
                 ResponseStatusException.class,
-                () -> autenticacionService.iniciarSesion(
-                        new LoginRequest("12345678", "incorrecta")
-                )
-        );
+                () -> autenticacionService.iniciarSesion(new LoginRequest("docente@educoders.com", "incorrecta")));
 
         assertEquals(HttpStatus.UNAUTHORIZED, error.getStatusCode());
+        assertEquals("Correo o contraseña incorrectos", error.getReason());
         verifyNoInteractions(jwtService);
     }
 
     @Test
     void rechazarCuentaSinContrasenaDefinida() {
         // Cuenta recién registrada: aún no definió su contraseña (HU-SAT-03), así que no puede iniciar sesión.
-        when(usuarioRepository.findAllByDni("12345678"))
-                .thenReturn(List.of(docente));
-
+        when(usuarioRepository.findByEmail("docente@educoders.com")).thenReturn(Optional.of(docente));
         when(docente.getPasswordHash()).thenReturn(null);
 
         ResponseStatusException error = assertThrows(
                 ResponseStatusException.class,
-                () -> autenticacionService.iniciarSesion(
-                        new LoginRequest("12345678", "cualquier-cosa")
-                )
-        );
+                () -> autenticacionService.iniciarSesion(new LoginRequest("docente@educoders.com", "cualquier-cosa")));
 
         assertEquals(HttpStatus.UNAUTHORIZED, error.getStatusCode());
         verifyNoInteractions(passwordEncoder, jwtService);
@@ -129,15 +91,11 @@ class AutenticacionServiceImplTest {
 
     @Test
     void rechazarUsuarioInexistente() {
-        when(usuarioRepository.findAllByDni("99999999"))
-                .thenReturn(List.of());
+        when(usuarioRepository.findByEmail("nadie@educoders.com")).thenReturn(Optional.empty());
 
         ResponseStatusException error = assertThrows(
                 ResponseStatusException.class,
-                () -> autenticacionService.iniciarSesion(
-                        new LoginRequest("99999999", "clave123")
-                )
-        );
+                () -> autenticacionService.iniciarSesion(new LoginRequest("nadie@educoders.com", "clave123")));
 
         assertEquals(HttpStatus.UNAUTHORIZED, error.getStatusCode());
         verifyNoInteractions(jwtService);
@@ -145,21 +103,14 @@ class AutenticacionServiceImplTest {
 
     @Test
     void rechazarCuentaInactiva() {
-        when(usuarioRepository.findAllByDni("12345678"))
-                .thenReturn(List.of(docente));
-
+        when(usuarioRepository.findByEmail("docente@educoders.com")).thenReturn(Optional.of(docente));
         when(docente.getPasswordHash()).thenReturn("hash");
         when(docente.isActivo()).thenReturn(false);
-
-        when(passwordEncoder.matches("clave123", "hash"))
-                .thenReturn(true);
+        when(passwordEncoder.matches("clave123", "hash")).thenReturn(true);
 
         ResponseStatusException error = assertThrows(
                 ResponseStatusException.class,
-                () -> autenticacionService.iniciarSesion(
-                        new LoginRequest("12345678", "clave123")
-                )
-        );
+                () -> autenticacionService.iniciarSesion(new LoginRequest("docente@educoders.com", "clave123")));
 
         assertEquals(HttpStatus.FORBIDDEN, error.getStatusCode());
         verifyNoInteractions(jwtService);
@@ -292,31 +243,6 @@ class AutenticacionServiceImplTest {
     }
 
     @Test
-    void intentoFallidoPorDniDeUnaSolaCuentaSeAtribuyeAlTitular() {
-        when(usuarioRepository.findAllByDni("12345678")).thenReturn(List.of(docente));
-        when(docente.getPasswordHash()).thenReturn("hash");
-        when(docente.getId()).thenReturn(7L);
-        when(passwordEncoder.matches("mala", "hash")).thenReturn(false);
-
-        assertThrows(ResponseStatusException.class,
-                () -> autenticacionService.iniciarSesion(new LoginRequest("12345678", "mala")));
-
-        assertEventoDeSesion(auditoriaRegistrada(), "Intento fallido de inicio de sesión", 7L,
-                "Sin sesión", "Sin sesión");
-    }
-
-    @Test
-    void intentoFallidoPorDniSinCuentasTieneAutorNoDeterminado() {
-        when(usuarioRepository.findAllByDni("99999999")).thenReturn(List.of());
-
-        assertThrows(ResponseStatusException.class,
-                () -> autenticacionService.iniciarSesion(new LoginRequest("99999999", "clave123")));
-
-        assertEventoDeSesion(auditoriaRegistrada(), "Intento fallido de inicio de sesión", null,
-                "Sin sesión", "Sin sesión");
-    }
-
-    @Test
     void siLaAuditoriaDelIntentoFallidoFallaIgualSeResponde401() {
         when(usuarioRepository.findByEmail("nadie@educoders.com")).thenReturn(Optional.empty());
         doThrow(new IllegalStateException("BD caída")).when(auditoriaService).registrarAuditoria(any());
@@ -353,10 +279,9 @@ class AutenticacionServiceImplTest {
         for (int i = 0; i < usuarios.length; i++) {
             Usuario usuario = usuarios[i];
             String rolEsperado = roles[i];
-            String dni = String.format("%08d", i + 1);
+            String correo = "usuario" + i + "@educoders.com";
 
-            when(usuarioRepository.findAllByDni(dni))
-                    .thenReturn(List.of(usuario));
+            when(usuarioRepository.findByEmail(correo)).thenReturn(Optional.of(usuario));
 
             when(usuario.getPasswordHash()).thenReturn("hash");
             when(usuario.isActivo()).thenReturn(true);
@@ -368,96 +293,11 @@ class AutenticacionServiceImplTest {
                     .thenReturn("token-" + rolEsperado);
 
             LoginResponse respuesta = autenticacionService.iniciarSesion(
-                    new LoginRequest(dni, "clave123")
+                    new LoginRequest(correo, "clave123")
             );
 
             assertEquals(rolEsperado, respuesta.usuario().rol());
             assertEquals("token-" + rolEsperado, respuesta.token());
         }
-    }
-
-    @Test
-    void identificarDocenteConDniCompartido() {
-        Apoderado apoderado = mock(Apoderado.class);
-
-        when(usuarioRepository.findAllByDni("12345678"))
-                .thenReturn(List.of(docente, apoderado));
-
-        when(docente.getPasswordHash()).thenReturn("hash-docente");
-        when(apoderado.getPasswordHash()).thenReturn("hash-apoderado");
-
-        when(passwordEncoder.matches("clave-docente", "hash-docente"))
-                .thenReturn(true);
-
-        when(passwordEncoder.matches("clave-docente", "hash-apoderado"))
-                .thenReturn(false);
-
-        when(docente.isActivo()).thenReturn(true);
-
-        when(jwtService.generarToken(docente, "DOCENTE"))
-                .thenReturn("token-docente");
-
-        LoginResponse respuesta = autenticacionService.iniciarSesion(
-                new LoginRequest("12345678", "clave-docente")
-        );
-
-        assertEquals("DOCENTE", respuesta.usuario().rol());
-        assertEquals("token-docente", respuesta.token());
-    }
-
-    @Test
-    void identificarApoderadoConDniCompartido() {
-        Apoderado apoderado = mock(Apoderado.class);
-
-        when(usuarioRepository.findAllByDni("12345678"))
-                .thenReturn(List.of(docente, apoderado));
-
-        when(docente.getPasswordHash()).thenReturn("hash-docente");
-        when(apoderado.getPasswordHash()).thenReturn("hash-apoderado");
-
-        when(passwordEncoder.matches("clave-apoderado", "hash-docente"))
-                .thenReturn(false);
-
-        when(passwordEncoder.matches("clave-apoderado", "hash-apoderado"))
-                .thenReturn(true);
-
-        when(apoderado.isActivo()).thenReturn(true);
-
-        when(jwtService.generarToken(apoderado, "APODERADO"))
-                .thenReturn("token-apoderado");
-
-        LoginResponse respuesta = autenticacionService.iniciarSesion(
-                new LoginRequest("12345678", "clave-apoderado")
-        );
-
-        assertEquals("APODERADO", respuesta.usuario().rol());
-        assertEquals("token-apoderado", respuesta.token());
-    }
-
-    @Test
-    void rechazarDniCompartidoConMismaContrasena() {
-        Apoderado apoderado = mock(Apoderado.class);
-
-        when(usuarioRepository.findAllByDni("12345678"))
-                .thenReturn(List.of(docente, apoderado));
-
-        when(docente.getPasswordHash()).thenReturn("hash-docente");
-        when(apoderado.getPasswordHash()).thenReturn("hash-apoderado");
-
-        when(passwordEncoder.matches("clave-compartida", "hash-docente"))
-                .thenReturn(true);
-
-        when(passwordEncoder.matches("clave-compartida", "hash-apoderado"))
-                .thenReturn(true);
-
-        ResponseStatusException error = assertThrows(
-                ResponseStatusException.class,
-                () -> autenticacionService.iniciarSesion(
-                        new LoginRequest("12345678", "clave-compartida")
-                )
-        );
-
-        assertEquals(HttpStatus.CONFLICT, error.getStatusCode());
-        verifyNoInteractions(jwtService);
     }
 }

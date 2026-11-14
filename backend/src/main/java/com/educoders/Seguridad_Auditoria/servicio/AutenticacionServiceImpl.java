@@ -22,8 +22,6 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.server.ResponseStatusException;
 
-import java.util.List;
-
 @Service
 public class AutenticacionServiceImpl implements AutenticacionService {
 
@@ -60,48 +58,17 @@ public class AutenticacionServiceImpl implements AutenticacionService {
     @Override
     public LoginResponse iniciarSesion(LoginRequest request) {
 
-        String identificador = request.identificador().trim();
+        // El inicio de sesión es solo por correo electrónico (único en el sistema); el rol lo determina la cuenta.
+        String correo = request.identificador().trim();
 
-        Usuario usuario;
+        Usuario usuario = usuarioRepository.findByEmail(correo).orElse(null);
 
-        if (identificador.contains("@")) {
-            Usuario encontrado = usuarioRepository.findByEmail(identificador).orElse(null);
-
-            if (encontrado == null) {
-                // El correo no corresponde a ninguna cuenta: autor "No determinado".
-                throw intentoFallido(null);
-            }
-            if (!contrasenaCorrecta(encontrado, request.password())) {
-                throw intentoFallido(encontrado);
-            }
-            usuario = encontrado;
-
-        } else {
-            List<Usuario> usuarios =
-                    usuarioRepository.findAllByDni(identificador);
-
-            // Buscar todas las cuentas cuya contraseña coincida.
-            List<Usuario> coincidencias = usuarios.stream()
-                    .filter(u -> contrasenaCorrecta(
-                            u, request.password()
-                    ))
-                    .toList();
-
-            if (coincidencias.isEmpty()) {
-                // Con una sola cuenta para ese DNI se sabe a quién pertenece; con varias o ninguna, no.
-                throw intentoFallido(usuarios.size() == 1 ? usuarios.get(0) : null);
-            }
-
-            // Evitar elegir arbitrariamente entre varias cuentas.
-            if (coincidencias.size() > 1) {
-                throw new ResponseStatusException(
-                        HttpStatus.CONFLICT,
-                        "Existen varias cuentas asociadas a estas credenciales. " +
-                                "Inicia sesión con tu correo electrónico."
-                );
-            }
-
-            usuario = coincidencias.get(0);
+        if (usuario == null) {
+            // El correo no corresponde a ninguna cuenta: autor "No determinado".
+            throw intentoFallido(null);
+        }
+        if (!contrasenaCorrecta(usuario, request.password())) {
+            throw intentoFallido(usuario);
         }
 
         // Impedir el acceso a cuentas inactivas.
@@ -193,7 +160,7 @@ public class AutenticacionServiceImpl implements AutenticacionService {
     private ResponseStatusException credencialesInvalidas() {
         return new ResponseStatusException(
                 HttpStatus.UNAUTHORIZED,
-                "Correo/DNI o contraseña incorrectos"
+                "Correo o contraseña incorrectos"
         );
     }
 }
