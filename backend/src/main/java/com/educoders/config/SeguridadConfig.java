@@ -196,16 +196,35 @@ public class SeguridadConfig {
                                 "/api/v1/secciones"
                         ).hasRole("ADMINISTRADOR")
 
-                        // HU-EVAL-04 y HU-EVAL-05:
-                        // Consulta y descarga de libretas de notas.
+
+                        // HU-EVAL-06:
+                        // Vista previa de libreta para docentes tutores.
                         .requestMatchers(
                                 HttpMethod.GET,
-                                "/api/v1/estudiantes/*/libretas",
-                                "/api/v1/estudiantes/*/libretas/**"
-                        ).hasAnyRole(
-                                "ESTUDIANTE",
-                                "APODERADO"
-                        )
+                                "/api/v1/estudiantes/*/libretas/vista-previa"
+                        ).hasRole("DOCENTE")
+
+                        // HU-EVAL-06:
+                        // Generación de libreta por el docente tutor.
+                        .requestMatchers(
+                                HttpMethod.POST,
+                                "/api/v1/estudiantes/*/libretas"
+                        ).hasRole("DOCENTE")
+
+
+
+                                // HU-EVAL-04/05/06:
+                                // Consultar y descargar libretas generadas.
+                                .requestMatchers(
+                                        HttpMethod.GET,
+                                        "/api/v1/estudiantes/*/libretas",
+                                        "/api/v1/estudiantes/*/libretas/**"
+                                ).hasAnyRole(
+                                        "ESTUDIANTE",
+                                        "APODERADO",
+                                        "DOCENTE"
+                                )
+
                                 // HU-GEMIH-03 y HU-GEMIH-04:
 // Consultas administrativas de horarios
                                 .requestMatchers(

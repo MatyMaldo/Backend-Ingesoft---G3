@@ -46,6 +46,23 @@ public class LibretaNotasPdfGenerator {
                 escritor.espacio();
 
                 escritor.escribir(
+                        "Institución: " +
+                                texto(libreta.nombreInstitucion()), false);
+
+                escritor.escribir(
+                        "Estudiante: " +
+                                texto(libreta.nombreEstudiante()), false);
+
+                escritor.escribir(
+                        "Sección: " +
+                                texto(libreta.nombreSeccion()), false);
+
+                escritor.escribir(
+                        "Tutor: " +
+                                texto(libreta.nombreTutor()), false);
+
+
+                escritor.escribir(
                         "Libreta ID: " + texto(libreta.idLibreta()), false);
 
                 escritor.escribir(
@@ -60,6 +77,19 @@ public class LibretaNotasPdfGenerator {
                 escritor.escribir(
                         "Fecha de generación: " +
                                 texto(libreta.fechaGeneracion()), false);
+
+                escritor.espacio();
+
+                escritor.escribir("RESUMEN DE ASISTENCIA", true);
+
+                escritor.escribir(
+                        "Inasistencias: " +
+                                libreta.inasistencias(), false);
+
+                escritor.escribir(
+                        "Tardanzas: " +
+                                libreta.tardanzas(), false);
+
 
                 escritor.espacio();
                 escritor.escribir("CALIFICACIONES POR COMPETENCIA", true);

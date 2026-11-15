@@ -7,23 +7,29 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
+import java.util.Optional;
 
+/**
+ * Repositorio de libretas de notas.
+ * Permite consultar libretas y prevenir duplicados.
+ */
 @Repository
 public interface LibretaNotasRepository extends JpaRepository<LibretaNotas, Long> {
 
-    // Consultar libretas de un estudiante por año académico
-    // y estado, ordenadas desde el bimestre más reciente.
-    List<LibretaNotas> findByEstudiante_IdAndBimestre_AnioAcademico_IdAndEstadoOrderByBimestre_FechaFinDesc(
+    /**
+     * HU-EVAL-04/05: Consulta las libretas generadas
+     * de un estudiante para un año académico.
+     */
+    List<LibretaNotas>
+    findByEstudiante_IdAndBimestre_AnioAcademico_IdAndEstadoOrderByBimestre_FechaFinDesc(
             Long estudianteId,
             Long anioAcademicoId,
             EstadoLibreta estado
     );
 
-
-
     /**
-     * Comprueba si la libreta de un estudiante
-     * ya fue generada para un bimestre.
+     * HU-EVAL-07: Verifica si las notas están
+     * bloqueadas por una libreta generada.
      */
     boolean existsByEstudianteIdAndBimestreIdAndEstado(
             Long idEstudiante,
@@ -31,4 +37,21 @@ public interface LibretaNotasRepository extends JpaRepository<LibretaNotas, Long
             EstadoLibreta estado
     );
 
+    /**
+     * HU-EVAL-06: Verifica si existe una libreta
+     * para un estudiante y bimestre determinados.
+     */
+    boolean existsByEstudianteIdAndBimestreId(
+            Long idEstudiante,
+            Long idBimestre
+    );
+
+    /**
+     * HU-EVAL-06: Obtiene una libreta existente
+     * para evitar generar registros duplicados.
+     */
+    Optional<LibretaNotas> findByEstudianteIdAndBimestreId(
+            Long idEstudiante,
+            Long idBimestre
+    );
 }

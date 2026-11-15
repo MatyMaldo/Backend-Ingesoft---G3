@@ -15,6 +15,10 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import java.util.List;
 
+import com.educoders.Gestion_Academica_Motor_Evaluacion.presentacion.dto.GenerarLibretaNotasRequest;
+import com.educoders.Gestion_Academica_Motor_Evaluacion.presentacion.dto.VistaPreviaLibretaNotasResponse;
+import jakarta.validation.Valid;
+
 @RestController
 @RequestMapping("/api/v1/estudiantes/{idEstudiante}/libretas")
 public class LibretaNotasController {
@@ -112,6 +116,48 @@ public class LibretaNotasController {
                 .header(HttpHeaders.CACHE_CONTROL, "no-store")
                 .contentLength(pdf.length)
                 .body(pdf);
+    }
+
+
+
+    /**
+     * HU-EVAL-06: Obtiene la vista previa de la libreta,
+     * validando que el docente sea tutor del estudiante.
+     */
+    @GetMapping("/vista-previa")
+    public ResponseEntity<VistaPreviaLibretaNotasResponse> obtenerVistaPrevia(
+            @PathVariable Long idEstudiante,
+            @RequestParam Long idBimestre,
+            @AuthenticationPrincipal Usuario usuarioAutenticado) {
+
+        VistaPreviaLibretaNotasResponse response =
+                libretaNotasService.obtenerVistaPrevia(
+                        idEstudiante,
+                        idBimestre,
+                        usuarioAutenticado
+                );
+
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * HU-EVAL-06: Genera y registra la libreta del
+     * estudiante para el bimestre seleccionado.
+     */
+    @PostMapping
+    public ResponseEntity<LibretaNotasResumenResponse> generarLibreta(
+            @PathVariable Long idEstudiante,
+            @Valid @RequestBody GenerarLibretaNotasRequest request,
+            @AuthenticationPrincipal Usuario usuarioAutenticado) {
+
+        LibretaNotasResumenResponse response =
+                libretaNotasService.generarLibreta(
+                        idEstudiante,
+                        request,
+                        usuarioAutenticado
+                );
+
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
 
