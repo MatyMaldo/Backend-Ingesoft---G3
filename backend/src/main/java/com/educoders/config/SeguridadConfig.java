@@ -129,6 +129,18 @@ public class SeguridadConfig {
                                 "/api/v1/usuarios/apoderados/me/estudiantes"
                         ).hasRole("APODERADO")
 
+                        // HU-EVAL-03: cursos de un estudiante del apoderado
+                        .requestMatchers(
+                                HttpMethod.GET,
+                                "/api/v1/usuarios/apoderados/me/estudiantes/*/cursos/anio-consulta"
+                        ).hasRole("APODERADO")
+
+                        // HU-EVAL-03: evaluaciones y notas de un estudiante en un curso
+                        .requestMatchers(
+                                HttpMethod.GET,
+                                "/api/v1/usuarios/apoderados/me/estudiantes/*/cursos/*/evaluaciones-notas"
+                        ).hasRole("APODERADO")
+
                         // HU-SAT-07: Consulta de usuarios solo para administradores
                         .requestMatchers(
                                 HttpMethod.GET,
