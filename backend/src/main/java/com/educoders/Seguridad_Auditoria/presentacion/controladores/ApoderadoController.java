@@ -2,6 +2,8 @@ package com.educoders.Seguridad_Auditoria.presentacion.controladores;
 
 import com.educoders.Infraestructura_Servicios.dto.RespuestaApiResponse;
 import com.educoders.Seguridad_Auditoria.presentacion.dto.ApoderadoResponse;
+import com.educoders.Seguridad_Auditoria.presentacion.dto.CursoEstudianteResponse;
+import com.educoders.Seguridad_Auditoria.presentacion.dto.EvaluacionesEstudianteResponse;
 import com.educoders.Seguridad_Auditoria.presentacion.dto.EstudianteApoderadoResponse;
 import com.educoders.Seguridad_Auditoria.presentacion.dto.RegistrarApoderadoRequest;
 import com.educoders.Seguridad_Auditoria.servicio.ApoderadoService;
@@ -10,6 +12,7 @@ import java.net.URI;
 import java.util.List;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -34,6 +37,27 @@ public class ApoderadoController {
                 apoderadoService.listarMisEstudiantes(anioId);
 
         return ResponseEntity.ok(RespuestaApiResponse.crearExito(estudiantes));
+    }
+
+    @GetMapping("/me/estudiantes/{estudianteId}/cursos/anio-consulta")
+    public ResponseEntity<RespuestaApiResponse<List<CursoEstudianteResponse>>> listarCursosEstudiante(
+            @PathVariable Long estudianteId) {
+
+        List<CursoEstudianteResponse> cursos =
+                apoderadoService.listarCursosEstudiante(estudianteId);
+
+        return ResponseEntity.ok(RespuestaApiResponse.crearExito(cursos));
+    }
+
+    @GetMapping("/me/estudiantes/{estudianteId}/cursos/{cursoId}/evaluaciones-notas")
+    public ResponseEntity<RespuestaApiResponse<EvaluacionesEstudianteResponse>> listarEvaluacionesEstudianteCurso(
+            @PathVariable Long estudianteId,
+            @PathVariable Long cursoId) {
+
+        EvaluacionesEstudianteResponse response =
+                apoderadoService.listarEvaluacionesEstudianteCurso(estudianteId, cursoId);
+
+        return ResponseEntity.ok(RespuestaApiResponse.crearExito(response));
     }
 
     @PostMapping
