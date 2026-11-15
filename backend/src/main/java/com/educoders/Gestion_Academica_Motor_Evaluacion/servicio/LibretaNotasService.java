@@ -4,6 +4,8 @@ package com.educoders.Gestion_Academica_Motor_Evaluacion.servicio;
 import com.educoders.Gestion_Academica_Motor_Evaluacion.presentacion.dto.LibretaNotasResumenResponse;
 import com.educoders.Gestion_Academica_Motor_Evaluacion.presentacion.dto.LibretaNotasDetalleResponse;
 import com.educoders.Seguridad_Auditoria.dominio.Usuario;
+import com.educoders.Gestion_Academica_Motor_Evaluacion.presentacion.dto.GenerarLibretaNotasRequest;
+import com.educoders.Gestion_Academica_Motor_Evaluacion.presentacion.dto.VistaPreviaLibretaNotasResponse;
 
 import java.util.List;
 
@@ -31,4 +33,25 @@ public interface LibretaNotasService {
             Long idLibreta,
             Usuario usuarioAutenticado
     );
+
+
+    /**
+     * HU-EVAL-06: Muestra los datos de la libreta antes
+     * de su generación, previa validación del tutor.
+     */
+    VistaPreviaLibretaNotasResponse obtenerVistaPrevia(
+            Long idEstudiante,
+            Long idBimestre,
+            Usuario usuarioAutenticado
+    );
+
+    /**
+     * HU-EVAL-06: Genera y guarda la libreta del estudiante.
+     */
+    LibretaNotasResumenResponse generarLibreta(
+            Long idEstudiante,
+            GenerarLibretaNotasRequest request,
+            Usuario usuarioAutenticado
+    );
+
 }
