@@ -3,7 +3,7 @@ package com.educoders.Seguridad_Auditoria.presentacion.controladores;
 import com.educoders.Infraestructura_Servicios.dto.RespuestaApiResponse;
 import com.educoders.Seguridad_Auditoria.presentacion.dto.ApoderadoResponse;
 import com.educoders.Seguridad_Auditoria.presentacion.dto.CursoEstudianteResponse;
-import com.educoders.Seguridad_Auditoria.presentacion.dto.EvaluacionesEstudianteResponse;
+import com.educoders.Seguridad_Auditoria.presentacion.dto.DetalleCursoEstudianteResponse;
 import com.educoders.Seguridad_Auditoria.presentacion.dto.EstudianteApoderadoResponse;
 import com.educoders.Seguridad_Auditoria.presentacion.dto.RegistrarApoderadoRequest;
 import com.educoders.Seguridad_Auditoria.servicio.ApoderadoService;
@@ -50,11 +50,11 @@ public class ApoderadoController {
     }
 
     @GetMapping("/me/estudiantes/{estudianteId}/cursos/{cursoId}/evaluaciones-notas")
-    public ResponseEntity<RespuestaApiResponse<EvaluacionesEstudianteResponse>> listarEvaluacionesEstudianteCurso(
+    public ResponseEntity<RespuestaApiResponse<DetalleCursoEstudianteResponse>> listarEvaluacionesEstudianteCurso(
             @PathVariable Long estudianteId,
             @PathVariable Long cursoId) {
 
-        EvaluacionesEstudianteResponse response =
+        DetalleCursoEstudianteResponse response =
                 apoderadoService.listarEvaluacionesEstudianteCurso(estudianteId, cursoId);
 
         return ResponseEntity.ok(RespuestaApiResponse.crearExito(response));

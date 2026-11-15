@@ -2,7 +2,7 @@ package com.educoders.Seguridad_Auditoria.servicio;
 
 import com.educoders.Seguridad_Auditoria.presentacion.dto.ApoderadoResponse;
 import com.educoders.Seguridad_Auditoria.presentacion.dto.CursoEstudianteResponse;
-import com.educoders.Seguridad_Auditoria.presentacion.dto.EvaluacionesEstudianteResponse;
+import com.educoders.Seguridad_Auditoria.presentacion.dto.DetalleCursoEstudianteResponse;
 import com.educoders.Seguridad_Auditoria.presentacion.dto.EstudianteApoderadoResponse;
 import com.educoders.Seguridad_Auditoria.presentacion.dto.RegistrarApoderadoRequest;
 
@@ -38,11 +38,12 @@ public interface ApoderadoService {
     List<CursoEstudianteResponse> listarCursosEstudiante(Long estudianteId);
 
     /**
-     * Lista las evaluaciones con notas de un estudiante en un curso específico.
+     * Lista las evaluaciones con notas de un estudiante en un curso específico,
+     * incluyendo información completa del curso, docente, bimestres y competencias.
      *
      * @param estudianteId ID del estudiante a consultar
      * @param cursoId ID del curso a consultar
-     * @return evaluaciones con notas del estudiante en el curso
+     * @return detalle completo del curso con evaluaciones y notas del estudiante
      */
-    EvaluacionesEstudianteResponse listarEvaluacionesEstudianteCurso(Long estudianteId, Long cursoId);
+    DetalleCursoEstudianteResponse listarEvaluacionesEstudianteCurso(Long estudianteId, Long cursoId);
 }

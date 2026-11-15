@@ -2,8 +2,12 @@ package com.educoders.Seguridad_Auditoria.servicio;
 
 import com.educoders.Gestion_Academica_Motor_Evaluacion.dominio.AsignacionCurso;
 import com.educoders.Gestion_Academica_Motor_Evaluacion.dominio.AnioAcademico;
+import com.educoders.Gestion_Academica_Motor_Evaluacion.dominio.Bimestre;
+import com.educoders.Gestion_Academica_Motor_Evaluacion.dominio.Competencia;
 import com.educoders.Gestion_Academica_Motor_Evaluacion.persistencia.AsignacionCursoRepository;
 import com.educoders.Gestion_Academica_Motor_Evaluacion.persistencia.AnioAcademicoRepository;
+import com.educoders.Gestion_Academica_Motor_Evaluacion.persistencia.BimestreRepository;
+import com.educoders.Gestion_Academica_Motor_Evaluacion.persistencia.CompetenciaRepository;
 import com.educoders.Gestion_Academica_Motor_Evaluacion.presentacion.dto.EvaluacionNotaResponse;
 import com.educoders.Gestion_Academica_Motor_Evaluacion.presentacion.dto.EvaluacionResponse;
 import com.educoders.Gestion_Academica_Motor_Evaluacion.presentacion.dto.NotaResponse;
@@ -11,6 +15,7 @@ import com.educoders.Gestion_Academica_Motor_Evaluacion.servicio.EvaluacionServi
 import com.educoders.Gestion_Academica_Motor_Evaluacion.servicio.NotaService;
 import com.educoders.Gestion_Matricula_Pagos.dominio.Matricula;
 import com.educoders.Gestion_Matricula_Pagos.persistencia.MatriculaRepository;
+import com.educoders.Infraestructura_Servicios.enums.EscalaNota;
 import com.educoders.Infraestructura_Servicios.enums.EstadoMatricula;
 import com.educoders.Infraestructura_Servicios.exception.ConflictoException;
 import com.educoders.Infraestructura_Servicios.exception.RecursoNoEncontradoException;
@@ -22,14 +27,17 @@ import com.educoders.Seguridad_Auditoria.persistencia.EstudianteRepository;
 import com.educoders.Seguridad_Auditoria.persistencia.UsuarioRepository;
 import com.educoders.Seguridad_Auditoria.presentacion.dto.ApoderadoResponse;
 import com.educoders.Seguridad_Auditoria.presentacion.dto.CursoEstudianteResponse;
-import com.educoders.Seguridad_Auditoria.presentacion.dto.EvaluacionesEstudianteResponse;
+import com.educoders.Seguridad_Auditoria.presentacion.dto.DetalleCursoEstudianteResponse;
 import com.educoders.Seguridad_Auditoria.presentacion.dto.EstudianteApoderadoResponse;
 import com.educoders.Seguridad_Auditoria.presentacion.dto.RegistrarApoderadoRequest;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
@@ -54,6 +62,8 @@ public class ApoderadoServiceImpl implements ApoderadoService {
     private final AuditoriaService auditoriaService;
     private final EvaluacionService evaluacionService;
     private final NotaService notaService;
+    private final BimestreRepository bimestreRepository;
+    private final CompetenciaRepository competenciaRepository;
 
     public ApoderadoServiceImpl(
             UsuarioRepository usuarioRepository,
@@ -64,7 +74,9 @@ public class ApoderadoServiceImpl implements ApoderadoService {
             AsignacionCursoRepository asignacionCursoRepository,
             AuditoriaService auditoriaService,
             EvaluacionService evaluacionService,
-            NotaService notaService) {
+            NotaService notaService,
+            BimestreRepository bimestreRepository,
+            CompetenciaRepository competenciaRepository) {
 
         this.usuarioRepository = usuarioRepository;
         this.apoderadoRepository = apoderadoRepository;
@@ -75,6 +87,8 @@ public class ApoderadoServiceImpl implements ApoderadoService {
         this.auditoriaService = auditoriaService;
         this.evaluacionService = evaluacionService;
         this.notaService = notaService;
+        this.bimestreRepository = bimestreRepository;
+        this.competenciaRepository = competenciaRepository;
     }
 
     /**
@@ -231,7 +245,7 @@ public class ApoderadoServiceImpl implements ApoderadoService {
 
     @Override
     @Transactional(readOnly = true)
-    public EvaluacionesEstudianteResponse listarEvaluacionesEstudianteCurso(Long estudianteId, Long cursoId) {
+    public DetalleCursoEstudianteResponse listarEvaluacionesEstudianteCurso(Long estudianteId, Long cursoId) {
         Apoderado apoderado = exigirApoderado();
 
         // Verificar que el estudiante pertenece al apoderado
@@ -243,13 +257,67 @@ public class ApoderadoServiceImpl implements ApoderadoService {
                     "El estudiante no está vinculado al apoderado autenticado.");
         }
 
-        // Obtener evaluaciones del curso
-        List<EvaluacionResponse> evaluaciones = evaluacionService.listarEvaluaciones(
-                Optional.empty(), Optional.empty(), Optional.of(cursoId)
+        // Obtener año académico vigente
+        LocalDate hoy = LocalDate.now();
+        AnioAcademico anioVigente = anioAcademicoRepository
+                .findByFechaInicioLessThanEqualAndFechaFinGreaterThanEqual(hoy, hoy)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+                        "No hay un año académico vigente."));
+
+        // Obtener bimestres del año académico
+        List<Bimestre> bimestres = bimestreRepository.findByAnioAcademicoIdOrderByFechaInicioAsc(anioVigente.getId());
+        List<DetalleCursoEstudianteResponse.BimestreInfo> bimestresInfo = bimestres.stream()
+                .map(b -> new DetalleCursoEstudianteResponse.BimestreInfo(
+                        b.getId(),
+                        b.getNombre().name()
+                ))
+                .toList();
+
+        // Obtener matrícula del estudiante para obtener la sección
+        List<Matricula> matriculas = matriculaRepository.buscarPorEstudianteYAnioIdYEstados(
+                estudianteId,
+                anioVigente.getId(),
+                List.of(EstadoMatricula.CONFIRMADA)
         );
 
+        if (matriculas.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND,
+                    "El estudiante no tiene matrícula confirmada en el año vigente.");
+        }
+
+        Long seccionId = matriculas.get(0).getSeccion().getId();
+
+        // Obtener asignación de curso para obtener docente y grado
+        Optional<AsignacionCurso> asignacionOpt = asignacionCursoRepository.findByCursoIdAndSeccionId(cursoId, seccionId);
+
+        if (asignacionOpt.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND,
+                    "No se encontró asignación para el curso en la sección del estudiante.");
+        }
+
+        AsignacionCurso asignacion = asignacionOpt.get();
+        String docenteNombre = asignacion.getDocente().getNombre() + " " +
+                asignacion.getDocente().getApellidoPaterno();
+        String gradoNombre = asignacion.getSeccion().getGrado().getNombre();
+        String seccionNombre = asignacion.getSeccion().getNombre();
+
+        // Obtener evaluaciones del curso usando el ID de asignación
+        List<EvaluacionResponse> evaluaciones = evaluacionService.listarEvaluaciones(
+                Optional.of(asignacion.getId()), Optional.empty(), Optional.empty()
+        );
+
+        if (evaluaciones.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "No se encontraron evaluaciones para el curso.");
+        }
+
+        // Obtener información del curso
+        String nombreCurso = evaluaciones.get(0).nombreCurso();
+
+        // Obtener competencias del curso
+        List<Competencia> competencias = competenciaRepository.findByCursoId(cursoId);
+
         // Para cada evaluación, buscar la nota del estudiante
-        List<EvaluacionNotaResponse> evaluacionesConNotas = evaluaciones.stream()
+        List<DetalleCursoEstudianteResponse.EvaluacionInfo> evaluacionesInfo = evaluaciones.stream()
                 .map(evaluacion -> {
                     List<NotaResponse> notas = notaService.listarNotasPorEvaluacion(evaluacion.idEvaluacion());
                     NotaResponse notaEstudiante = notas.stream()
@@ -257,14 +325,47 @@ public class ApoderadoServiceImpl implements ApoderadoService {
                             .findFirst()
                             .orElse(null);
 
-                    return new EvaluacionNotaResponse(
+                    String notaStr = notaEstudiante != null && notaEstudiante.valorNota() != null
+                            ? notaEstudiante.valorNota().name()
+                            : null;
+
+                    return new DetalleCursoEstudianteResponse.EvaluacionInfo(
                             evaluacion.idEvaluacion(),
                             evaluacion.nombre(),
                             evaluacion.descripcion(),
                             evaluacion.fecha(),
                             evaluacion.nombreBimestre(),
                             evaluacion.nombreCompetencia(),
-                            notaEstudiante != null ? notaEstudiante.valorNota() : null
+                            notaStr
+                    );
+                })
+                .toList();
+
+        // Agrupar notas por competencia y bimestre
+        Map<Long, Map<String, String>> notasPorCompetenciaBimestre = new HashMap<>();
+        for (DetalleCursoEstudianteResponse.EvaluacionInfo eval : evaluacionesInfo) {
+            if (eval.nota() != null) {
+                // Encontrar el ID de la competencia basado en el nombre
+                Competencia comp = competencias.stream()
+                        .filter(c -> c.getNombre().equals(eval.competenciaNombre()))
+                        .findFirst()
+                        .orElse(null);
+
+                if (comp != null) {
+                    notasPorCompetenciaBimestre
+                            .computeIfAbsent(comp.getId(), k -> new HashMap<>())
+                            .put(eval.bimestreNombre(), eval.nota());
+                }
+            }
+        }
+
+        List<DetalleCursoEstudianteResponse.CompetenciaInfo> competenciasInfo = competencias.stream()
+                .map(comp -> {
+                    Map<String, String> notasPorBimestre = notasPorCompetenciaBimestre.getOrDefault(comp.getId(), new HashMap<>());
+                    return new DetalleCursoEstudianteResponse.CompetenciaInfo(
+                            comp.getId(),
+                            comp.getNombre(),
+                            notasPorBimestre
                     );
                 })
                 .toList();
@@ -276,12 +377,26 @@ public class ApoderadoServiceImpl implements ApoderadoService {
                 estudiante.getApellidoMaterno() == null ? "" : estudiante.getApellidoMaterno()
         ).trim();
 
-        return new EvaluacionesEstudianteResponse(
-                estudianteId,
-                nombreCompletoEstudiante,
-                cursoId,
-                evaluaciones.isEmpty() ? "" : evaluaciones.get(0).nombreCurso(),
-                evaluacionesConNotas
+        return new DetalleCursoEstudianteResponse(
+                new DetalleCursoEstudianteResponse.EstudianteInfo(
+                        estudianteId,
+                        nombreCompletoEstudiante,
+                        estudiante.getCodigo()
+                ),
+                new DetalleCursoEstudianteResponse.CursoInfo(
+                        cursoId,
+                        nombreCurso
+                ),
+                gradoNombre,
+                seccionNombre,
+                docenteNombre,
+                new DetalleCursoEstudianteResponse.AnioAcademicoInfo(
+                        anioVigente.getId(),
+                        anioVigente.getAnio()
+                ),
+                bimestresInfo,
+                competenciasInfo,
+                evaluacionesInfo
         );
     }
 
