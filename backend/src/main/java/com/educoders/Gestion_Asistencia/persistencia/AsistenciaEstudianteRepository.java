@@ -1,6 +1,7 @@
 package com.educoders.Gestion_Asistencia.persistencia;
 
 import com.educoders.Gestion_Asistencia.dominio.AsistenciaEstudiante;
+import com.educoders.Infraestructura_Servicios.enums.EstadoAsistencia;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -18,6 +19,22 @@ public interface AsistenciaEstudianteRepository
 
     Optional<AsistenciaEstudiante> findBySesionClaseIdAndEstudianteId(
             Long sesionClaseId, Long estudianteId);
+
+    @Query("""
+            SELECT a FROM AsistenciaEstudiante a
+            JOIN FETCH a.sesionClase s
+            WHERE s.bloqueHorario.asignacionCurso.id = :asignacionId
+              AND a.estudiante.id = :estudianteId
+              AND s.fecha BETWEEN :desde AND :hasta
+              AND a.estado IN :estados
+            ORDER BY s.fecha, s.horaInicio, a.id
+            """)
+    List<AsistenciaEstudiante> buscarFaltasParaReporte(
+            @Param("asignacionId") Long asignacionId,
+            @Param("estudianteId") Long estudianteId,
+            @Param("desde") LocalDate desde,
+            @Param("hasta") LocalDate hasta,
+            @Param("estados") List<EstadoAsistencia> estados);
 
     @Query(value = """
             SELECT a FROM AsistenciaEstudiante a
