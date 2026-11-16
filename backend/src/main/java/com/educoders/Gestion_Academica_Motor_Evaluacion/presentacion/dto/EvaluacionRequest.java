@@ -17,9 +17,6 @@ public record EvaluacionRequest(
         @NotNull(message = "La fecha es obligatoria")
         LocalDate fecha,
 
-        @NotNull(message = "El ID de la competencia es obligatorio")
-        Long idCompetencia,
-
         @NotNull(message = "El ID de la asignación de curso es obligatorio")
         Long idAsignacionCurso
 ) {

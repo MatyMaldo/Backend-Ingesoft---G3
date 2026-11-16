@@ -8,7 +8,6 @@ public record EvaluacionResponse(
         String descripcion,
         LocalDate fecha,
         String nombreBimestre,
-        String nombreCompetencia,
         String nombreCurso,
         String nombreSeccion
 ) {

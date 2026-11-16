@@ -104,7 +104,6 @@ public class RevisionNotasServiceImpl implements RevisionNotasService {
                     eval.getDescripcion(),
                     eval.getFecha(),
                     eval.getBimestre().getNombre().name(),
-                    eval.getCompetencia().getNombre(),
                     nota != null ? nota.getValor() : null // null significa "no hay nota registrada"
             );
         }).collect(Collectors.toList());

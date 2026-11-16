@@ -69,6 +69,19 @@ public interface NotaCompetenciaRepository extends JpaRepository<NotaCompetencia
             Long idCurso
     );
 
+    /**
+     * Consulta las notas de un estudiante en un curso específico.
+     */
+    @Query("SELECT nc FROM NotaCompetencia nc " +
+            "JOIN FETCH nc.competencia c " +
+            "JOIN FETCH nc.bimestre b " +
+            "WHERE nc.estudiante.id = :idEstudiante " +
+            "AND c.curso.id = :idCurso")
+    List<NotaCompetencia> findByEstudianteIdAndCompetenciaCursoId(
+            @Param("idEstudiante") Long idEstudiante,
+            @Param("idCurso") Long idCurso
+    );
+
 
     /**
      * Consulta las calificaciones de todas las competencias
