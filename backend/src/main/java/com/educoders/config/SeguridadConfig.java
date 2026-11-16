@@ -169,6 +169,22 @@ public class SeguridadConfig {
                                 "/api/v1/operaciones-masivas/**"
                         ).hasRole("ADMINISTRADOR")
 
+                        // Reportes de asistencia
+                        .requestMatchers(HttpMethod.GET,
+                                "/api/v1/asistencias/reportes/docente/asignaciones/*/estudiantes/*/vista-previa"
+                        ).hasRole("DOCENTE")
+                        .requestMatchers(HttpMethod.POST,
+                                "/api/v1/asistencias/reportes/docente/asignaciones/*/estudiantes/*"
+                        ).hasRole("DOCENTE")
+                        .requestMatchers(HttpMethod.GET,
+                                "/api/v1/asistencias/reportes/estudiante",
+                                "/api/v1/asistencias/reportes/estudiante/*"
+                        ).hasRole("ESTUDIANTE")
+                        .requestMatchers(HttpMethod.GET,
+                                "/api/v1/asistencias/reportes/apoderado/*",
+                                "/api/v1/asistencias/reportes/apoderado/*/*"
+                        ).hasRole("APODERADO")
+
                         // Asistencia
                         .requestMatchers(
                                 HttpMethod.GET,

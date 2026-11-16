@@ -21,5 +21,7 @@ public interface AnioAcademicoRepository extends JpaRepository<AnioAcademico, Lo
      */
     List<AnioAcademico> findByFechaInicioGreaterThanOrderByFechaInicioAsc(LocalDate fechaInicio);
 
+    Optional<AnioAcademico> findFirstByFechaInicioLessThanEqualOrderByFechaInicioDescIdDesc(LocalDate hoy);
+
     Optional<AnioAcademico> findFirstByAnioLessThanOrderByAnioDesc(Integer anio);
 }

@@ -70,4 +70,26 @@ public interface NotaCompetenciaRepository extends JpaRepository<NotaCompetencia
     );
 
 
+    /**
+     * Consulta las calificaciones de todas las competencias
+     * de un estudiante durante un año académico.
+     *
+     * HU-EVAL-06: permite construir la libreta acumulativa.
+     */
+    @Query("""
+            SELECT nc
+            FROM NotaCompetencia nc
+            JOIN FETCH nc.competencia c
+            JOIN FETCH c.curso curso
+            JOIN FETCH nc.bimestre b
+            WHERE nc.estudiante.id = :idEstudiante
+              AND b.anioAcademico.id = :idAnioAcademico
+            ORDER BY curso.nombre, c.nombre, b.fechaInicio
+            """)
+    List<NotaCompetencia> buscarNotasAcumuladasPorAnio(
+            @Param("idEstudiante") Long idEstudiante,
+            @Param("idAnioAcademico") Long idAnioAcademico
+    );
+
+
 }
