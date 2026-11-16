@@ -23,7 +23,8 @@ public record LibretaNotasDetalleResponse(
         String nombreTutor,
         String nombreInstitucion,
         long inasistencias,
-        long tardanzas
+        long tardanzas,
+        List<ProgresoCompetenciaAcumuladoResponse> progresoAcumulado
 ) {
 
     public record NotaPorCompetencia(

@@ -30,6 +30,15 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import com.educoders.Gestion_Academica_Motor_Evaluacion.dominio.Competencia;
+import com.educoders.Gestion_Academica_Motor_Evaluacion.presentacion.dto.ProgresoCompetenciaAcumuladoResponse;
+import com.educoders.Infraestructura_Servicios.enums.EscalaNota;
+import com.educoders.Infraestructura_Servicios.enums.NombreBimestre;
+
+import java.util.EnumMap;
+import java.util.LinkedHashMap;
+import java.util.Map;
+
 import com.educoders.Gestion_Academica_Motor_Evaluacion.persistencia.NotaCompetenciaRepository;
 import java.io.IOException;
 import java.util.List;
@@ -308,6 +317,12 @@ public class LibretaNotasServiceImpl implements LibretaNotasService {
                 : tutorSeccion.getNombre()
                   + " " + tutorSeccion.getApellidoPaterno();
 
+        var progresoAcumulado = construirProgresoAcumulado(
+                idEstudiante,
+                idAnioAcademico,
+                bimestre.getNombre()
+        );
+
         return new LibretaNotasDetalleResponse(
                 libreta.getId(),
                 idEstudiante,
@@ -321,7 +336,8 @@ public class LibretaNotasServiceImpl implements LibretaNotasService {
                 nombreTutor,
                 nombreInstitucion,
                 inasistencias,
-                tardanzas
+                tardanzas,
+                progresoAcumulado
         );
     }
 
@@ -510,6 +526,71 @@ public class LibretaNotasServiceImpl implements LibretaNotasService {
 
         return tutor;
     }
+
+
+
+    /**
+     * Construye el progreso acumulado por competencia
+     * hasta el bimestre al que pertenece la libreta.
+     *
+     * No incluye calificaciones de bimestres posteriores.
+     */
+    private List<ProgresoCompetenciaAcumuladoResponse>
+    construirProgresoAcumulado(
+            Long idEstudiante,
+            Long idAnioAcademico,
+            NombreBimestre bimestreCorte) {
+
+        var notas = notaCompetenciaRepository
+                .buscarNotasAcumuladasPorAnio(
+                        idEstudiante,
+                        idAnioAcademico
+                );
+
+        Map<Long, Competencia> competencias = new LinkedHashMap<>();
+
+        Map<Long, EnumMap<NombreBimestre, EscalaNota>>
+                calificaciones = new LinkedHashMap<>();
+
+        for (var nota : notas) {
+
+            NombreBimestre periodo = nota.getBimestre().getNombre();
+
+            // No mostrar notas posteriores al corte académico.
+            if (periodo.compareTo(bimestreCorte) > 0) {
+                continue;
+            }
+
+            Competencia competencia = nota.getCompetencia();
+            Long idCompetencia = competencia.getId();
+
+            competencias.putIfAbsent(idCompetencia, competencia);
+
+            calificaciones.computeIfAbsent(
+                    idCompetencia,
+                    id -> new EnumMap<>(NombreBimestre.class)
+            ).put(periodo, nota.getValor());
+        }
+
+        return competencias.values().stream()
+                .map(competencia -> {
+
+                    var notasPorPeriodo =
+                            calificaciones.get(competencia.getId());
+
+                    return new ProgresoCompetenciaAcumuladoResponse(
+                            competencia.getId(),
+                            competencia.getCurso().getNombre(),
+                            competencia.getNombre(),
+                            notasPorPeriodo.get(NombreBimestre.BIM_1),
+                            notasPorPeriodo.get(NombreBimestre.BIM_2),
+                            notasPorPeriodo.get(NombreBimestre.BIM_3),
+                            notasPorPeriodo.get(NombreBimestre.BIM_4)
+                    );
+                })
+                .toList();
+    }
+
 
 
 }
