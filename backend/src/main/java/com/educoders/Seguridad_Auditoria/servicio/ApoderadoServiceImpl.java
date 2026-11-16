@@ -4,10 +4,12 @@ import com.educoders.Gestion_Academica_Motor_Evaluacion.dominio.AsignacionCurso;
 import com.educoders.Gestion_Academica_Motor_Evaluacion.dominio.AnioAcademico;
 import com.educoders.Gestion_Academica_Motor_Evaluacion.dominio.Bimestre;
 import com.educoders.Gestion_Academica_Motor_Evaluacion.dominio.Competencia;
+import com.educoders.Gestion_Academica_Motor_Evaluacion.dominio.NotaCompetencia;
 import com.educoders.Gestion_Academica_Motor_Evaluacion.persistencia.AsignacionCursoRepository;
 import com.educoders.Gestion_Academica_Motor_Evaluacion.persistencia.AnioAcademicoRepository;
 import com.educoders.Gestion_Academica_Motor_Evaluacion.persistencia.BimestreRepository;
 import com.educoders.Gestion_Academica_Motor_Evaluacion.persistencia.CompetenciaRepository;
+import com.educoders.Gestion_Academica_Motor_Evaluacion.persistencia.NotaCompetenciaRepository;
 import com.educoders.Gestion_Academica_Motor_Evaluacion.presentacion.dto.EvaluacionNotaResponse;
 import com.educoders.Gestion_Academica_Motor_Evaluacion.presentacion.dto.EvaluacionResponse;
 import com.educoders.Gestion_Academica_Motor_Evaluacion.presentacion.dto.NotaResponse;
@@ -64,6 +66,7 @@ public class ApoderadoServiceImpl implements ApoderadoService {
     private final NotaService notaService;
     private final BimestreRepository bimestreRepository;
     private final CompetenciaRepository competenciaRepository;
+    private final NotaCompetenciaRepository notaCompetenciaRepository;
 
     public ApoderadoServiceImpl(
             UsuarioRepository usuarioRepository,
@@ -76,7 +79,8 @@ public class ApoderadoServiceImpl implements ApoderadoService {
             EvaluacionService evaluacionService,
             NotaService notaService,
             BimestreRepository bimestreRepository,
-            CompetenciaRepository competenciaRepository) {
+            CompetenciaRepository competenciaRepository,
+            NotaCompetenciaRepository notaCompetenciaRepository) {
 
         this.usuarioRepository = usuarioRepository;
         this.apoderadoRepository = apoderadoRepository;
@@ -89,6 +93,7 @@ public class ApoderadoServiceImpl implements ApoderadoService {
         this.notaService = notaService;
         this.bimestreRepository = bimestreRepository;
         this.competenciaRepository = competenciaRepository;
+        this.notaCompetenciaRepository = notaCompetenciaRepository;
     }
 
     /**
@@ -335,28 +340,21 @@ public class ApoderadoServiceImpl implements ApoderadoService {
                             evaluacion.descripcion(),
                             evaluacion.fecha(),
                             evaluacion.nombreBimestre(),
-                            evaluacion.nombreCompetencia(),
                             notaStr
                     );
                 })
                 .toList();
 
+        // Obtener notas por competencia directamente de notas_competencia (fuente de verdad bimestral)
+        List<NotaCompetencia> notasCompetencias = notaCompetenciaRepository
+                .findByEstudianteIdAndCompetenciaCursoId(estudianteId, cursoId);
+
         // Agrupar notas por competencia y bimestre
         Map<Long, Map<String, String>> notasPorCompetenciaBimestre = new HashMap<>();
-        for (DetalleCursoEstudianteResponse.EvaluacionInfo eval : evaluacionesInfo) {
-            if (eval.nota() != null) {
-                // Encontrar el ID de la competencia basado en el nombre
-                Competencia comp = competencias.stream()
-                        .filter(c -> c.getNombre().equals(eval.competenciaNombre()))
-                        .findFirst()
-                        .orElse(null);
-
-                if (comp != null) {
-                    notasPorCompetenciaBimestre
-                            .computeIfAbsent(comp.getId(), k -> new HashMap<>())
-                            .put(eval.bimestreNombre(), eval.nota());
-                }
-            }
+        for (NotaCompetencia nc : notasCompetencias) {
+            notasPorCompetenciaBimestre
+                    .computeIfAbsent(nc.getCompetencia().getId(), k -> new HashMap<>())
+                    .put(nc.getBimestre().getNombre().name(), nc.getValor().name());
         }
 
         List<DetalleCursoEstudianteResponse.CompetenciaInfo> competenciasInfo = competencias.stream()

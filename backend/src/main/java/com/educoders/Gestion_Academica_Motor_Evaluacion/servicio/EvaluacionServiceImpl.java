@@ -30,29 +30,29 @@ public class EvaluacionServiceImpl implements EvaluacionService {
 
     private final EvaluacionRepository evaluacionRepository;
     private final BimestreRepository bimestreRepository;
-    private final CompetenciaRepository competenciaRepository;
     private final AsignacionCursoRepository asignacionCursoRepository;
     private final AnioAcademicoRepository anioAcademicoRepository;
     private final SeccionRepository seccionRepository;
+    private final CompetenciaRepository competenciaRepository;
 
     public EvaluacionServiceImpl(EvaluacionRepository evaluacionRepository,
                                  BimestreRepository bimestreRepository,
-                                 CompetenciaRepository competenciaRepository,
                                  AsignacionCursoRepository asignacionCursoRepository,
                                  AnioAcademicoRepository anioAcademicoRepository,
-                                 SeccionRepository seccionRepository) {
+                                 SeccionRepository seccionRepository,
+                                 CompetenciaRepository competenciaRepository) {
         this.evaluacionRepository = evaluacionRepository;
         this.bimestreRepository = bimestreRepository;
-        this.competenciaRepository = competenciaRepository;
         this.asignacionCursoRepository = asignacionCursoRepository;
         this.anioAcademicoRepository = anioAcademicoRepository;
         this.seccionRepository = seccionRepository;
+        this.competenciaRepository = competenciaRepository;
     }
 
     /**
      * Registra una nueva evaluación en el sistema.
      * Regla de negocio: HU-EVAL-01. Valida que el docente dicte el curso, que el año
-     * esté vigente, que la competencia pertenezca al curso y calcula el bimestre.
+     * esté vigente y calcula el bimestre.
      */
     @Override
     @Transactional
@@ -71,15 +71,7 @@ public class EvaluacionServiceImpl implements EvaluacionService {
             throw new ReglaNegocioException("La creación de evaluaciones solo está disponible con el año académico vigente.");
         }
 
-        // 3. Validar que la Competencia existe y PERTENECE AL CURSO DE LA ASIGNACIÓN
-        Competencia competencia = competenciaRepository.findById(request.idCompetencia())
-                .orElseThrow(() -> new ReglaNegocioException("Competencia no encontrada"));
-
-        if (!competencia.getCurso().getId().equals(asignacion.getCurso().getId())) {
-            throw new ReglaNegocioException("La competencia seleccionada no pertenece al curso de esta asignación.");
-        }
-
-        // 4. Buscar el bimestre vigente SOLO EN EL AÑO ACADÉMICO DE LA SECCIÓN
+        // 3. Buscar el bimestre vigente SOLO EN EL AÑO ACADÉMICO DE LA SECCIÓN
         Long idAnioAcademico = asignacion.getSeccion().getAnioAcademico().getId();
         Optional<Bimestre> bimestreOpt = bimestreRepository
                 .findByAnioAcademicoIdAndFechaInicioLessThanEqualAndFechaFinGreaterThanEqual(
@@ -89,25 +81,23 @@ public class EvaluacionServiceImpl implements EvaluacionService {
             throw new ReglaNegocioException("La fecha debe estar dentro de un bimestre del año académico.");
         }
 
-        // 5. Crear la evaluación
+        // 4. Crear la evaluación
         Evaluacion evaluacion = new Evaluacion();
         evaluacion.setNombre(request.nombre());
         evaluacion.setDescripcion(request.descripcion());
         evaluacion.setFecha(request.fecha());
         evaluacion.setBimestre(bimestreOpt.get());
-        evaluacion.setCompetencia(competencia);
         evaluacion.setAsignacionCurso(asignacion);
 
         Evaluacion evaluacionGuardada = evaluacionRepository.save(evaluacion);
 
-        // 6. Construir la respuesta
+        // 5. Construir la respuesta
         return new EvaluacionResponse(
                 evaluacionGuardada.getId(),
                 evaluacionGuardada.getNombre(),
                 evaluacionGuardada.getDescripcion(),
                 evaluacionGuardada.getFecha(),
                 evaluacionGuardada.getBimestre().getNombre().name(),
-                evaluacionGuardada.getCompetencia().getNombre(),
                 evaluacionGuardada.getAsignacionCurso().getCurso().getNombre(),
                 evaluacionGuardada.getAsignacionCurso().getSeccion().getNombre()
         );
@@ -133,7 +123,6 @@ public class EvaluacionServiceImpl implements EvaluacionService {
                         e.getDescripcion(),
                         e.getFecha(),
                         e.getBimestre().getNombre().name(),
-                        e.getCompetencia().getNombre(),
                         e.getAsignacionCurso().getCurso().getNombre(),
                         e.getAsignacionCurso().getSeccion().getNombre()
                 ))

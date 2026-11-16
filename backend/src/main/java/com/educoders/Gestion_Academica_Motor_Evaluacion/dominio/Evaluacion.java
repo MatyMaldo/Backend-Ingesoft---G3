@@ -32,10 +32,6 @@ public class Evaluacion {
     @JoinColumn(name = "bimestre_id", nullable = false)
     private Bimestre bimestre;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "competencia_id", nullable = false)
-    private Competencia competencia;
-
     public Evaluacion() {
     }
 
@@ -85,13 +81,5 @@ public class Evaluacion {
 
     public void setBimestre(Bimestre bimestre) {
         this.bimestre = bimestre;
-    }
-
-    public Competencia getCompetencia() {
-        return competencia;
-    }
-
-    public void setCompetencia(Competencia competencia) {
-        this.competencia = competencia;
     }
 }

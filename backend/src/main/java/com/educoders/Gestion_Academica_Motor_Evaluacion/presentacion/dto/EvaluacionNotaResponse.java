@@ -9,6 +9,5 @@ public record EvaluacionNotaResponse(
         String descripcion,
         LocalDate fecha,
         String nombreBimestre,
-        String nombreCompetencia,
         EscalaNota valorNota // Puede ser null si el docente no ha registrado nota
 ) {}

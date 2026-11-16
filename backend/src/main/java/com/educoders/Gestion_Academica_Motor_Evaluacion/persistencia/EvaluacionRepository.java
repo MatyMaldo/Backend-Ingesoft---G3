@@ -18,7 +18,6 @@ public interface EvaluacionRepository extends JpaRepository<Evaluacion, Long> {
 
     @Query("SELECT e FROM Evaluacion e " +
             "JOIN FETCH e.bimestre b " +
-            "JOIN FETCH e.competencia c " +
             "WHERE e.asignacionCurso.seccion.id = :idSeccion " +
             "AND e.asignacionCurso.curso.id = :idCurso")
     List<Evaluacion> buscarEvaluacionesConDetalles(@Param("idSeccion") Long idSeccion, @Param("idCurso") Long idCurso);

@@ -48,7 +48,6 @@ public record DetalleCursoEstudianteResponse(
             String descripcion,
             LocalDate fecha,
             String bimestreNombre,
-            String competenciaNombre,
             String nota
     ) {}
 }
