@@ -3,6 +3,7 @@ package com.educoders.Gestion_Asistencia.presentacion.dto;
 import com.educoders.Infraestructura_Servicios.enums.EstadoAsistencia;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.List;
 
@@ -17,7 +18,8 @@ public record AsistenciaHistorialResponse(
         long totalTardanzas,
         long totalFaltas,
         long totalJustificadas,
-        double porcentajeAsistencia
+        double porcentajeAsistencia,
+        AnioItem anioAcademico
 ) {
     public AsistenciaHistorialResponse {
         cursos = List.copyOf(cursos);
@@ -25,6 +27,10 @@ public record AsistenciaHistorialResponse(
     }
 
     public record CursoItem(Long id, String nombre) {
+    }
+
+    /** Año académico de consulta al que corresponde el historial (puede ser {@code null}). */
+    public record AnioItem(Long id, Integer anio, LocalDate fechaInicio, LocalDate fechaFin) {
     }
 
     public record RegistroItem(
@@ -37,7 +43,9 @@ public record AsistenciaHistorialResponse(
             LocalTime horaInicio,
             LocalTime horaFin,
             EstadoAsistencia estado,
-            String observaciones
+            String observaciones,
+            /** Hora en que se registró la asistencia; solo se informa en el historial del docente (HU-ASI-08). */
+            LocalDateTime fechaHoraRegistro
     ) {
     }
 }

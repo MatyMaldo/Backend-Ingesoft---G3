@@ -1,6 +1,7 @@
 package com.educoders.Gestion_Matriz_Horarios.presentacion.dto;
 
 import com.educoders.Infraestructura_Servicios.enums.DiaSemana;
+import com.educoders.Infraestructura_Servicios.enums.EstadoAsistencia;
 import com.educoders.Infraestructura_Servicios.enums.EstadoSesion;
 
 import java.time.LocalDate;
@@ -24,6 +25,10 @@ public class SesionClaseResponse {
     private String gradoNombre;
     private Long seccionId;
     private String seccionNombre;
+    /** Solo en «mi horario» del docente: estado de su propia asistencia, o {@code null} si aún no tiene registro. */
+    private EstadoAsistencia asistenciaDocente;
+    /** Solo en «mi horario» del docente: si la sesión ya tiene asistencia de estudiantes registrada. */
+    private Boolean asistenciaEstudiantesRegistrada;
 
     public SesionClaseResponse() {}
     public Long getId() { return id; }
@@ -60,4 +65,10 @@ public class SesionClaseResponse {
     public void setSeccionId(Long seccionId) { this.seccionId = seccionId; }
     public String getSeccionNombre() { return seccionNombre; }
     public void setSeccionNombre(String seccionNombre) { this.seccionNombre = seccionNombre; }
+    public EstadoAsistencia getAsistenciaDocente() { return asistenciaDocente; }
+    public void setAsistenciaDocente(EstadoAsistencia asistenciaDocente) { this.asistenciaDocente = asistenciaDocente; }
+    public Boolean getAsistenciaEstudiantesRegistrada() { return asistenciaEstudiantesRegistrada; }
+    public void setAsistenciaEstudiantesRegistrada(Boolean asistenciaEstudiantesRegistrada) {
+        this.asistenciaEstudiantesRegistrada = asistenciaEstudiantesRegistrada;
+    }
 }

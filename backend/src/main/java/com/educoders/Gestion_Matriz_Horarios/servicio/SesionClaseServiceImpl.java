@@ -22,6 +22,9 @@ import com.educoders.Infraestructura_Servicios.exception.RecursoNoEncontradoExce
 import com.educoders.Infraestructura_Servicios.exception.ReglaNegocioException;
 import com.educoders.Infraestructura_Servicios.operaciones.ProgresoLote;
 import com.educoders.Seguridad_Auditoria.dominio.Apoderado;
+import com.educoders.Gestion_Asistencia.persistencia.AsistenciaDocenteRepository;
+import com.educoders.Gestion_Asistencia.persistencia.AsistenciaEstudianteRepository;
+import com.educoders.Infraestructura_Servicios.enums.EstadoAsistencia;
 import com.educoders.Seguridad_Auditoria.dominio.Docente;
 import com.educoders.Seguridad_Auditoria.dominio.Estudiante;
 import com.educoders.Seguridad_Auditoria.dominio.Usuario;
@@ -56,6 +59,8 @@ public class SesionClaseServiceImpl implements SesionClaseService {
     private final EstudianteRepository estudianteRepo;
     private final BimestreRepository bimestreRepo;
     private final AuditoriaService auditoriaService;
+    private final AsistenciaDocenteRepository asistenciaDocenteRepo;
+    private final AsistenciaEstudianteRepository asistenciaEstudianteRepo;
 
     public SesionClaseServiceImpl(SesionClaseRepository repo,
                                   BloqueHorarioRepository bloqueRepo,
@@ -63,7 +68,9 @@ public class SesionClaseServiceImpl implements SesionClaseService {
                                   MatriculaRepository matriculaRepo,
                                   EstudianteRepository estudianteRepo,
                                   BimestreRepository bimestreRepo,
-                                  AuditoriaService auditoriaService) {
+                                  AuditoriaService auditoriaService,
+                                  AsistenciaDocenteRepository asistenciaDocenteRepo,
+                                  AsistenciaEstudianteRepository asistenciaEstudianteRepo) {
         this.repo = repo;
         this.bloqueRepo = bloqueRepo;
         this.periodoRepo = periodoRepo;
@@ -71,6 +78,8 @@ public class SesionClaseServiceImpl implements SesionClaseService {
         this.estudianteRepo = estudianteRepo;
         this.bimestreRepo = bimestreRepo;
         this.auditoriaService = auditoriaService;
+        this.asistenciaDocenteRepo = asistenciaDocenteRepo;
+        this.asistenciaEstudianteRepo = asistenciaEstudianteRepo;
     }
 
     // ------------------------------------------------------------------
@@ -301,7 +310,29 @@ public class SesionClaseServiceImpl implements SesionClaseService {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN,
                     "Solo un docente puede consultar su propio horario.");
         }
-        return listarPorDocente(docente.getId(), fechaInicio, fechaFin);
+        List<SesionClaseResponse> sesiones = listarPorDocente(docente.getId(), fechaInicio, fechaFin);
+        completarAsistencia(sesiones);
+        return sesiones;
+    }
+
+    /**
+     * Indica en cada sesión del docente el estado de su propia asistencia y si ya hay asistencia de estudiantes, para
+     * que el horario muestre qué falta por registrar sin abrir cada sesión.
+     */
+    private void completarAsistencia(List<SesionClaseResponse> sesiones) {
+        if (sesiones.isEmpty()) {
+            return;
+        }
+        List<Long> ids = sesiones.stream().map(SesionClaseResponse::getId).toList();
+        java.util.Map<Long, EstadoAsistencia> estadosDocente = new java.util.HashMap<>();
+        for (Object[] fila : asistenciaDocenteRepo.estadosPorSesiones(ids)) {
+            estadosDocente.put(((Number) fila[0]).longValue(), (EstadoAsistencia) fila[1]);
+        }
+        java.util.Set<Long> conAsistencia = new java.util.HashSet<>(asistenciaEstudianteRepo.sesionesConAsistencia(ids));
+        for (SesionClaseResponse sesion : sesiones) {
+            sesion.setAsistenciaDocente(estadosDocente.get(sesion.getId()));
+            sesion.setAsistenciaEstudiantesRegistrada(conAsistencia.contains(sesion.getId()));
+        }
     }
 
     @Override

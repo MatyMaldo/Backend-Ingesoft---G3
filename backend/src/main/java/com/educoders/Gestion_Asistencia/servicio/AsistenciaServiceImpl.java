@@ -1,5 +1,7 @@
 package com.educoders.Gestion_Asistencia.servicio;
 
+import com.educoders.Gestion_Academica_Motor_Evaluacion.dominio.AnioAcademico;
+import com.educoders.Gestion_Academica_Motor_Evaluacion.persistencia.AnioAcademicoRepository;
 import com.educoders.Gestion_Asistencia.dominio.AsistenciaDocente;
 import com.educoders.Gestion_Asistencia.dominio.AsistenciaEstudiante;
 import com.educoders.Gestion_Asistencia.persistencia.AsistenciaDocenteRepository;
@@ -25,6 +27,7 @@ import com.educoders.Seguridad_Auditoria.dominio.Docente;
 import com.educoders.Seguridad_Auditoria.dominio.Estudiante;
 import com.educoders.Seguridad_Auditoria.dominio.Usuario;
 import com.educoders.Seguridad_Auditoria.persistencia.EstudianteRepository;
+import com.educoders.Seguridad_Auditoria.presentacion.dto.DetalleAuditoriaDTO;
 import com.educoders.Seguridad_Auditoria.presentacion.dto.RegistrarAuditoriaRequestDTO;
 import com.educoders.Seguridad_Auditoria.servicio.AuditoriaService;
 import org.springframework.data.domain.Page;
@@ -50,12 +53,15 @@ import java.util.Set;
 public class AsistenciaServiceImpl implements AsistenciaService {
 
     private static final long MINUTOS_TARDANZA_DOCENTE = 10;
+    private static final String SIN_REGISTRO = "Sin registro";
+    private static final String SIN_OBSERVACIONES = "Sin observaciones";
 
     private final SesionClaseRepository sesionRepository;
     private final AsistenciaEstudianteRepository asistenciaEstudianteRepository;
     private final AsistenciaDocenteRepository asistenciaDocenteRepository;
     private final MatriculaRepository matriculaRepository;
     private final EstudianteRepository estudianteRepository;
+    private final AnioAcademicoRepository anioRepository;
     private final AuditoriaService auditoriaService;
     private final Clock clock;
 
@@ -65,6 +71,7 @@ public class AsistenciaServiceImpl implements AsistenciaService {
             AsistenciaDocenteRepository asistenciaDocenteRepository,
             MatriculaRepository matriculaRepository,
             EstudianteRepository estudianteRepository,
+            AnioAcademicoRepository anioRepository,
             AuditoriaService auditoriaService,
             Clock clock) {
         this.sesionRepository = sesionRepository;
@@ -72,6 +79,7 @@ public class AsistenciaServiceImpl implements AsistenciaService {
         this.asistenciaDocenteRepository = asistenciaDocenteRepository;
         this.matriculaRepository = matriculaRepository;
         this.estudianteRepository = estudianteRepository;
+        this.anioRepository = anioRepository;
         this.auditoriaService = auditoriaService;
         this.clock = clock;
     }
@@ -136,13 +144,34 @@ public class AsistenciaServiceImpl implements AsistenciaService {
             existentes.put(asistencia.getEstudiante().getId(), asistencia);
         }
 
+        boolean primerRegistro = existentes.isEmpty();
         List<AsistenciaEstudiante> guardar = new ArrayList<>();
+        List<DetalleAuditoriaDTO> detalles = new ArrayList<>();
         for (GuardarAsistenciaEstudiantesRequest.AsistenciaItem item : request.asistencias()) {
             AsistenciaEstudiante asistencia = existentes.get(item.estudianteId());
+            Estudiante estudiante = rosterPorId.get(item.estudianteId()).getEstudiante();
+            String etiqueta = nombreCompleto(estudiante) + " (" + estudiante.getCodigo() + ")";
+            String estadoAnterior = asistencia != null ? asistencia.getEstado().name() : SIN_REGISTRO;
+            String observacionesAnteriores = asistencia != null
+                    ? textoObservaciones(asistencia.getObservaciones())
+                    : SIN_REGISTRO;
+            boolean existia = asistencia != null;
             if (asistencia == null) {
                 asistencia = new AsistenciaEstudiante();
                 asistencia.setSesionClase(sesion);
-                asistencia.setEstudiante(rosterPorId.get(item.estudianteId()).getEstudiante());
+                asistencia.setEstudiante(estudiante);
+            }
+            if (!estadoAnterior.equals(item.estado().name())) {
+                detalles.add(new DetalleAuditoriaDTO(
+                        "Asistencia de " + etiqueta, estadoAnterior, item.estado().name()));
+            }
+            String observacionesNuevas = textoObservaciones(item.observaciones());
+            boolean observacionesCambiaron = existia
+                    ? !observacionesAnteriores.equals(observacionesNuevas)
+                    : !SIN_OBSERVACIONES.equals(observacionesNuevas);
+            if (observacionesCambiaron) {
+                detalles.add(new DetalleAuditoriaDTO(
+                        "Observaciones de " + etiqueta, observacionesAnteriores, observacionesNuevas));
             }
             asistencia.setEstado(item.estado());
             asistencia.setObservaciones(item.observaciones());
@@ -152,8 +181,14 @@ public class AsistenciaServiceImpl implements AsistenciaService {
 
         if (!guardar.isEmpty()) {
             asistenciaEstudianteRepository.saveAll(guardar);
-            auditar("AsistenciaEstudiante", sesionId,
-                    "Registro de asistencia de estudiantes");
+            if (!detalles.isEmpty()) {
+                auditar(primerRegistro ? TipoAccionAuditoria.CREAR : TipoAccionAuditoria.ACTUALIZAR,
+                        "AsistenciaEstudiante", sesionId,
+                        primerRegistro
+                                ? "Registro de asistencia de estudiantes"
+                                : "Modificación de asistencia de estudiantes",
+                        detalles);
+            }
         }
 
         return construirDetalle(sesion, LocalDateTime.now(clock));
@@ -191,7 +226,10 @@ public class AsistenciaServiceImpl implements AsistenciaService {
         asistencia.setFechaHoraRegistro(ahora);
         AsistenciaDocente guardada = asistenciaDocenteRepository.save(asistencia);
 
-        auditar("AsistenciaDocente", sesionId, "Registro de asistencia del docente");
+        auditar(TipoAccionAuditoria.CREAR, "AsistenciaDocente", sesionId,
+                "Registro de asistencia del docente",
+                List.of(new DetalleAuditoriaDTO(
+                        "Asistencia del docente", SIN_REGISTRO, estado.name())));
         return mapearDocente(guardada);
     }
 
@@ -204,15 +242,24 @@ public class AsistenciaServiceImpl implements AsistenciaService {
         int paginaNormalizada = normalizarPagina(pagina);
         int tamanoNormalizado = normalizarTamano(tamano);
 
+        AnioAcademico anio = anioDeConsulta();
+        if (anio == null) {
+            return historialVacio(null, paginaNormalizada, tamanoNormalizado);
+        }
+        LocalDate[] rango = rangoEnAnio(anio, desde, hasta);
+        if (rango == null) {
+            return historialVacio(anio, paginaNormalizada, tamanoNormalizado);
+        }
+
         Page<AsistenciaDocente> registros = asistenciaDocenteRepository
-                .buscarHistorial(docente.getId(), desde, hasta, cursoId,
+                .buscarHistorial(docente.getId(), rango[0], rango[1], cursoId,
                         PageRequest.of(paginaNormalizada, tamanoNormalizado));
         List<Object[]> cursos = asistenciaDocenteRepository
-                .buscarCursosHistorial(docente.getId(), desde, hasta);
+                .buscarCursosHistorial(docente.getId(), rango[0], rango[1]);
         List<Object[]> conteos = asistenciaDocenteRepository
-                .contarPorEstado(docente.getId(), desde, hasta, cursoId);
+                .contarPorEstado(docente.getId(), rango[0], rango[1], cursoId);
         return construirHistorialDocente(
-                registros, cursos, conteos, paginaNormalizada, tamanoNormalizado);
+                registros, cursos, conteos, paginaNormalizada, tamanoNormalizado, anio);
     }
 
     @Override
@@ -221,18 +268,7 @@ public class AsistenciaServiceImpl implements AsistenciaService {
             LocalDate desde, LocalDate hasta, Long cursoId, int pagina, int tamano) {
         Estudiante estudiante = exigirEstudiante();
         validarRango(desde, hasta);
-        int paginaNormalizada = normalizarPagina(pagina);
-        int tamanoNormalizado = normalizarTamano(tamano);
-
-        Page<AsistenciaEstudiante> registros = asistenciaEstudianteRepository
-                .buscarHistorial(estudiante.getId(), desde, hasta, cursoId,
-                        PageRequest.of(paginaNormalizada, tamanoNormalizado));
-        List<Object[]> cursos = asistenciaEstudianteRepository
-                .buscarCursosHistorial(estudiante.getId(), desde, hasta);
-        List<Object[]> conteos = asistenciaEstudianteRepository
-                .contarPorEstado(estudiante.getId(), desde, hasta, cursoId);
-        return construirHistorialEstudiante(
-                registros, cursos, conteos, paginaNormalizada, tamanoNormalizado);
+        return historialDeEstudiante(estudiante.getId(), desde, hasta, cursoId, pagina, tamano);
     }
 
     @Override
@@ -242,8 +278,6 @@ public class AsistenciaServiceImpl implements AsistenciaService {
             int pagina, int tamano) {
         Apoderado apoderado = exigirApoderado();
         validarRango(desde, hasta);
-        int paginaNormalizada = normalizarPagina(pagina);
-        int tamanoNormalizado = normalizarTamano(tamano);
 
         Estudiante estudiante = estudianteRepository.findById(estudianteId)
                 .orElseThrow(() -> RecursoNoEncontradoException.de(
@@ -253,16 +287,74 @@ public class AsistenciaServiceImpl implements AsistenciaService {
             throw new ResponseStatusException(
                     HttpStatus.FORBIDDEN, "El estudiante no se encuentra a su cargo.");
         }
+        return historialDeEstudiante(estudianteId, desde, hasta, cursoId, pagina, tamano);
+    }
+
+    /**
+     * Historial de un estudiante limitado al año académico de consulta (HU-GEMAP-11: el más reciente que ya inició),
+     * y solo si el estudiante tiene matrícula Confirmada en ese año. Los rangos pedidos se recortan a ese año.
+     */
+    private AsistenciaHistorialResponse historialDeEstudiante(
+            Long estudianteId, LocalDate desde, LocalDate hasta, Long cursoId,
+            int pagina, int tamano) {
+        int paginaNormalizada = normalizarPagina(pagina);
+        int tamanoNormalizado = normalizarTamano(tamano);
+
+        AnioAcademico anio = anioDeConsulta();
+        if (anio == null) {
+            return historialVacio(null, paginaNormalizada, tamanoNormalizado);
+        }
+        boolean matriculado = matriculaRepository
+                .existsByEstudianteIdAndSeccionAnioAcademicoIdAndEstadoIn(
+                        estudianteId, anio.getId(), List.of(EstadoMatricula.CONFIRMADA));
+        if (!matriculado) {
+            return historialVacio(anio, paginaNormalizada, tamanoNormalizado);
+        }
+
+        LocalDate[] rango = rangoEnAnio(anio, desde, hasta);
+        if (rango == null) {
+            return historialVacio(anio, paginaNormalizada, tamanoNormalizado);
+        }
+        LocalDate desdeEfectivo = rango[0];
+        LocalDate hastaEfectivo = rango[1];
 
         Page<AsistenciaEstudiante> registros = asistenciaEstudianteRepository
-                .buscarHistorial(estudianteId, desde, hasta, cursoId,
+                .buscarHistorial(estudianteId, desdeEfectivo, hastaEfectivo, cursoId,
                         PageRequest.of(paginaNormalizada, tamanoNormalizado));
         List<Object[]> cursos = asistenciaEstudianteRepository
-                .buscarCursosHistorial(estudianteId, desde, hasta);
+                .buscarCursosHistorial(estudianteId, desdeEfectivo, hastaEfectivo);
         List<Object[]> conteos = asistenciaEstudianteRepository
-                .contarPorEstado(estudianteId, desde, hasta, cursoId);
+                .contarPorEstado(estudianteId, desdeEfectivo, hastaEfectivo, cursoId);
         return construirHistorialEstudiante(
-                registros, cursos, conteos, paginaNormalizada, tamanoNormalizado);
+                registros, cursos, conteos, paginaNormalizada, tamanoNormalizado, anio);
+    }
+
+    /** Año académico de consulta (HU-GEMAP-11): el más reciente que ya inició; {@code null} si ninguno inició. */
+    private AnioAcademico anioDeConsulta() {
+        return anioRepository
+                .findFirstByFechaInicioLessThanEqualOrderByFechaInicioDescIdDesc(LocalDate.now(clock))
+                .orElse(null);
+    }
+
+    /** Recorta el rango pedido al año; devuelve {@code null} si el rango queda fuera del año. */
+    private LocalDate[] rangoEnAnio(AnioAcademico anio, LocalDate desde, LocalDate hasta) {
+        LocalDate desdeEfectivo = desde == null || desde.isBefore(anio.getFechaInicio())
+                ? anio.getFechaInicio() : desde;
+        LocalDate hastaEfectivo = hasta == null || hasta.isAfter(anio.getFechaFin())
+                ? anio.getFechaFin() : hasta;
+        return desdeEfectivo.isAfter(hastaEfectivo) ? null : new LocalDate[]{desdeEfectivo, hastaEfectivo};
+    }
+
+    private AsistenciaHistorialResponse historialVacio(AnioAcademico anio, int pagina, int tamano) {
+        return new AsistenciaHistorialResponse(
+                List.of(), List.of(), pagina, tamano, 0, 0, 0, 0, 0, 0, 0.0, mapearAnio(anio));
+    }
+
+    private AsistenciaHistorialResponse.AnioItem mapearAnio(AnioAcademico anio) {
+        return anio == null
+                ? null
+                : new AsistenciaHistorialResponse.AnioItem(
+                        anio.getId(), anio.getAnio(), anio.getFechaInicio(), anio.getFechaFin());
     }
 
     private AsistenciaSesionDetalleResponse construirDetalle(
@@ -343,7 +435,8 @@ public class AsistenciaServiceImpl implements AsistenciaService {
             List<Object[]> cursosRaw,
             List<Object[]> conteos,
             int pagina,
-            int tamano) {
+            int tamano,
+            AnioAcademico anio) {
         List<AsistenciaHistorialResponse.CursoItem> cursos = mapearCursos(cursosRaw);
         List<AsistenciaHistorialResponse.RegistroItem> items =
                 registros.getContent().stream()
@@ -360,6 +453,44 @@ public class AsistenciaServiceImpl implements AsistenciaService {
                                     sesion.getHoraInicio().toLocalTime(),
                                     sesion.getHoraFin().toLocalTime(),
                                     r.getEstado(),
+                                    null,
+                                    r.getFechaHoraRegistro());
+                        })
+                        .toList();
+
+        ResumenAsistencia resumen = resumir(conteos, registros.getTotalElements());
+        return new AsistenciaHistorialResponse(
+                cursos, items, pagina, tamano,
+                registros.getTotalElements(), registros.getTotalPages(),
+                resumen.presentes(), resumen.tardanzas(),
+                resumen.faltas(), resumen.justificadas(),
+                resumen.porcentajeAsistencia(), mapearAnio(anio));
+    }
+
+    private AsistenciaHistorialResponse construirHistorialEstudiante(
+            Page<AsistenciaEstudiante> registros,
+            List<Object[]> cursosRaw,
+            List<Object[]> conteos,
+            int pagina,
+            int tamano,
+            AnioAcademico anio) {
+        List<AsistenciaHistorialResponse.CursoItem> cursos = mapearCursos(cursosRaw);
+        List<AsistenciaHistorialResponse.RegistroItem> items =
+                registros.getContent().stream()
+                        .map(r -> {
+                            var sesion = r.getSesionClase();
+                            var asignacion = sesion.getBloqueHorario().getAsignacionCurso();
+                            return new AsistenciaHistorialResponse.RegistroItem(
+                                    r.getId(),
+                                    sesion.getFecha(),
+                                    asignacion.getCurso().getId(),
+                                    asignacion.getCurso().getNombre(),
+                                    asignacion.getSeccion().getNombre(),
+                                    asignacion.getSeccion().getGrado().getNombre(),
+                                    sesion.getHoraInicio().toLocalTime(),
+                                    sesion.getHoraFin().toLocalTime(),
+                                    r.getEstado(),
+                                    r.getObservaciones(),
                                     null);
                         })
                         .toList();
@@ -370,42 +501,7 @@ public class AsistenciaServiceImpl implements AsistenciaService {
                 registros.getTotalElements(), registros.getTotalPages(),
                 resumen.presentes(), resumen.tardanzas(),
                 resumen.faltas(), resumen.justificadas(),
-                resumen.porcentajeAsistencia());
-    }
-
-    private AsistenciaHistorialResponse construirHistorialEstudiante(
-            Page<AsistenciaEstudiante> registros,
-            List<Object[]> cursosRaw,
-            List<Object[]> conteos,
-            int pagina,
-            int tamano) {
-        List<AsistenciaHistorialResponse.CursoItem> cursos = mapearCursos(cursosRaw);
-        List<AsistenciaHistorialResponse.RegistroItem> items =
-                registros.getContent().stream()
-                        .map(r -> {
-                            var sesion = r.getSesionClase();
-                            var asignacion = sesion.getBloqueHorario().getAsignacionCurso();
-                            return new AsistenciaHistorialResponse.RegistroItem(
-                                    r.getId(),
-                                    sesion.getFecha(),
-                                    asignacion.getCurso().getId(),
-                                    asignacion.getCurso().getNombre(),
-                                    asignacion.getSeccion().getNombre(),
-                                    asignacion.getSeccion().getGrado().getNombre(),
-                                    sesion.getHoraInicio().toLocalTime(),
-                                    sesion.getHoraFin().toLocalTime(),
-                                    r.getEstado(),
-                                    r.getObservaciones());
-                        })
-                        .toList();
-
-        ResumenAsistencia resumen = resumir(conteos, registros.getTotalElements());
-        return new AsistenciaHistorialResponse(
-                cursos, items, pagina, tamano,
-                registros.getTotalElements(), registros.getTotalPages(),
-                resumen.presentes(), resumen.tardanzas(),
-                resumen.faltas(), resumen.justificadas(),
-                resumen.porcentajeAsistencia());
+                resumen.porcentajeAsistencia(), mapearAnio(anio));
     }
 
     private ResumenAsistencia resumir(List<Object[]> conteos, long totalRegistros) {
@@ -425,9 +521,11 @@ public class AsistenciaServiceImpl implements AsistenciaService {
             }
         }
 
-        double porcentaje = totalRegistros == 0
+        // Justificada no cuenta como asistencia ni como falta: sale del cálculo.
+        long base = totalRegistros - justificadas;
+        double porcentaje = base <= 0
                 ? 0.0
-                : Math.round((presentes + tardanzas) * 10000.0 / totalRegistros) / 100.0;
+                : Math.round((presentes + tardanzas) * 10000.0 / base) / 100.0;
 
         return new ResumenAsistencia(
                 presentes, tardanzas, faltas, justificadas, porcentaje);
@@ -545,19 +643,23 @@ public class AsistenciaServiceImpl implements AsistenciaService {
         return nombre;
     }
 
-    private void auditar(String entidad, Long entidadId, String descripcion) {
-        try {
-            auditoriaService.registrarAuditoria(new RegistrarAuditoriaRequestDTO(
-                    null,
-                    CategoriaAuditoria.ASISTENCIA,
-                    TipoAccionAuditoria.ACTUALIZAR,
-                    entidad,
-                    entidadId,
-                    descripcion,
-                    List.of()
-            ));
-        } catch (RuntimeException ignored) {
-            // La auditoría no debe impedir el registro de asistencia.
-        }
+    /**
+     * Registra la auditoría dentro de la misma transacción: si falla, no queda asistencia sin su rastro de auditoría.
+     */
+    private void auditar(TipoAccionAuditoria accion, String entidad, Long entidadId,
+                         String descripcion, List<DetalleAuditoriaDTO> detalles) {
+        auditoriaService.registrarAuditoria(new RegistrarAuditoriaRequestDTO(
+                null,
+                CategoriaAuditoria.ASISTENCIA,
+                accion,
+                entidad,
+                entidadId,
+                descripcion,
+                detalles
+        ));
+    }
+
+    private String textoObservaciones(String observaciones) {
+        return observaciones == null || observaciones.isBlank() ? SIN_OBSERVACIONES : observaciones.trim();
     }
 }
