@@ -14,6 +14,8 @@ import com.educoders.Infraestructura_Servicios.enums.EstadoMatricula;
 import com.educoders.Infraestructura_Servicios.enums.EstadoSesion;
 import com.educoders.Infraestructura_Servicios.enums.TipoAccionAuditoria;
 import com.educoders.Infraestructura_Servicios.enums.TipoError;
+import com.educoders.Seguridad_Auditoria.dominio.Estudiante;
+import com.educoders.Seguridad_Auditoria.presentacion.dto.DetalleAuditoriaDTO;
 import com.educoders.Seguridad_Auditoria.presentacion.dto.RegistrarAuditoriaRequestDTO;
 import com.educoders.Seguridad_Auditoria.servicio.AuditoriaService;
 import com.educoders.Seguridad_Auditoria.servicio.LogErrorService;
@@ -144,7 +146,9 @@ public class AsistenciaCierreServiceImpl implements AsistenciaCierreService {
             asistenciaEstudianteRepository.saveAll(faltantes);
         }
 
-        if (asistenciaDocenteRepository.findBySesionClaseId(sesion.getId()).isEmpty()) {
+        boolean docenteSinRegistro = asistenciaDocenteRepository
+                .findBySesionClaseId(sesion.getId()).isEmpty();
+        if (docenteSinRegistro) {
             AsistenciaDocente faltaDocente = new AsistenciaDocente();
             faltaDocente.setSesionClase(sesion);
             faltaDocente.setDocente(sesion.getBloqueHorario()
@@ -154,24 +158,36 @@ public class AsistenciaCierreServiceImpl implements AsistenciaCierreService {
             asistenciaDocenteRepository.save(faltaDocente);
         }
 
-        auditarFinalizacion(sesion, faltantes.size());
+        auditarFinalizacion(sesion, faltantes, docenteSinRegistro);
     }
 
-    private void auditarFinalizacion(SesionClase sesion, int faltasCreadas) {
-        try {
-            auditoriaService.registrarAuditoria(new RegistrarAuditoriaRequestDTO(
-                    null,
-                    CategoriaAuditoria.ASISTENCIA,
-                    TipoAccionAuditoria.ACTUALIZAR,
-                    "SesionClase",
-                    sesion.getId(),
-                    "Cierre automático de sesión. Faltas creadas: " + faltasCreadas,
-                    List.of()
-            ));
-        } catch (RuntimeException ex) {
-            log.warn("No se pudo auditar el cierre de la sesión {}: {}",
-                    sesion.getId(), ex.getMessage());
+    /**
+     * Audita el cierre con el sistema como autor. Va dentro de la transacción de la sesión: si falla, el error se
+     * registra en el log de errores y la sesión se reintenta en la siguiente ejecución.
+     */
+    private void auditarFinalizacion(SesionClase sesion, List<AsistenciaEstudiante> faltantes,
+                                     boolean docenteSinRegistro) {
+        List<DetalleAuditoriaDTO> detalles = new ArrayList<>();
+        for (AsistenciaEstudiante falta : faltantes) {
+            Estudiante estudiante = falta.getEstudiante();
+            detalles.add(new DetalleAuditoriaDTO(
+                    "Asistencia de " + estudiante.getNombre() + " " + estudiante.getApellidoPaterno()
+                            + " (" + estudiante.getCodigo() + ")",
+                    "Sin registro", EstadoAsistencia.FALTA.name()));
         }
+        if (docenteSinRegistro) {
+            detalles.add(new DetalleAuditoriaDTO(
+                    "Asistencia del docente", "Sin registro", EstadoAsistencia.FALTA.name()));
+        }
+        auditoriaService.registrarAuditoria(new RegistrarAuditoriaRequestDTO(
+                null,
+                CategoriaAuditoria.ASISTENCIA,
+                TipoAccionAuditoria.ACTUALIZAR,
+                "SesionClase",
+                sesion.getId(),
+                "Cierre automático de sesión. Faltas creadas: " + faltantes.size(),
+                detalles
+        ).conAutorFijo());
     }
 
     private void registrarError(Long sesionId, Exception ex) {

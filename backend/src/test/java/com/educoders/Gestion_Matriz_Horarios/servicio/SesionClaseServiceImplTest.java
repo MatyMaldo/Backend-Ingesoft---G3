@@ -94,6 +94,12 @@ class SesionClaseServiceImplTest {
     @Mock
     private AuditoriaService auditoriaService;
 
+    @Mock
+    private com.educoders.Gestion_Asistencia.persistencia.AsistenciaDocenteRepository asistenciaDocenteRepo;
+
+    @Mock
+    private com.educoders.Gestion_Asistencia.persistencia.AsistenciaEstudianteRepository asistenciaEstudianteRepo;
+
     @InjectMocks
     private SesionClaseServiceImpl sesionService;
 
@@ -681,6 +687,46 @@ class SesionClaseServiceImplTest {
         assertEquals(1, r.size());
         assertEquals(100L, r.get(0).getId());
         assertEquals(2L, r.get(0).getDocenteId());
+    }
+
+    @Test
+    void listarMiHorarioDocente_indicaElEstadoDeAsistenciaDeCadaSesion() {
+        Docente docente = new Docente();
+        docente.setId(2L);
+        autenticarComo(docente);
+
+        BloqueHorario bloque = crearBloque(10L, DiaSemana.LUNES, LocalTime.of(8, 0), LocalTime.of(10, 0));
+        SesionClase conTodo = crearSesion(100L, bloque, LUNES_1);
+        SesionClase pendiente = crearSesion(101L, bloque, LUNES_2);
+
+        when(repo.findByBloqueHorarioAsignacionCursoDocenteIdAndFechaBetween(2L, LUNES_1, LUNES_2))
+                .thenReturn(List.of(conTodo, pendiente));
+        when(asistenciaDocenteRepo.estadosPorSesiones(List.of(100L, 101L)))
+                .thenReturn(List.<Object[]>of(
+                        new Object[]{100L, com.educoders.Infraestructura_Servicios.enums.EstadoAsistencia.TARDANZA}));
+        when(asistenciaEstudianteRepo.sesionesConAsistencia(List.of(100L, 101L)))
+                .thenReturn(List.of(100L));
+
+        List<SesionClaseResponse> r = sesionService.listarMiHorarioDocente(LUNES_1, LUNES_2);
+
+        assertEquals(com.educoders.Infraestructura_Servicios.enums.EstadoAsistencia.TARDANZA,
+                r.get(0).getAsistenciaDocente());
+        assertEquals(Boolean.TRUE, r.get(0).getAsistenciaEstudiantesRegistrada());
+        assertEquals(null, r.get(1).getAsistenciaDocente());
+        assertEquals(Boolean.FALSE, r.get(1).getAsistenciaEstudiantesRegistrada());
+    }
+
+    @Test
+    void listarPorDocente_noCalculaElEstadoDeAsistencia() {
+        when(repo.findByBloqueHorarioAsignacionCursoDocenteIdAndFechaBetween(2L, LUNES_1, LUNES_1))
+                .thenReturn(List.of(crearSesion(100L,
+                        crearBloque(10L, DiaSemana.LUNES, LocalTime.of(8, 0), LocalTime.of(10, 0)), LUNES_1)));
+
+        SesionClaseResponse r = sesionService.listarPorDocente(2L, LUNES_1, LUNES_1).get(0);
+
+        assertEquals(null, r.getAsistenciaDocente());
+        assertEquals(null, r.getAsistenciaEstudiantesRegistrada());
+        verify(asistenciaDocenteRepo, never()).estadosPorSesiones(any());
     }
 
     @Test

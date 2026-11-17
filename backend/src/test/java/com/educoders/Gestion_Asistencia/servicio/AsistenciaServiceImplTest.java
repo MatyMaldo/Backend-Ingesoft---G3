@@ -1,5 +1,7 @@
 package com.educoders.Gestion_Asistencia.servicio;
 
+import com.educoders.Gestion_Academica_Motor_Evaluacion.dominio.AnioAcademico;
+import com.educoders.Gestion_Academica_Motor_Evaluacion.persistencia.AnioAcademicoRepository;
 import com.educoders.Gestion_Asistencia.dominio.AsistenciaDocente;
 import com.educoders.Gestion_Asistencia.dominio.AsistenciaEstudiante;
 import com.educoders.Gestion_Asistencia.persistencia.AsistenciaDocenteRepository;
@@ -25,6 +27,8 @@ import com.educoders.Seguridad_Auditoria.dominio.Apoderado;
 import com.educoders.Seguridad_Auditoria.dominio.Docente;
 import com.educoders.Seguridad_Auditoria.dominio.Estudiante;
 import com.educoders.Seguridad_Auditoria.persistencia.EstudianteRepository;
+import com.educoders.Infraestructura_Servicios.enums.TipoAccionAuditoria;
+import com.educoders.Seguridad_Auditoria.presentacion.dto.RegistrarAuditoriaRequestDTO;
 import com.educoders.Seguridad_Auditoria.servicio.AuditoriaService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -51,6 +55,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.Mockito.doThrow;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -70,6 +75,7 @@ class AsistenciaServiceImplTest {
     @Mock private AsistenciaDocenteRepository asistenciaDocenteRepository;
     @Mock private MatriculaRepository matriculaRepository;
     @Mock private EstudianteRepository estudianteRepository;
+    @Mock private AnioAcademicoRepository anioRepository;
     @Mock private AuditoriaService auditoriaService;
     @Mock private Clock clock;
 
@@ -84,6 +90,22 @@ class AsistenciaServiceImplTest {
     @AfterEach
     void limpiarContexto() {
         SecurityContextHolder.clearContext();
+    }
+
+    private static final LocalDate INICIO_ANIO = LocalDate.of(2026, 3, 1);
+    private static final LocalDate FIN_ANIO = LocalDate.of(2026, 12, 15);
+
+    private void anioDeConsulta(boolean matriculado) {
+        AnioAcademico anio = new AnioAcademico();
+        anio.setId(7L);
+        anio.setAnio(2026);
+        anio.setFechaInicio(INICIO_ANIO);
+        anio.setFechaFin(FIN_ANIO);
+        when(anioRepository.findFirstByFechaInicioLessThanEqualOrderByFechaInicioDescIdDesc(any(LocalDate.class)))
+                .thenReturn(Optional.of(anio));
+        when(matriculaRepository.existsByEstudianteIdAndSeccionAnioAcademicoIdAndEstadoIn(
+                eq(10L), eq(7L), any()))
+                .thenReturn(matriculado);
     }
 
     private Docente docente() {
@@ -219,7 +241,106 @@ class AsistenciaServiceImplTest {
         verify(asistenciaEstudianteRepository).saveAll(captor.capture());
         assertEquals(1, captor.getValue().size());
         assertEquals(EstadoAsistencia.PRESENTE, captor.getValue().get(0).getEstado());
-        verify(auditoriaService).registrarAuditoria(any());
+
+        ArgumentCaptor<RegistrarAuditoriaRequestDTO> auditoria =
+                ArgumentCaptor.forClass(RegistrarAuditoriaRequestDTO.class);
+        verify(auditoriaService).registrarAuditoria(auditoria.capture());
+        assertEquals(TipoAccionAuditoria.CREAR, auditoria.getValue().getAccion());
+        assertEquals(1, auditoria.getValue().getDetalles().size());
+        assertEquals("Sin registro", auditoria.getValue().getDetalles().get(0).getValorAnterior());
+        assertEquals("PRESENTE", auditoria.getValue().getDetalles().get(0).getValorNuevo());
+    }
+
+    @Test
+    void guardarEstudiantes_siFallaLaAuditoriaPropagaElErrorParaRevertir() {
+        Docente docente = docente();
+        Estudiante estudiante = estudiante();
+        SesionClase sesion = sesion(
+                LocalDateTime.now().minusMinutes(5),
+                LocalDateTime.now().plusMinutes(30),
+                EstadoSesion.PROGRAMADA, docente, estudiante);
+
+        autenticar(docente);
+        when(sesionRepository.findById(1L)).thenReturn(Optional.of(sesion));
+        when(matriculaRepository.buscarPorSeccionYEstadoConEstudiante(
+                3L, EstadoMatricula.CONFIRMADA))
+                .thenReturn(List.of(matricula(estudiante)));
+        when(asistenciaEstudianteRepository.findBySesionClaseId(1L)).thenReturn(List.of());
+        doThrow(new IllegalStateException("auditoría caída"))
+                .when(auditoriaService).registrarAuditoria(any());
+
+        GuardarAsistenciaEstudiantesRequest request =
+                new GuardarAsistenciaEstudiantesRequest(List.of(
+                        new GuardarAsistenciaEstudiantesRequest.AsistenciaItem(
+                                10L, EstadoAsistencia.PRESENTE, "")));
+
+        assertThrows(IllegalStateException.class,
+                () -> service.guardarAsistenciaEstudiantes(1L, request));
+    }
+
+    @Test
+    void guardarEstudiantes_modificaLaAsistenciaYaRegistradaMientrasLaSesionEstaActiva() {
+        Docente docente = docente();
+        Estudiante estudiante = estudiante();
+        SesionClase sesion = sesion(
+                LocalDateTime.now().minusMinutes(5),
+                LocalDateTime.now().plusMinutes(30),
+                EstadoSesion.ACTIVA, docente, estudiante);
+
+        AsistenciaEstudiante registrada = new AsistenciaEstudiante();
+        registrada.setSesionClase(sesion);
+        registrada.setEstudiante(estudiante);
+        registrada.setEstado(EstadoAsistencia.FALTA);
+        registrada.setObservaciones("");
+        registrada.setFechaHoraRegistro(LocalDateTime.now().minusMinutes(2));
+
+        autenticar(docente);
+        when(sesionRepository.findById(1L)).thenReturn(Optional.of(sesion));
+        when(matriculaRepository.buscarPorSeccionYEstadoConEstudiante(
+                3L, EstadoMatricula.CONFIRMADA))
+                .thenReturn(List.of(matricula(estudiante)));
+        when(asistenciaEstudianteRepository.findBySesionClaseId(1L))
+                .thenReturn(List.of(registrada));
+
+        service.guardarAsistenciaEstudiantes(1L,
+                new GuardarAsistenciaEstudiantesRequest(List.of(
+                        new GuardarAsistenciaEstudiantesRequest.AsistenciaItem(
+                                10L, EstadoAsistencia.TARDANZA, ""))));
+
+        ArgumentCaptor<List<AsistenciaEstudiante>> guardadas = ArgumentCaptor.forClass(List.class);
+        verify(asistenciaEstudianteRepository).saveAll(guardadas.capture());
+        assertEquals(1, guardadas.getValue().size());
+        assertTrue(guardadas.getValue().get(0) == registrada, "debe actualizar el mismo registro");
+        assertEquals(EstadoAsistencia.TARDANZA, registrada.getEstado());
+
+        ArgumentCaptor<RegistrarAuditoriaRequestDTO> auditoria =
+                ArgumentCaptor.forClass(RegistrarAuditoriaRequestDTO.class);
+        verify(auditoriaService).registrarAuditoria(auditoria.capture());
+        assertEquals(TipoAccionAuditoria.ACTUALIZAR, auditoria.getValue().getAccion());
+        assertEquals(1, auditoria.getValue().getDetalles().size());
+        assertEquals("FALTA", auditoria.getValue().getDetalles().get(0).getValorAnterior());
+        assertEquals("TARDANZA", auditoria.getValue().getDetalles().get(0).getValorNuevo());
+    }
+
+    @Test
+    void guardarEstudiantes_noPermiteModificarUnaSesionFinalizada() {
+        Docente docente = docente();
+        Estudiante estudiante = estudiante();
+        SesionClase sesion = sesion(
+                LocalDateTime.now().minusHours(2),
+                LocalDateTime.now().minusHours(1),
+                EstadoSesion.FINALIZADA, docente, estudiante);
+
+        autenticar(docente);
+        when(sesionRepository.findById(1L)).thenReturn(Optional.of(sesion));
+
+        ReglaNegocioException error = assertThrows(ReglaNegocioException.class,
+                () -> service.guardarAsistenciaEstudiantes(1L,
+                        new GuardarAsistenciaEstudiantesRequest(List.of(
+                                new GuardarAsistenciaEstudiantesRequest.AsistenciaItem(
+                                        10L, EstadoAsistencia.PRESENTE, "")))));
+        assertEquals("La sesión ya finalizó.", error.getMessage());
+        verify(asistenciaEstudianteRepository, never()).saveAll(any());
     }
 
     @Test
@@ -327,6 +448,7 @@ class AsistenciaServiceImplTest {
     void historialEstudiante_devuelveCursosYRegistros() {
         Estudiante estudiante = estudiante();
         autenticar(estudiante);
+        anioDeConsulta(true);
 
         Docente docente = docente();
         SesionClase sesion = sesion(
@@ -341,12 +463,12 @@ class AsistenciaServiceImplTest {
         asistencia.setFechaHoraRegistro(sesion.getHoraInicio());
 
         when(asistenciaEstudianteRepository.buscarHistorial(
-                eq(10L), isNull(), isNull(), isNull(), any(Pageable.class)))
+                eq(10L), eq(INICIO_ANIO), eq(FIN_ANIO), isNull(), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(asistencia)));
-        when(asistenciaEstudianteRepository.buscarCursosHistorial(10L, null, null))
+        when(asistenciaEstudianteRepository.buscarCursosHistorial(10L, INICIO_ANIO, FIN_ANIO))
                 .thenReturn(List.<Object[]>of(new Object[]{4L, "Matematicas"}));
         when(asistenciaEstudianteRepository.contarPorEstado(
-                10L, null, null, null))
+                10L, INICIO_ANIO, FIN_ANIO, null))
                 .thenReturn(List.<Object[]>of(
                         new Object[]{EstadoAsistencia.PRESENTE, 1L}));
 
@@ -369,14 +491,15 @@ class AsistenciaServiceImplTest {
     void historialCalculaTotalesGlobalesYPorcentaje() {
         Estudiante estudiante = estudiante();
         autenticar(estudiante);
+        anioDeConsulta(true);
 
         when(asistenciaEstudianteRepository.buscarHistorial(
-                eq(10L), isNull(), isNull(), isNull(), any(Pageable.class)))
+                eq(10L), eq(INICIO_ANIO), eq(FIN_ANIO), isNull(), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(
                         List.of(), PageRequest.of(0, 10), 4));
-        when(asistenciaEstudianteRepository.buscarCursosHistorial(10L, null, null))
+        when(asistenciaEstudianteRepository.buscarCursosHistorial(10L, INICIO_ANIO, FIN_ANIO))
                 .thenReturn(List.of());
-        when(asistenciaEstudianteRepository.contarPorEstado(10L, null, null, null))
+        when(asistenciaEstudianteRepository.contarPorEstado(10L, INICIO_ANIO, FIN_ANIO, null))
                 .thenReturn(List.of(
                         new Object[]{EstadoAsistencia.PRESENTE, 2L},
                         new Object[]{EstadoAsistencia.TARDANZA, 1L},
@@ -403,20 +526,176 @@ class AsistenciaServiceImplTest {
 
         Estudiante estudiante = estudiante();
         estudiante.setApoderado(apoderado);
+        anioDeConsulta(true);
         when(estudianteRepository.findById(10L)).thenReturn(Optional.of(estudiante));
         when(asistenciaEstudianteRepository.buscarHistorial(
-                eq(10L), isNull(), isNull(), isNull(), any(Pageable.class)))
+                eq(10L), eq(INICIO_ANIO), eq(FIN_ANIO), isNull(), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of()));
-        when(asistenciaEstudianteRepository.buscarCursosHistorial(10L, null, null))
+        when(asistenciaEstudianteRepository.buscarCursosHistorial(10L, INICIO_ANIO, FIN_ANIO))
                 .thenReturn(List.of());
         when(asistenciaEstudianteRepository.contarPorEstado(
-                10L, null, null, null)).thenReturn(List.of());
+                10L, INICIO_ANIO, FIN_ANIO, null)).thenReturn(List.of());
 
         AsistenciaHistorialResponse r = service.historialApoderado(
                 10L, null, null, null, 0, 10);
 
         assertTrue(r.registros().isEmpty());
         verify(asistenciaEstudianteRepository).buscarHistorial(
-                eq(10L), isNull(), isNull(), isNull(), any(Pageable.class));
+                eq(10L), eq(INICIO_ANIO), eq(FIN_ANIO), isNull(), any(Pageable.class));
+    }
+
+    @Test
+    void historialEstudiante_sinMatriculaConfirmadaEnElAnioDeConsultaEstaVacio() {
+        autenticar(estudiante());
+        anioDeConsulta(false);
+
+        AsistenciaHistorialResponse r = service.historialEstudiante(null, null, null, 0, 10);
+
+        assertTrue(r.registros().isEmpty());
+        assertEquals(0, r.totalRegistros());
+        assertEquals(2026, r.anioAcademico().anio());
+        verify(asistenciaEstudianteRepository, never()).buscarHistorial(any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void historialEstudiante_sinAnioIniciadoEstaVacio() {
+        autenticar(estudiante());
+        when(anioRepository.findFirstByFechaInicioLessThanEqualOrderByFechaInicioDescIdDesc(any(LocalDate.class)))
+                .thenReturn(Optional.empty());
+
+        AsistenciaHistorialResponse r = service.historialEstudiante(null, null, null, 0, 10);
+
+        assertTrue(r.registros().isEmpty());
+        assertEquals(null, r.anioAcademico());
+        verify(asistenciaEstudianteRepository, never()).buscarHistorial(any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void historialEstudiante_recortaElRangoPedidoAlAnioDeConsulta() {
+        autenticar(estudiante());
+        anioDeConsulta(true);
+        when(asistenciaEstudianteRepository.buscarHistorial(
+                eq(10L), eq(INICIO_ANIO), eq(LocalDate.of(2026, 6, 30)), isNull(), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of()));
+        when(asistenciaEstudianteRepository.buscarCursosHistorial(10L, INICIO_ANIO, LocalDate.of(2026, 6, 30)))
+                .thenReturn(List.of());
+        when(asistenciaEstudianteRepository.contarPorEstado(
+                10L, INICIO_ANIO, LocalDate.of(2026, 6, 30), null)).thenReturn(List.of());
+
+        service.historialEstudiante(LocalDate.of(2025, 1, 1), LocalDate.of(2026, 6, 30), null, 0, 10);
+
+        verify(asistenciaEstudianteRepository).buscarHistorial(
+                eq(10L), eq(INICIO_ANIO), eq(LocalDate.of(2026, 6, 30)), isNull(), any(Pageable.class));
+    }
+
+    @Test
+    void historialEstudiante_rangoFueraDelAnioDeConsultaEstaVacio() {
+        autenticar(estudiante());
+        anioDeConsulta(true);
+
+        AsistenciaHistorialResponse r = service.historialEstudiante(
+                LocalDate.of(2027, 1, 1), LocalDate.of(2027, 2, 1), null, 0, 10);
+
+        assertTrue(r.registros().isEmpty());
+        verify(asistenciaEstudianteRepository, never()).buscarHistorial(any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void historial_justificadaNoCuentaNiComoAsistenciaNiComoFalta() {
+        autenticar(estudiante());
+        anioDeConsulta(true);
+        when(asistenciaEstudianteRepository.buscarHistorial(
+                eq(10L), eq(INICIO_ANIO), eq(FIN_ANIO), isNull(), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 10), 5));
+        when(asistenciaEstudianteRepository.buscarCursosHistorial(10L, INICIO_ANIO, FIN_ANIO))
+                .thenReturn(List.of());
+        when(asistenciaEstudianteRepository.contarPorEstado(10L, INICIO_ANIO, FIN_ANIO, null))
+                .thenReturn(List.of(
+                        new Object[]{EstadoAsistencia.PRESENTE, 2L},
+                        new Object[]{EstadoAsistencia.FALTA, 1L},
+                        new Object[]{EstadoAsistencia.JUSTIFICADA, 2L}));
+
+        AsistenciaHistorialResponse r = service.historialEstudiante(null, null, null, 0, 10);
+
+        assertEquals(2, r.totalJustificadas());
+        assertEquals(66.67, r.porcentajeAsistencia());
+    }
+
+    private void anioDeConsultaSinMatricula() {
+        AnioAcademico anio = new AnioAcademico();
+        anio.setId(7L);
+        anio.setAnio(2026);
+        anio.setFechaInicio(INICIO_ANIO);
+        anio.setFechaFin(FIN_ANIO);
+        when(anioRepository.findFirstByFechaInicioLessThanEqualOrderByFechaInicioDescIdDesc(any(LocalDate.class)))
+                .thenReturn(Optional.of(anio));
+    }
+
+    @Test
+    void historialDocente_informaLaHoraDeRegistroYElAnioDeConsulta() {
+        Docente docente = docente();
+        Estudiante estudiante = estudiante();
+        autenticar(docente);
+        anioDeConsultaSinMatricula();
+
+        SesionClase sesion = sesion(
+                LocalDateTime.now().minusDays(1),
+                LocalDateTime.now().minusDays(1).plusHours(2),
+                EstadoSesion.FINALIZADA, docente, estudiante);
+        AsistenciaDocente registro = new AsistenciaDocente();
+        registro.setId(50L);
+        registro.setSesionClase(sesion);
+        registro.setDocente(docente);
+        registro.setEstado(EstadoAsistencia.TARDANZA);
+        LocalDateTime hora = sesion.getHoraInicio().plusMinutes(14);
+        registro.setFechaHoraRegistro(hora);
+
+        when(asistenciaDocenteRepository.buscarHistorial(
+                eq(2L), eq(INICIO_ANIO), eq(FIN_ANIO), isNull(), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(registro)));
+        when(asistenciaDocenteRepository.buscarCursosHistorial(2L, INICIO_ANIO, FIN_ANIO))
+                .thenReturn(List.<Object[]>of(new Object[]{4L, "Matematicas"}));
+        when(asistenciaDocenteRepository.contarPorEstado(2L, INICIO_ANIO, FIN_ANIO, null))
+                .thenReturn(List.<Object[]>of(new Object[]{EstadoAsistencia.TARDANZA, 1L}));
+
+        AsistenciaHistorialResponse r = service.historialDocente(null, null, null, 0, 10);
+
+        assertEquals(1, r.registros().size());
+        assertEquals(hora, r.registros().get(0).fechaHoraRegistro());
+        assertEquals(EstadoAsistencia.TARDANZA, r.registros().get(0).estado());
+        assertEquals(2026, r.anioAcademico().anio());
+        assertEquals(100.0, r.porcentajeAsistencia());
+    }
+
+    @Test
+    void historialDocente_recortaElRangoAlAnioDeConsulta() {
+        autenticar(docente());
+        anioDeConsultaSinMatricula();
+        when(asistenciaDocenteRepository.buscarHistorial(
+                eq(2L), eq(INICIO_ANIO), eq(FIN_ANIO), eq(4L), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of()));
+        when(asistenciaDocenteRepository.buscarCursosHistorial(2L, INICIO_ANIO, FIN_ANIO))
+                .thenReturn(List.of());
+        when(asistenciaDocenteRepository.contarPorEstado(2L, INICIO_ANIO, FIN_ANIO, 4L))
+                .thenReturn(List.of());
+
+        service.historialDocente(LocalDate.of(2020, 1, 1), LocalDate.of(2030, 1, 1), 4L, 0, 10);
+
+        verify(asistenciaDocenteRepository).buscarHistorial(
+                eq(2L), eq(INICIO_ANIO), eq(FIN_ANIO), eq(4L), any(Pageable.class));
+    }
+
+    @Test
+    void historialDocente_sinAnioIniciadoORangoFueraDelAnioEstaVacio() {
+        autenticar(docente());
+        when(anioRepository.findFirstByFechaInicioLessThanEqualOrderByFechaInicioDescIdDesc(any(LocalDate.class)))
+                .thenReturn(Optional.empty());
+
+        assertTrue(service.historialDocente(null, null, null, 0, 10).registros().isEmpty());
+
+        anioDeConsultaSinMatricula();
+        assertTrue(service.historialDocente(
+                LocalDate.of(2027, 1, 1), LocalDate.of(2027, 2, 1), null, 0, 10).registros().isEmpty());
+        verify(asistenciaDocenteRepository, never()).buscarHistorial(any(), any(), any(), any(), any());
     }
 }

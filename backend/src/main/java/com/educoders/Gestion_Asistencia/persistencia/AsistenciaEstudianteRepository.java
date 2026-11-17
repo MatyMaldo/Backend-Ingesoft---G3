@@ -9,6 +9,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDate;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -16,6 +17,10 @@ public interface AsistenciaEstudianteRepository
         extends JpaRepository<AsistenciaEstudiante, Long> {
 
     List<AsistenciaEstudiante> findBySesionClaseId(Long sesionClaseId);
+
+    /** Ids de las sesiones (de las dadas) que ya tienen asistencia de estudiantes registrada. */
+    @Query("SELECT DISTINCT a.sesionClase.id FROM AsistenciaEstudiante a WHERE a.sesionClase.id IN :sesionIds")
+    List<Long> sesionesConAsistencia(@Param("sesionIds") Collection<Long> sesionIds);
 
     Optional<AsistenciaEstudiante> findBySesionClaseIdAndEstudianteId(
             Long sesionClaseId, Long estudianteId);

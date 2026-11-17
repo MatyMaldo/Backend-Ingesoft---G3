@@ -40,6 +40,7 @@ public interface MatriculaRepository extends JpaRepository<Matricula, Long> {
             JOIN FETCH m.estudiante e
             WHERE m.seccion.id = :seccionId
               AND m.estado = :estado
+              AND e.activo = true
             ORDER BY e.apellidoPaterno, e.apellidoMaterno, e.nombre
             """)
     List<Matricula> buscarPorSeccionYEstadoConEstudiante(

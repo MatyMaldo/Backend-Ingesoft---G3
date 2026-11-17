@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDate;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -15,6 +16,10 @@ public interface AsistenciaDocenteRepository
         extends JpaRepository<AsistenciaDocente, Long> {
 
     Optional<AsistenciaDocente> findBySesionClaseId(Long sesionClaseId);
+
+    /** Pares (id de sesión, estado) de las asistencias de docente de esas sesiones. */
+    @Query("SELECT a.sesionClase.id, a.estado FROM AsistenciaDocente a WHERE a.sesionClase.id IN :sesionIds")
+    List<Object[]> estadosPorSesiones(@Param("sesionIds") Collection<Long> sesionIds);
 
     @Query(value = """
             SELECT a FROM AsistenciaDocente a
