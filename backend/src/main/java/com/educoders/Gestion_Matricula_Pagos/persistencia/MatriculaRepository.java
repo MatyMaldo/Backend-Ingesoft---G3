@@ -18,7 +18,7 @@ import java.util.List;
 import java.util.Optional;
 
 @Repository
-public interface MatriculaRepository extends JpaRepository<Matricula, Long> {
+public interface MatriculaRepository extends JpaRepository<Matricula, Long>, MatriculaRepositoryCustom {
 
     /**
      * Cuenta cuántas matrículas en los estados especificados ocupan capacidad en la sección.
