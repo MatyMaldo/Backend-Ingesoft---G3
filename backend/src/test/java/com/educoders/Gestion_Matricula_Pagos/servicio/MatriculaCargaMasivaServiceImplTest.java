@@ -21,7 +21,9 @@ import com.educoders.Seguridad_Auditoria.persistencia.EstudianteRepository;
 import com.educoders.Seguridad_Auditoria.servicio.AuditoriaService;
 
 import org.junit.jupiter.api.AfterEach;
+import com.educoders.Infraestructura_Servicios.exception.ConflictoException;
 import org.junit.jupiter.api.Test;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
@@ -41,6 +43,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -291,11 +294,42 @@ class MatriculaCargaMasivaServiceImplTest {
         assertEquals(1, respuesta.creados());
         assertTrue(respuesta.errores().isEmpty());
 
-        ArgumentCaptor<Iterable<Matricula>> captor =
-                ArgumentCaptor.forClass((Class) Iterable.class);
-        verify(matriculaRepository).saveAll(captor.capture());
-        assertEquals(EstadoMatricula.PENDIENTE, captor.getValue().iterator().next().getEstado());
+        ArgumentCaptor<List<Matricula>> captor =
+                ArgumentCaptor.forClass((Class) List.class);
+        verify(matriculaRepository).insertarEnLotes(captor.capture());
+        assertEquals(EstadoMatricula.PENDIENTE, captor.getValue().get(0).getEstado());
         verify(auditoriaService).registrarAuditoria(any());
+    }
+
+    @Test
+    void confirmar_restriccionUnicaViolada_lanzaConflictoYNoAudita() {
+        autenticarAdmin();
+
+        AnioAcademico anio = crearAnio();
+        PeriodoMatricula periodo = crearPeriodo(anio, true);
+        Grado grado = crearGrado();
+        Seccion seccion = crearSeccion(grado, anio);
+        Estudiante estudiante = crearEstudiante();
+
+        when(anioAcademicoRepository.findById(anio.getId())).thenReturn(Optional.of(anio));
+        when(periodoMatriculaRepository.findByAnioAcademicoId(anio.getId()))
+                .thenReturn(Optional.of(periodo));
+        when(estudianteRepository.findAllById(any())).thenReturn(List.of(estudiante));
+        when(seccionRepository.findAllById(any())).thenReturn(List.of(seccion));
+        when(matriculaRepository.buscarPorEstudiantesYAnio(any(), eq(anio.getId())))
+                .thenReturn(List.of());
+        when(matriculaRepository.contarPorSecciones(any(), any())).thenReturn(List.of());
+        doThrow(new DataIntegrityViolationException("uq_matricula_estudiante_seccion"))
+                .when(matriculaRepository).insertarEnLotes(any());
+
+        assertThrows(ConflictoException.class, () -> service.confirmar(
+                new ConfirmarCargaMasivaMatriculasRequest(
+                        anio.getId(),
+                        List.of(new ConfirmarCargaMasivaMatriculasRequest.FilaConfirmacion(
+                                "p-1", 5L, anio.getId(), 1L, 1L,
+                                "matriculas.csv#2")))));
+
+        verify(auditoriaService, never()).registrarAuditoria(any());
     }
 
     @Test
@@ -321,7 +355,7 @@ class MatriculaCargaMasivaServiceImplTest {
 
         assertEquals(0, respuesta.creados());
         assertEquals(1, respuesta.errores().size());
-        verify(matriculaRepository, never()).saveAll(any());
+        verify(matriculaRepository, never()).insertarEnLotes(any());
     }
 
     @Test
@@ -357,7 +391,7 @@ class MatriculaCargaMasivaServiceImplTest {
         assertEquals(0, respuesta.creados());
         assertEquals(1, respuesta.errores().size());
         assertTrue(respuesta.errores().get(0).mensaje().contains("repetido"));
-        verify(matriculaRepository, never()).saveAll(any());
+        verify(matriculaRepository, never()).insertarEnLotes(any());
     }
 
     @Test

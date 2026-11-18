@@ -233,8 +233,8 @@ public class MatriculaCargaMasivaServiceImpl implements MatriculaCargaMasivaServ
         }
 
         try {
-            matriculaRepository.saveAll(aCrear);
-            matriculaRepository.flush();
+            // Un INSERT de varias filas por lote en lugar de uno por matrícula (Matricula usa IDENTITY).
+            matriculaRepository.insertarEnLotes(aCrear);
         } catch (DataIntegrityViolationException ex) {
             throw new ConflictoException(
                     "No se pudo completar la carga masiva: existe un registro de matrícula "
