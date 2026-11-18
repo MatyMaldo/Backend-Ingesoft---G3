@@ -30,7 +30,9 @@ import com.educoders.Gestion_Matricula_Pagos.persistencia.MatriculaRepository;
 import com.educoders.Infraestructura_Servicios.enums.EstadoMatricula;
 
 import java.time.LocalDate;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 import com.educoders.Gestion_Matricula_Pagos.dominio.PeriodoMatricula;
@@ -181,34 +183,56 @@ public class GradoSeccionServiceImpl implements GradoSeccionService {
     @Override
     @Transactional(readOnly = true)
     public List<SeccionResponse> listarSecciones() {
-        return seccionRepository.findAll().stream()
-                .map(this::mapToSeccionResponse)
-                .collect(Collectors.toList());
+        return mapearSecciones(seccionRepository.findAll());
     }
 
     @Override
     @Transactional(readOnly = true)
     public List<SeccionResponse> listarSeccionesPorGradoYAnio(Long gradoId, Long anioId) {
-        return seccionRepository.findByGradoIdAndAnioAcademicoId(gradoId, anioId).stream()
-                .map(this::mapToSeccionResponse)
+        return mapearSecciones(seccionRepository.findByGradoIdAndAnioAcademicoId(gradoId, anioId));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<SeccionResponse> listarSeccionesPorAnio(Long anioId) {
+        return mapearSecciones(seccionRepository.findByAnioAcademicoId(anioId));
+    }
+
+    /**
+     * Arma la respuesta de varias secciones contando las matrículas confirmadas de todas en una sola consulta
+     * agrupada, en lugar de una consulta de conteo por sección.
+     */
+    private List<SeccionResponse> mapearSecciones(List<Seccion> secciones) {
+        if (secciones.isEmpty()) {
+            return List.of();
+        }
+        Map<Long, Long> confirmadasPorSeccion = new HashMap<>();
+        for (Object[] fila : matriculaRepository.contarPorSeccionYEstado(
+                secciones.stream().map(Seccion::getId).toList(), List.of(EstadoMatricula.CONFIRMADA))) {
+            confirmadasPorSeccion.put(((Number) fila[0]).longValue(), ((Number) fila[1]).longValue());
+        }
+        return secciones.stream()
+                .map(s -> mapToSeccionResponse(s, confirmadasPorSeccion.getOrDefault(s.getId(), 0L)))
                 .collect(Collectors.toList());
     }
 
-
     private SeccionResponse mapToSeccionResponse(Seccion s) {
-        String tutorNombre = null;
-
-        if (s.getTutor() != null && s.getTutor().getNombre() != null) {
-            tutorNombre = s.getTutor().getNombre()
-                    + " " + s.getTutor().getApellidoPaterno();
-        }
-
         // Contar solo las matrículas confirmadas
         long matriculadosConfirmados = matriculaRepository
                 .countBySeccionIdAndEstadoIn(
                         s.getId(),
                         List.of(EstadoMatricula.CONFIRMADA)
                 );
+        return mapToSeccionResponse(s, matriculadosConfirmados);
+    }
+
+    private SeccionResponse mapToSeccionResponse(Seccion s, long matriculadosConfirmados) {
+        String tutorNombre = null;
+
+        if (s.getTutor() != null && s.getTutor().getNombre() != null) {
+            tutorNombre = s.getTutor().getNombre()
+                    + " " + s.getTutor().getApellidoPaterno();
+        }
 
         // Calcular las vacantes disponibles
         long vacantesDisponibles = Math.max(

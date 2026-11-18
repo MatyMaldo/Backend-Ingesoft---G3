@@ -52,6 +52,8 @@ public class SeccionController {
         List<SeccionResponse> response;
         if (gradoId != null && anioId != null) {
             response = gradoSeccionService.listarSeccionesPorGradoYAnio(gradoId, anioId);
+        } else if (anioId != null) {
+            response = gradoSeccionService.listarSeccionesPorAnio(anioId);
         } else {
             response = gradoSeccionService.listarSecciones();
         }

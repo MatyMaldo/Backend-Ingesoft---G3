@@ -26,6 +26,18 @@ public interface MatriculaRepository extends JpaRepository<Matricula, Long> {
     long countBySeccionIdAndEstadoIn(Long seccionId, Collection<EstadoMatricula> estados);
 
     /**
+     * Cuenta las matrículas en los estados indicados de varias secciones en una sola consulta.
+     * Devuelve filas {@code [seccionId, cantidad]}; una sección sin matrículas no aparece.
+     */
+    @Query("""
+        SELECT m.seccion.id, COUNT(m) FROM Matricula m
+        WHERE m.seccion.id IN :seccionIds AND m.estado IN :estados
+        GROUP BY m.seccion.id
+        """)
+    List<Object[]> contarPorSeccionYEstado(@Param("seccionIds") Collection<Long> seccionIds,
+                                           @Param("estados") Collection<EstadoMatricula> estados);
+
+    /**
      * Verifica si el estudiante ya cuenta con matrícula previa en los estados indicados
      * dentro del año académico al que pertenece la sección.
      */

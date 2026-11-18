@@ -3,6 +3,7 @@ package com.educoders.Gestion_Matriz_Horarios.persistencia;
 import com.educoders.Gestion_Matriz_Horarios.dominio.SesionClase;
 import com.educoders.Infraestructura_Servicios.enums.EstadoSesion;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -14,7 +15,16 @@ import java.util.List;
 
 public interface SesionClaseRepository extends JpaRepository<SesionClase, Long>, SesionClaseRepositoryCustom {
     List<SesionClase> findByBloqueHorarioId(Long bloqueHorarioId);
+    // Los horarios por sección y por docente muestran aula, curso, docente, sección y grado de cada sesión: el grafo
+    // los carga junto con las sesiones en lugar de una consulta perezosa por cada bloque.
+    @EntityGraph(attributePaths = {"bloqueHorario", "bloqueHorario.aula", "bloqueHorario.asignacionCurso",
+            "bloqueHorario.asignacionCurso.curso", "bloqueHorario.asignacionCurso.docente",
+            "bloqueHorario.asignacionCurso.seccion", "bloqueHorario.asignacionCurso.seccion.grado"})
     List<SesionClase> findByBloqueHorarioAsignacionCursoSeccionIdAndFechaBetween(Long seccionId, LocalDate inicio, LocalDate fin);
+
+    @EntityGraph(attributePaths = {"bloqueHorario", "bloqueHorario.aula", "bloqueHorario.asignacionCurso",
+            "bloqueHorario.asignacionCurso.curso", "bloqueHorario.asignacionCurso.docente",
+            "bloqueHorario.asignacionCurso.seccion", "bloqueHorario.asignacionCurso.seccion.grado"})
     List<SesionClase> findByBloqueHorarioAsignacionCursoDocenteIdAndFechaBetween(Long docenteId, LocalDate inicio, LocalDate fin);
     boolean existsByBloqueHorarioIdAndFecha(Long bloqueHorarioId, LocalDate fecha);
     List<SesionClase> findByBloqueHorarioIdAndFecha(Long bloqueHorarioId, LocalDate fecha);

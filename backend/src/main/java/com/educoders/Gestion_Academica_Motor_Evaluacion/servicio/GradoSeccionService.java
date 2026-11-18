@@ -51,6 +51,13 @@ public interface GradoSeccionService {
      */
     List<SeccionResponse> listarSeccionesPorGradoYAnio(Long gradoId, Long anioId);
     /**
+     * Obtiene las secciones de un año académico, de todos los grados.
+     *
+     * @param anioId identificador del año académico
+     * @return lista de secciones del año
+     */
+    List<SeccionResponse> listarSeccionesPorAnio(Long anioId);
+    /**
      * Actualiza los datos de una sección académica existente.
      *
      * @param id identificador de la sección

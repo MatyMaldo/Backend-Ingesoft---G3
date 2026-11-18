@@ -371,6 +371,9 @@ public class SeguridadConfig {
         configuration.setAllowedHeaders(List.of("*"));
         configuration.setAllowCredentials(true);
         configuration.setExposedHeaders(List.of("Content-Disposition"));
+        // El navegador reutiliza la respuesta del preflight (OPTIONS) durante una hora en lugar de repetirla
+        // antes de cada petición con Authorization.
+        configuration.setMaxAge(3600L);
 
         UrlBasedCorsConfigurationSource source =
                 new UrlBasedCorsConfigurationSource();
