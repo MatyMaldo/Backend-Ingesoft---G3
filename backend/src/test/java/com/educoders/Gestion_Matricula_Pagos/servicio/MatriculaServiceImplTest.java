@@ -4,10 +4,15 @@ import com.educoders.Gestion_Academica_Motor_Evaluacion.dominio.AnioAcademico;
 import com.educoders.Gestion_Academica_Motor_Evaluacion.dominio.Grado;
 import com.educoders.Gestion_Academica_Motor_Evaluacion.dominio.Seccion;
 import com.educoders.Gestion_Academica_Motor_Evaluacion.persistencia.SeccionRepository;
+import com.educoders.Gestion_Matricula_Pagos.dominio.CompromisoPago;
 import com.educoders.Gestion_Matricula_Pagos.dominio.Matricula;
+import com.educoders.Gestion_Matricula_Pagos.dominio.Pago;
 import com.educoders.Gestion_Matricula_Pagos.dominio.PeriodoMatricula;
+import com.educoders.Gestion_Matricula_Pagos.persistencia.CompromisoPagoRepository;
 import com.educoders.Gestion_Matricula_Pagos.persistencia.MatriculaRepository;
+import com.educoders.Gestion_Matricula_Pagos.persistencia.PagoRepository;
 import com.educoders.Gestion_Matricula_Pagos.persistencia.PeriodoMatriculaRepository;
+import com.educoders.Gestion_Matricula_Pagos.presentacion.dto.ActualizarSeccionMatriculaRequest;
 import com.educoders.Gestion_Matricula_Pagos.presentacion.dto.MatriculaAdminListResponse;
 import com.educoders.Gestion_Matricula_Pagos.presentacion.dto.MatriculasPorEstadoResponse;
 import com.educoders.Gestion_Matricula_Pagos.presentacion.dto.MatriculaResponse;
@@ -17,6 +22,7 @@ import com.educoders.Infraestructura_Servicios.enums.EstadoCompromisoPago;
 import com.educoders.Infraestructura_Servicios.enums.EstadoMatricula;
 import com.educoders.Infraestructura_Servicios.enums.TipoCompromiso;
 import com.educoders.Infraestructura_Servicios.exception.RecursoNoEncontradoException;
+import com.educoders.Infraestructura_Servicios.exception.ConflictoException;
 import com.educoders.Infraestructura_Servicios.exception.ReglaNegocioException;
 import com.educoders.Seguridad_Auditoria.dominio.Administrador;
 import com.educoders.Seguridad_Auditoria.dominio.Apoderado;
@@ -45,7 +51,10 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.anyLong;
@@ -60,6 +69,8 @@ class MatriculaServiceImplTest {
     @Mock private PeriodoMatriculaRepository periodoMatriculaRepository;
     @Mock private SeccionRepository seccionRepository;
     @Mock private EstudianteRepository estudianteRepository;
+    @Mock private CompromisoPagoRepository compromisoPagoRepository;
+    @Mock private PagoRepository pagoRepository;
     @Mock private AuditoriaService auditoriaService;
 
     @InjectMocks
@@ -107,6 +118,25 @@ class MatriculaServiceImplTest {
         s.setGrado(g);
         s.setAnioAcademico(anio);
         return s;
+    }
+
+    private Seccion crearSeccion(Long id, String nombre, AnioAcademico anio) {
+        Grado g = new Grado();
+        g.setId(1L);
+        g.setNombre("1er Grado");
+        Seccion s = new Seccion();
+        s.setId(id);
+        s.setNombre(nombre);
+        s.setCapacidadMaxima(30);
+        s.setGrado(g);
+        s.setAnioAcademico(anio);
+        return s;
+    }
+
+    private PeriodoMatricula crearPeriodo(Seccion seccion, boolean vigente) {
+        PeriodoMatricula p = crearPeriodo(vigente);
+        p.setAnioAcademico(seccion.getAnioAcademico());
+        return p;
     }
 
     private PeriodoMatricula crearPeriodo(boolean vigente) {
@@ -335,5 +365,282 @@ class MatriculaServiceImplTest {
         ResponseStatusException ex = assertThrows(ResponseStatusException.class,
                 () -> service.registrarMatricula(new RegistrarMatriculaRequest(5L, 1L)));
         assertEquals(HttpStatus.FORBIDDEN, ex.getStatusCode());
+    }
+
+    @Test
+    void actualizarSeccion_exitoso_auditaCambio() {
+        autenticar(crearAdmin());
+
+        Seccion anterior = crearSeccion();
+        Matricula matricula = new Matricula();
+        matricula.setId(100L);
+        matricula.setFechaAsignacion(LocalDate.now());
+        matricula.setEstado(EstadoMatricula.PENDIENTE);
+        matricula.setEstudiante(crearEstudiante());
+        matricula.setSeccion(anterior);
+
+        Seccion nueva = crearSeccion(2L, "B", anterior.getAnioAcademico());
+
+        when(matriculaRepository.findByIdParaActualizar(100L))
+                .thenReturn(Optional.of(matricula));
+        when(periodoMatriculaRepository.findByAnioAcademicoId(1L))
+                .thenReturn(Optional.of(crearPeriodo(true)));
+        when(seccionRepository.findById(2L)).thenReturn(Optional.of(nueva));
+        when(matriculaRepository
+                .existsByEstudianteIdAndSeccionAnioAcademicoIdAndEstadoInAndIdNot(
+                        anyLong(), anyLong(), anyCollection(), anyLong()))
+                .thenReturn(false);
+        when(matriculaRepository.existsByEstudianteIdAndSeccionIdAndIdNot(
+                anyLong(), anyLong(), anyLong())).thenReturn(false);
+        when(matriculaRepository.countBySeccionIdAndEstadoInAndIdNot(
+                anyLong(), anyCollection(), anyLong())).thenReturn(0L);
+        when(matriculaRepository.save(any(Matricula.class)))
+                .thenAnswer(inv -> inv.getArgument(0));
+        when(periodoMatriculaRepository.findAll())
+                .thenReturn(List.of(crearPeriodo(anterior, true)));
+        when(compromisoPagoRepository.findByMatriculaIdIn(any()))
+                .thenReturn(List.of());
+
+        MatriculaAdminListResponse respuesta = service.actualizarSeccion(
+                100L, new ActualizarSeccionMatriculaRequest(2L));
+
+        assertEquals(2L, respuesta.seccionId());
+        assertEquals("B", respuesta.seccionNombre());
+        assertTrue(respuesta.puedeEditar());
+        assertTrue(respuesta.puedeEliminar());
+        assertNull(respuesta.motivoNoEditar());
+        assertNull(respuesta.motivoNoEliminar());
+        verify(auditoriaService).registrarAuditoria(any());
+    }
+
+    @Test
+    void actualizarSeccion_noPendiente_rechaza() {
+        autenticar(crearAdmin());
+
+        Matricula matricula = new Matricula();
+        matricula.setId(100L);
+        matricula.setEstado(EstadoMatricula.CONFIRMADA);
+        matricula.setEstudiante(crearEstudiante());
+        matricula.setSeccion(crearSeccion());
+
+        when(matriculaRepository.findByIdParaActualizar(100L))
+                .thenReturn(Optional.of(matricula));
+
+        assertThrows(ConflictoException.class,
+                () -> service.actualizarSeccion(
+                        100L, new ActualizarSeccionMatriculaRequest(2L)));
+
+        verify(matriculaRepository, never()).save(any(Matricula.class));
+    }
+
+    @Test
+    void actualizarSeccion_periodoVencido_rechaza() {
+        autenticar(crearAdmin());
+
+        Matricula matricula = new Matricula();
+        matricula.setId(100L);
+        matricula.setEstado(EstadoMatricula.PENDIENTE);
+        matricula.setEstudiante(crearEstudiante());
+        matricula.setSeccion(crearSeccion());
+
+        when(matriculaRepository.findByIdParaActualizar(100L))
+                .thenReturn(Optional.of(matricula));
+        when(periodoMatriculaRepository.findByAnioAcademicoId(1L))
+                .thenReturn(Optional.of(crearPeriodo(false)));
+
+        assertThrows(ReglaNegocioException.class,
+                () -> service.actualizarSeccion(
+                        100L, new ActualizarSeccionMatriculaRequest(2L)));
+
+        verify(matriculaRepository, never()).save(any(Matricula.class));
+    }
+
+    @Test
+    void actualizarSeccion_canceladaEnDestino_rechaza() {
+        autenticar(crearAdmin());
+
+        Seccion anterior = crearSeccion();
+        Matricula matricula = new Matricula();
+        matricula.setId(100L);
+        matricula.setEstado(EstadoMatricula.PENDIENTE);
+        matricula.setEstudiante(crearEstudiante());
+        matricula.setSeccion(anterior);
+
+        Seccion nueva = crearSeccion(2L, "B", anterior.getAnioAcademico());
+
+        when(matriculaRepository.findByIdParaActualizar(100L))
+                .thenReturn(Optional.of(matricula));
+        when(periodoMatriculaRepository.findByAnioAcademicoId(1L))
+                .thenReturn(Optional.of(crearPeriodo(true)));
+        when(seccionRepository.findById(2L)).thenReturn(Optional.of(nueva));
+        when(matriculaRepository
+                .existsByEstudianteIdAndSeccionAnioAcademicoIdAndEstadoInAndIdNot(
+                        anyLong(), anyLong(), anyCollection(), anyLong()))
+                .thenReturn(false);
+        when(matriculaRepository.existsByEstudianteIdAndSeccionIdAndIdNot(
+                anyLong(), anyLong(), anyLong())).thenReturn(true);
+
+        assertThrows(ConflictoException.class,
+                () -> service.actualizarSeccion(
+                        100L, new ActualizarSeccionMatriculaRequest(2L)));
+
+        verify(matriculaRepository, never()).save(any(Matricula.class));
+    }
+
+    @Test
+    void eliminarMatricula_exitoso_borraCompromisoSinPagos() {
+        autenticar(crearAdmin());
+
+        Matricula matricula = new Matricula();
+        matricula.setId(100L);
+        matricula.setEstado(EstadoMatricula.PENDIENTE);
+        matricula.setEstudiante(crearEstudiante());
+        matricula.setSeccion(crearSeccion());
+
+        CompromisoPago compromiso = new CompromisoPago();
+        compromiso.setId(10L);
+        compromiso.setTipoCompromiso(TipoCompromiso.MATRICULA);
+        compromiso.setEstado(EstadoCompromisoPago.PENDIENTE);
+        compromiso.setMatricula(matricula);
+
+        when(matriculaRepository.findByIdParaActualizar(100L))
+                .thenReturn(Optional.of(matricula));
+        when(periodoMatriculaRepository.findByAnioAcademicoId(1L))
+                .thenReturn(Optional.of(crearPeriodo(true)));
+        when(compromisoPagoRepository.findByMatriculaId(100L))
+                .thenReturn(List.of(compromiso));
+        when(pagoRepository.findByCompromisoPagoId(10L)).thenReturn(List.of());
+
+        service.eliminarMatricula(100L);
+
+        verify(compromisoPagoRepository).delete(compromiso);
+        verify(matriculaRepository).delete(matricula);
+        verify(auditoriaService).registrarAuditoria(any());
+    }
+
+    @Test
+    void eliminarMatricula_conPagos_rechaza() {
+        autenticar(crearAdmin());
+
+        Matricula matricula = new Matricula();
+        matricula.setId(100L);
+        matricula.setEstado(EstadoMatricula.PENDIENTE);
+        matricula.setEstudiante(crearEstudiante());
+        matricula.setSeccion(crearSeccion());
+
+        CompromisoPago compromiso = new CompromisoPago();
+        compromiso.setId(10L);
+        compromiso.setTipoCompromiso(TipoCompromiso.MATRICULA);
+        compromiso.setEstado(EstadoCompromisoPago.PENDIENTE);
+        compromiso.setMatricula(matricula);
+
+        when(matriculaRepository.findByIdParaActualizar(100L))
+                .thenReturn(Optional.of(matricula));
+        when(periodoMatriculaRepository.findByAnioAcademicoId(1L))
+                .thenReturn(Optional.of(crearPeriodo(true)));
+        when(compromisoPagoRepository.findByMatriculaId(100L))
+                .thenReturn(List.of(compromiso));
+        when(pagoRepository.findByCompromisoPagoId(10L))
+                .thenReturn(List.of(new Pago()));
+
+        assertThrows(ConflictoException.class, () -> service.eliminarMatricula(100L));
+
+        verify(compromisoPagoRepository, never()).delete(any());
+        verify(matriculaRepository, never()).delete(any(Matricula.class));
+    }
+
+    @Test
+    void listarMatriculas_pendienteVigente_permiteEditarYEliminar() {
+        autenticar(crearAdmin());
+
+        Seccion seccion = crearSeccion();
+        Matricula matricula = new Matricula();
+        matricula.setId(100L);
+        matricula.setFechaAsignacion(LocalDate.now());
+        matricula.setEstado(EstadoMatricula.PENDIENTE);
+        matricula.setEstudiante(crearEstudiante());
+        matricula.setSeccion(seccion);
+
+        Pageable pageable = PageRequest.of(0, 10);
+        when(matriculaRepository.listarMatriculas(
+                null, null, null, null, null, "", pageable))
+                .thenReturn(new PageImpl<>(List.of(matricula), pageable, 1));
+        when(periodoMatriculaRepository.findAll())
+                .thenReturn(List.of(crearPeriodo(seccion, true)));
+        when(compromisoPagoRepository.findByMatriculaIdIn(any()))
+                .thenReturn(List.of());
+
+        MatriculaAdminListResponse fila = service.listarMatriculas(
+                null, null, null, null, null, null, pageable).getContent().get(0);
+
+        assertTrue(fila.puedeEditar());
+        assertTrue(fila.puedeEliminar());
+        assertNull(fila.motivoNoEditar());
+        assertNull(fila.motivoNoEliminar());
+    }
+
+    @Test
+    void listarMatriculas_confirmada_noPermiteAcciones() {
+        autenticar(crearAdmin());
+
+        Matricula matricula = new Matricula();
+        matricula.setId(100L);
+        matricula.setFechaAsignacion(LocalDate.now());
+        matricula.setEstado(EstadoMatricula.CONFIRMADA);
+        matricula.setEstudiante(crearEstudiante());
+        matricula.setSeccion(crearSeccion());
+
+        Pageable pageable = PageRequest.of(0, 10);
+        when(matriculaRepository.listarMatriculas(
+                null, null, null, null, null, "", pageable))
+                .thenReturn(new PageImpl<>(List.of(matricula), pageable, 1));
+
+        MatriculaAdminListResponse fila = service.listarMatriculas(
+                null, null, null, null, null, null, pageable).getContent().get(0);
+
+        assertFalse(fila.puedeEditar());
+        assertFalse(fila.puedeEliminar());
+        assertEquals("Solo se pueden editar matrículas PENDIENTE.", fila.motivoNoEditar());
+        assertEquals("Solo se pueden eliminar matrículas PENDIENTE.", fila.motivoNoEliminar());
+    }
+
+    @Test
+    void listarMatriculas_pendienteConPago_noPermiteEliminar() {
+        autenticar(crearAdmin());
+
+        Seccion seccion = crearSeccion();
+        Matricula matricula = new Matricula();
+        matricula.setId(100L);
+        matricula.setFechaAsignacion(LocalDate.now());
+        matricula.setEstado(EstadoMatricula.PENDIENTE);
+        matricula.setEstudiante(crearEstudiante());
+        matricula.setSeccion(seccion);
+
+        CompromisoPago compromiso = new CompromisoPago();
+        compromiso.setId(10L);
+        compromiso.setTipoCompromiso(TipoCompromiso.MATRICULA);
+        compromiso.setEstado(EstadoCompromisoPago.PENDIENTE);
+        compromiso.setMatricula(matricula);
+
+        Pago pago = new Pago();
+        pago.setCompromisoPago(compromiso);
+
+        Pageable pageable = PageRequest.of(0, 10);
+        when(matriculaRepository.listarMatriculas(
+                null, null, null, null, null, "", pageable))
+                .thenReturn(new PageImpl<>(List.of(matricula), pageable, 1));
+        when(periodoMatriculaRepository.findAll())
+                .thenReturn(List.of(crearPeriodo(seccion, true)));
+        when(compromisoPagoRepository.findByMatriculaIdIn(any()))
+                .thenReturn(List.of(compromiso));
+        when(pagoRepository.findByCompromisoPagoIdIn(any()))
+                .thenReturn(List.of(pago));
+
+        MatriculaAdminListResponse fila = service.listarMatriculas(
+                null, null, null, null, null, null, pageable).getContent().get(0);
+
+        assertTrue(fila.puedeEditar());
+        assertFalse(fila.puedeEliminar());
+        assertEquals("La matrícula tiene pagos registrados.", fila.motivoNoEliminar());
     }
 }

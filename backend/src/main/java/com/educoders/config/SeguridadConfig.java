@@ -283,16 +283,30 @@ public class SeguridadConfig {
                                 // Listado administrativo y procesamiento de matrículas
                                 .requestMatchers(
                                         HttpMethod.GET,
-                                        "/api/v1/matriculas"
+                                        "/api/v1/matriculas",
+                                        "/api/v1/matriculas/plantilla",
+                                        "/api/v1/matriculas/exportar"
                                 ).hasRole("ADMINISTRADOR")
 
                                 .requestMatchers(
                                         HttpMethod.POST,
+                                        "/api/v1/matriculas",
+                                        "/api/v1/matriculas/carga-masiva/**",
                                         "/api/v1/matriculas/cancelar-pendientes-por-periodo",
                                         "/api/v1/compromisos-pago/matricula/lote",
                                         "/api/v1/compromisos-pago/matricula/lote/async",
                                         "/api/v1/compromisos-pago/pension/lote",
                                         "/api/v1/compromisos-pago/pension/lote/async"
+                                ).hasRole("ADMINISTRADOR")
+
+                                .requestMatchers(
+                                        HttpMethod.PUT,
+                                        "/api/v1/matriculas/*"
+                                ).hasRole("ADMINISTRADOR")
+
+                                .requestMatchers(
+                                        HttpMethod.DELETE,
+                                        "/api/v1/matriculas/*"
                                 ).hasRole("ADMINISTRADOR")
 
                                 // HU-GEMIH-02: solo el administrador gestiona la
@@ -356,6 +370,7 @@ public class SeguridadConfig {
 
         configuration.setAllowedHeaders(List.of("*"));
         configuration.setAllowCredentials(true);
+        configuration.setExposedHeaders(List.of("Content-Disposition"));
 
         UrlBasedCorsConfigurationSource source =
                 new UrlBasedCorsConfigurationSource();

@@ -23,6 +23,13 @@ public interface EstudianteRepository extends JpaRepository<Estudiante, Long> {
 
     Optional<Estudiante> findByDni(String dni);
 
+    /** Estudiantes que coinciden con los DNI indicados. Se usa en la carga masiva. */
+    @Query("SELECT e FROM Estudiante e WHERE e.dni IN :dnis")
+    List<Estudiante> buscarPorDnis(@Param("dnis") Collection<String> dnis);
+
+    /** Estudiantes que coinciden con los códigos indicados. Se usa en la carga masiva. */
+    @Query("SELECT e FROM Estudiante e WHERE e.codigo IN :codigos")
+    List<Estudiante> buscarPorCodigos(@Param("codigos") Collection<String> codigos);
 
     java.util.List<Estudiante> findByApoderadoIdOrderByIdAsc(Long apoderadoId);
 

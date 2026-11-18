@@ -39,12 +39,15 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.SimpleTransactionStatus;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
@@ -55,6 +58,8 @@ import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -69,6 +74,7 @@ class CompromisoPagoServiceImplTest {
     @Mock private ServicioNotificacionEmail servicioNotificacionEmail;
     @Mock private EstudianteRepository estudianteRepository;
     @Mock private AuditoriaService auditoriaService;
+    @Mock private PlatformTransactionManager transactionManager;
 
     @InjectMocks
     private CompromisoPagoServiceImpl service;
@@ -267,6 +273,13 @@ class CompromisoPagoServiceImplTest {
         Mes mesActual = Mes.values()[indice];
 
         when(matriculaRepository.findById(1L)).thenReturn(Optional.of(matricula));
+        when(periodoMatriculaRepository.findByAnioAcademicoId(1L))
+                .thenReturn(Optional.of(crearPeriodo(false)));
+        if (mesActual != Mes.MARZO) {
+            when(compromisoPagoRepository.existsByMatriculaIdAndTipoCompromisoAndMes(
+                    1L, TipoCompromiso.PENSION, Mes.values()[mesActual.ordinal() - 1]))
+                    .thenReturn(true);
+        }
         when(compromisoPagoRepository.existsByMatriculaIdAndTipoCompromisoAndMes(1L, TipoCompromiso.PENSION, mesActual))
                 .thenReturn(false);
         when(compromisoPagoRepository.save(any(CompromisoPago.class))).thenAnswer(inv -> {
@@ -295,6 +308,13 @@ class CompromisoPagoServiceImplTest {
         when(estudianteRepository.existsById(5L)).thenReturn(true);
         when(matriculaRepository.buscarPorEstudianteYAnioId(5L, 1L, EstadoMatricula.CONFIRMADA))
                 .thenReturn(List.of(matricula));
+        when(periodoMatriculaRepository.findByAnioAcademicoId(1L))
+                .thenReturn(Optional.of(crearPeriodo(false)));
+        if (mesActual != Mes.MARZO) {
+            when(compromisoPagoRepository.existsByMatriculaIdAndTipoCompromisoAndMes(
+                    1L, TipoCompromiso.PENSION, Mes.values()[mesActual.ordinal() - 1]))
+                    .thenReturn(true);
+        }
         when(compromisoPagoRepository.existsByMatriculaIdAndTipoCompromisoAndMes(1L, TipoCompromiso.PENSION, mesActual))
                 .thenReturn(false);
         when(compromisoPagoRepository.save(any(CompromisoPago.class))).thenAnswer(inv -> {
@@ -347,12 +367,94 @@ class CompromisoPagoServiceImplTest {
         autenticar(crearAdmin());
         Matricula matricula = crearMatricula(EstadoMatricula.CONFIRMADA, true);
         when(matriculaRepository.findById(1L)).thenReturn(Optional.of(matricula));
+        when(periodoMatriculaRepository.findByAnioAcademicoId(1L))
+                .thenReturn(Optional.of(crearPeriodo(false)));
 
         assertThrows(ReglaNegocioException.class,
                 () -> service.emitirCompromisoPension(
                         new EmitirCompromisoPensionRequest(1L, null, null, Mes.DICIEMBRE)));
 
         verify(compromisoPagoRepository, never()).save(any(CompromisoPago.class));
+    }
+
+    @Test
+    void emitirCompromisoPension_periodoMatriculaVigente_rechaza() {
+        autenticar(crearAdmin());
+        Matricula matricula = crearMatricula(EstadoMatricula.CONFIRMADA, true);
+
+        when(matriculaRepository.findById(1L)).thenReturn(Optional.of(matricula));
+        when(periodoMatriculaRepository.findByAnioAcademicoId(1L))
+                .thenReturn(Optional.of(crearPeriodo(true)));
+
+        assertThrows(ReglaNegocioException.class,
+                () -> service.emitirCompromisoPension(
+                        new EmitirCompromisoPensionRequest(1L, null, null, Mes.MARZO)));
+
+        verify(compromisoPagoRepository, never()).save(any(CompromisoPago.class));
+    }
+
+    @Test
+    void emitirCompromisoPension_anioFinalizado_rechaza() {
+        autenticar(crearAdmin());
+        Matricula matricula = crearMatricula(EstadoMatricula.CONFIRMADA, true);
+        matricula.getSeccion().getAnioAcademico().setFechaFin(LocalDate.now().minusDays(1));
+
+        when(matriculaRepository.findById(1L)).thenReturn(Optional.of(matricula));
+        when(periodoMatriculaRepository.findByAnioAcademicoId(1L))
+                .thenReturn(Optional.of(crearPeriodo(false)));
+
+        assertThrows(ReglaNegocioException.class,
+                () -> service.emitirCompromisoPension(
+                        new EmitirCompromisoPensionRequest(1L, null, null, Mes.MARZO)));
+
+        verify(compromisoPagoRepository, never()).save(any(CompromisoPago.class));
+    }
+
+    @Test
+    void emitirCompromisoPension_sinMesAnterior_rechaza() {
+        Assumptions.assumeTrue(LocalDate.now().getMonthValue() >= 4,
+                "Abril todavía sería un mes futuro");
+
+        autenticar(crearAdmin());
+        Matricula matricula = crearMatricula(EstadoMatricula.CONFIRMADA, true);
+
+        when(matriculaRepository.findById(1L)).thenReturn(Optional.of(matricula));
+        when(periodoMatriculaRepository.findByAnioAcademicoId(1L))
+                .thenReturn(Optional.of(crearPeriodo(false)));
+        when(compromisoPagoRepository.existsByMatriculaIdAndTipoCompromisoAndMes(
+                1L, TipoCompromiso.PENSION, Mes.MARZO)).thenReturn(false);
+
+        assertThrows(ReglaNegocioException.class,
+                () -> service.emitirCompromisoPension(
+                        new EmitirCompromisoPensionRequest(1L, null, null, Mes.ABRIL)));
+
+        verify(compromisoPagoRepository, never()).save(any(CompromisoPago.class));
+    }
+
+    @Test
+    void emitirCompromisoPension_marzoNoRequiereMesAnterior() {
+        Assumptions.assumeTrue(LocalDate.now().getMonthValue() >= 3,
+                "Marzo todavía sería un mes futuro");
+
+        autenticar(crearAdmin());
+        Matricula matricula = crearMatricula(EstadoMatricula.CONFIRMADA, true);
+
+        when(matriculaRepository.findById(1L)).thenReturn(Optional.of(matricula));
+        when(periodoMatriculaRepository.findByAnioAcademicoId(1L))
+                .thenReturn(Optional.of(crearPeriodo(false)));
+        when(compromisoPagoRepository.existsByMatriculaIdAndTipoCompromisoAndMes(
+                1L, TipoCompromiso.PENSION, Mes.MARZO)).thenReturn(false);
+        when(compromisoPagoRepository.save(any(CompromisoPago.class))).thenAnswer(inv -> {
+            CompromisoPago c = inv.getArgument(0);
+            c.setId(22L);
+            return c;
+        });
+
+        CompromisoPagoResponse r = service.emitirCompromisoPension(
+                new EmitirCompromisoPensionRequest(1L, null, null, Mes.MARZO));
+
+        assertEquals(22L, r.id());
+        assertEquals(Mes.MARZO, r.mes());
     }
 
     // --- emisión masiva de matrícula ---
@@ -378,6 +480,8 @@ class CompromisoPagoServiceImplTest {
             c.setId(20L);
             return c;
         });
+        when(transactionManager.getTransaction(any()))
+                .thenReturn(new SimpleTransactionStatus());
 
         EmitirCompromisosMatriculaLoteResponse r = service.emitirCompromisosMatriculaLote(
                 new EmitirCompromisosMatriculaLoteRequest(1L));
@@ -387,6 +491,12 @@ class CompromisoPagoServiceImplTest {
         assertEquals(0, r.errores().size());
         verify(servicioNotificacionEmail).enviarCorreoCompromisoPago(any(), any(), any(), any(), any());
         verify(auditoriaService).registrarAuditoria(any());
+        verify(transactionManager).commit(any());
+
+        InOrder orden = inOrder(auditoriaService, servicioNotificacionEmail);
+        orden.verify(auditoriaService).registrarAuditoria(any());
+        orden.verify(servicioNotificacionEmail)
+                .enviarCorreoCompromisoPago(any(), any(), any(), any(), any());
     }
 
     @Test
@@ -419,6 +529,48 @@ class CompromisoPagoServiceImplTest {
         assertEquals(0, r.omitidos());
         assertEquals(1, r.errores().size());
         assertEquals(1L, r.errores().get(0).matriculaId());
+    }
+
+    @Test
+    void emitirCompromisosMatriculaLote_fallaAuditoria_revierteEsaFilaYContinua() {
+        autenticar(crearAdmin());
+
+        Matricula primera = crearMatricula(EstadoMatricula.PENDIENTE, true);
+        Matricula segunda = crearMatricula(EstadoMatricula.PENDIENTE, true);
+        segunda.setId(2L);
+
+        when(periodoMatriculaRepository.findByAnioAcademicoId(1L))
+                .thenReturn(Optional.of(crearPeriodo(true)));
+        when(matriculaRepository.buscarPendientesPorAnioConDetalle(1L, EstadoMatricula.PENDIENTE))
+                .thenReturn(List.of(primera, segunda));
+        when(compromisoPagoRepository.existsByMatriculaIdAndTipoCompromiso(any(), any()))
+                .thenReturn(false);
+        when(transactionManager.getTransaction(any()))
+                .thenReturn(new SimpleTransactionStatus());
+        when(compromisoPagoRepository.save(any(CompromisoPago.class))).thenAnswer(inv -> {
+            CompromisoPago c = inv.getArgument(0);
+            c.setId(c.getMatricula().getId().equals(1L) ? 20L : 21L);
+            return c;
+        });
+        doAnswer(inv -> {
+            RegistrarAuditoriaRequestDTO dto = inv.getArgument(0);
+            if (Long.valueOf(20L).equals(dto.getEntidadId())) {
+                throw new RuntimeException("Fallo simulado de auditoría");
+            }
+            return null;
+        }).when(auditoriaService).registrarAuditoria(any());
+
+        EmitirCompromisosMatriculaLoteResponse r = service.emitirCompromisosMatriculaLote(
+                new EmitirCompromisosMatriculaLoteRequest(1L));
+
+        assertEquals(1, r.emitidos());
+        assertEquals(0, r.omitidos());
+        assertEquals(1, r.errores().size());
+        assertEquals(1L, r.errores().get(0).matriculaId());
+        verify(transactionManager).rollback(any());
+        verify(transactionManager).commit(any());
+        verify(servicioNotificacionEmail)
+                .enviarCorreoCompromisoPago(any(), any(), any(), any(), any());
     }
 
     @Test
@@ -462,9 +614,15 @@ class CompromisoPagoServiceImplTest {
         segunda.setId(2L);
 
         when(anioAcademicoRepository.findById(1L)).thenReturn(Optional.of(anio));
+        when(periodoMatriculaRepository.findByAnioAcademicoId(1L))
+                .thenReturn(Optional.of(crearPeriodo(false)));
         when(matriculaRepository.buscarPorAnioYEstadoConDetalle(
                 1L, EstadoMatricula.CONFIRMADA, null, null))
                 .thenReturn(List.of(primera, segunda));
+        if (mesActual != Mes.MARZO) {
+            when(compromisoPagoRepository.findMatriculaIdsConCompromiso(
+                    any(), any(), any())).thenReturn(List.of(1L, 2L));
+        }
         when(compromisoPagoRepository.existsByMatriculaIdAndTipoCompromisoAndMes(
                 1L, TipoCompromiso.PENSION, mesActual)).thenReturn(false);
         when(compromisoPagoRepository.existsByMatriculaIdAndTipoCompromisoAndMes(
@@ -500,9 +658,15 @@ class CompromisoPagoServiceImplTest {
         segunda.setId(2L);
 
         when(anioAcademicoRepository.findById(1L)).thenReturn(Optional.of(anio));
+        when(periodoMatriculaRepository.findByAnioAcademicoId(1L))
+                .thenReturn(Optional.of(crearPeriodo(false)));
         when(matriculaRepository.buscarPorAnioYEstadoConDetalle(
                 1L, EstadoMatricula.CONFIRMADA, null, null))
                 .thenReturn(List.of(primera, segunda));
+        if (mesActual != Mes.MARZO) {
+            when(compromisoPagoRepository.findMatriculaIdsConCompromiso(
+                    any(), any(), any())).thenReturn(List.of(1L, 2L));
+        }
         when(compromisoPagoRepository.existsByMatriculaIdAndTipoCompromisoAndMes(
                 any(), any(), any())).thenReturn(false);
         when(compromisoPagoRepository.save(any(CompromisoPago.class))).thenAnswer(inv -> {
@@ -530,6 +694,8 @@ class CompromisoPagoServiceImplTest {
         anio.setFechaInicio(LocalDate.now().minusYears(2));
         anio.setFechaFin(LocalDate.now().minusYears(1));
         when(anioAcademicoRepository.findById(1L)).thenReturn(Optional.of(anio));
+        when(periodoMatriculaRepository.findByAnioAcademicoId(1L))
+                .thenReturn(Optional.of(crearPeriodo(false)));
 
         assertThrows(ReglaNegocioException.class,
                 () -> service.emitirCompromisosPensionLote(
@@ -546,6 +712,8 @@ class CompromisoPagoServiceImplTest {
         autenticar(crearAdmin());
         AnioAcademico anio = crearSeccion(true).getAnioAcademico();
         when(anioAcademicoRepository.findById(1L)).thenReturn(Optional.of(anio));
+        when(periodoMatriculaRepository.findByAnioAcademicoId(1L))
+                .thenReturn(Optional.of(crearPeriodo(false)));
 
         assertThrows(ReglaNegocioException.class,
                 () -> service.emitirCompromisosPensionLote(
@@ -571,6 +739,8 @@ class CompromisoPagoServiceImplTest {
         autenticar(crearAdmin());
         AnioAcademico anio = crearSeccion(true).getAnioAcademico();
         when(anioAcademicoRepository.findById(1L)).thenReturn(Optional.of(anio));
+        when(periodoMatriculaRepository.findByAnioAcademicoId(1L))
+                .thenReturn(Optional.of(crearPeriodo(false)));
         when(matriculaRepository.buscarPorAnioYEstadoConDetalle(
                 1L, EstadoMatricula.CONFIRMADA, 1L, 2L))
                 .thenReturn(List.of());
@@ -581,6 +751,68 @@ class CompromisoPagoServiceImplTest {
         assertEquals(0, r.emitidos());
         assertEquals(0, r.omitidos());
         assertEquals(0, r.errores().size());
+    }
+
+    @Test
+    void emitirCompromisosPensionLote_periodoMatriculaVigente_rechaza() {
+        autenticar(crearAdmin());
+        AnioAcademico anio = crearSeccion(true).getAnioAcademico();
+
+        when(anioAcademicoRepository.findById(1L)).thenReturn(Optional.of(anio));
+        when(periodoMatriculaRepository.findByAnioAcademicoId(1L))
+                .thenReturn(Optional.of(crearPeriodo(true)));
+
+        assertThrows(ReglaNegocioException.class,
+                () -> service.emitirCompromisosPensionLote(
+                        new EmitirCompromisosPensionLoteRequest(1L, Mes.MARZO, null, null)));
+
+        verify(matriculaRepository, never())
+                .buscarPorAnioYEstadoConDetalle(any(), any(), any(), any());
+    }
+
+    @Test
+    void emitirCompromisosPensionLote_anioFinalizado_rechaza() {
+        autenticar(crearAdmin());
+        AnioAcademico anio = crearSeccion(true).getAnioAcademico();
+        anio.setFechaFin(LocalDate.now().minusDays(1));
+
+        when(anioAcademicoRepository.findById(1L)).thenReturn(Optional.of(anio));
+        when(periodoMatriculaRepository.findByAnioAcademicoId(1L))
+                .thenReturn(Optional.of(crearPeriodo(false)));
+
+        assertThrows(ReglaNegocioException.class,
+                () -> service.emitirCompromisosPensionLote(
+                        new EmitirCompromisosPensionLoteRequest(1L, Mes.MARZO, null, null)));
+
+        verify(matriculaRepository, never())
+                .buscarPorAnioYEstadoConDetalle(any(), any(), any(), any());
+    }
+
+    @Test
+    void emitirCompromisosPensionLote_sinMesAnterior_rechaza() {
+        Assumptions.assumeTrue(LocalDate.now().getMonthValue() >= 4,
+                "Abril todavía sería un mes futuro");
+
+        autenticar(crearAdmin());
+        AnioAcademico anio = crearSeccion(true).getAnioAcademico();
+        Matricula primera = crearMatricula(EstadoMatricula.CONFIRMADA, true);
+        Matricula segunda = crearMatricula(EstadoMatricula.CONFIRMADA, true);
+        segunda.setId(2L);
+
+        when(anioAcademicoRepository.findById(1L)).thenReturn(Optional.of(anio));
+        when(periodoMatriculaRepository.findByAnioAcademicoId(1L))
+                .thenReturn(Optional.of(crearPeriodo(false)));
+        when(matriculaRepository.buscarPorAnioYEstadoConDetalle(
+                1L, EstadoMatricula.CONFIRMADA, null, null))
+                .thenReturn(List.of(primera, segunda));
+        when(compromisoPagoRepository.findMatriculaIdsConCompromiso(
+                any(), any(), any())).thenReturn(List.of(1L));
+
+        assertThrows(ReglaNegocioException.class,
+                () -> service.emitirCompromisosPensionLote(
+                        new EmitirCompromisosPensionLoteRequest(1L, Mes.ABRIL, null, null)));
+
+        verify(compromisoPagoRepository, never()).save(any(CompromisoPago.class));
     }
 
     @Test
@@ -619,9 +851,15 @@ class CompromisoPagoServiceImplTest {
         Matricula matricula = crearMatricula(EstadoMatricula.CONFIRMADA, true);
 
         when(anioAcademicoRepository.findById(1L)).thenReturn(Optional.of(anio));
+        when(periodoMatriculaRepository.findByAnioAcademicoId(1L))
+                .thenReturn(Optional.of(crearPeriodo(false)));
         when(matriculaRepository.buscarPorAnioYEstadoConDetalle(
                 1L, EstadoMatricula.CONFIRMADA, null, null))
                 .thenReturn(List.of(matricula));
+        if (mesActual != Mes.MARZO) {
+            when(compromisoPagoRepository.findMatriculaIdsConCompromiso(
+                    any(), any(), any())).thenReturn(List.of(1L));
+        }
         when(compromisoPagoRepository.existsByMatriculaIdAndTipoCompromisoAndMes(
                 1L, TipoCompromiso.PENSION, mesActual)).thenReturn(false);
         when(compromisoPagoRepository.save(any(CompromisoPago.class))).thenAnswer(inv -> {

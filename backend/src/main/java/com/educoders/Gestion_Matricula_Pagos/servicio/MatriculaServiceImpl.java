@@ -4,10 +4,14 @@ import com.educoders.Gestion_Academica_Motor_Evaluacion.dominio.AnioAcademico;
 import com.educoders.Gestion_Academica_Motor_Evaluacion.dominio.Seccion;
 import com.educoders.Gestion_Academica_Motor_Evaluacion.persistencia.SeccionRepository;
 import com.educoders.Gestion_Academica_Motor_Evaluacion.presentacion.dto.EstudianteAsignacionResponse;
+import com.educoders.Gestion_Matricula_Pagos.dominio.CompromisoPago;
 import com.educoders.Gestion_Matricula_Pagos.dominio.Matricula;
 import com.educoders.Gestion_Matricula_Pagos.dominio.PeriodoMatricula;
+import com.educoders.Gestion_Matricula_Pagos.persistencia.CompromisoPagoRepository;
 import com.educoders.Gestion_Matricula_Pagos.persistencia.MatriculaRepository;
+import com.educoders.Gestion_Matricula_Pagos.persistencia.PagoRepository;
 import com.educoders.Gestion_Matricula_Pagos.persistencia.PeriodoMatriculaRepository;
+import com.educoders.Gestion_Matricula_Pagos.presentacion.dto.ActualizarSeccionMatriculaRequest;
 import com.educoders.Gestion_Matricula_Pagos.presentacion.dto.MatriculaAdminListResponse;
 import com.educoders.Gestion_Matricula_Pagos.presentacion.dto.MatriculasPorEstadoResponse;
 import com.educoders.Gestion_Matricula_Pagos.presentacion.dto.MatriculaResponse;
@@ -30,8 +34,10 @@ import com.educoders.Seguridad_Auditoria.presentacion.dto.RegistrarAuditoriaRequ
 import com.educoders.Seguridad_Auditoria.servicio.AuditoriaService;
 
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
@@ -39,7 +45,10 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @Service
@@ -49,17 +58,23 @@ public class MatriculaServiceImpl implements MatriculaService {
     private final PeriodoMatriculaRepository periodoMatriculaRepository;
     private final SeccionRepository seccionRepository;
     private final EstudianteRepository estudianteRepository;
+    private final CompromisoPagoRepository compromisoPagoRepository;
+    private final PagoRepository pagoRepository;
     private final AuditoriaService auditoriaService;
 
     public MatriculaServiceImpl(MatriculaRepository matriculaRepository,
                                 PeriodoMatriculaRepository periodoMatriculaRepository,
                                 SeccionRepository seccionRepository,
                                 EstudianteRepository estudianteRepository,
+                                CompromisoPagoRepository compromisoPagoRepository,
+                                PagoRepository pagoRepository,
                                 AuditoriaService auditoriaService) {
         this.matriculaRepository = matriculaRepository;
         this.periodoMatriculaRepository = periodoMatriculaRepository;
         this.seccionRepository = seccionRepository;
         this.estudianteRepository = estudianteRepository;
+        this.compromisoPagoRepository = compromisoPagoRepository;
+        this.pagoRepository = pagoRepository;
         this.auditoriaService = auditoriaService;
     }
 
@@ -192,9 +207,11 @@ public class MatriculaServiceImpl implements MatriculaService {
                 ? ""
                 : "%" + busqueda.trim().toLowerCase() + "%";
 
-        return matriculaRepository.listarMatriculas(
-                        anioId, gradoId, seccionId, estado, estudianteId, patron, pageable)
-                .map(MatriculaAdminListResponse::fromEntity);
+        Page<Matricula> pagina = matriculaRepository.listarMatriculas(
+                anioId, gradoId, seccionId, estado, estudianteId, patron, pageable);
+
+        List<MatriculaAdminListResponse> contenido = enriquecer(pagina.getContent());
+        return new PageImpl<>(contenido, pageable, pagina.getTotalElements());
     }
 
     @Override
@@ -289,6 +306,290 @@ public class MatriculaServiceImpl implements MatriculaService {
                         m.getEstado()
                 ))
                 .collect(Collectors.toList());
+    }
+
+    @Override
+    @Transactional
+    public MatriculaAdminListResponse actualizarSeccion(
+            Long id, ActualizarSeccionMatriculaRequest request) {
+
+        exigirAdministrador();
+
+        if (request == null || request.seccionId() == null) {
+            throw new ReglaNegocioException("La sección es obligatoria.");
+        }
+
+        Matricula matricula = matriculaRepository.findByIdParaActualizar(id)
+                .orElseThrow(() -> RecursoNoEncontradoException.de("Matrícula", id));
+
+        if (matricula.getEstado() != EstadoMatricula.PENDIENTE) {
+            throw new ConflictoException("Solo se pueden editar matrículas PENDIENTE.");
+        }
+
+        Seccion anterior = matricula.getSeccion();
+        AnioAcademico anio = anterior.getAnioAcademico();
+        exigirPeriodoVigente(anio);
+
+        if (anterior.getId().equals(request.seccionId())) {
+            return enriquecer(List.of(matricula)).get(0);
+        }
+
+        Seccion nueva = seccionRepository.findById(request.seccionId())
+                .orElseThrow(() -> RecursoNoEncontradoException.de("Sección", request.seccionId()));
+
+        if (nueva.getAnioAcademico() == null
+                || !nueva.getAnioAcademico().getId().equals(anio.getId())) {
+            throw new ReglaNegocioException(
+                    "La sección debe pertenecer al mismo año académico de la matrícula.");
+        }
+
+        Long estudianteId = matricula.getEstudiante().getId();
+
+        boolean duplicadoEnAnio = matriculaRepository
+                .existsByEstudianteIdAndSeccionAnioAcademicoIdAndEstadoInAndIdNot(
+                        estudianteId,
+                        anio.getId(),
+                        List.of(EstadoMatricula.PENDIENTE, EstadoMatricula.CONFIRMADA),
+                        matricula.getId());
+
+        if (duplicadoEnAnio) {
+            throw new ConflictoException(
+                    "El estudiante ya cuenta con otra matrícula vigente en este año académico.");
+        }
+
+        boolean yaExisteEnSeccion = matriculaRepository
+                .existsByEstudianteIdAndSeccionIdAndIdNot(
+                        estudianteId, nueva.getId(), matricula.getId());
+
+        if (yaExisteEnSeccion) {
+            throw new ConflictoException(
+                    "El estudiante ya tiene un registro de matrícula en la sección destino, "
+                            + "aunque esté cancelada. Elige otra sección.");
+        }
+
+        long ocupacion = matriculaRepository.countBySeccionIdAndEstadoInAndIdNot(
+                nueva.getId(),
+                List.of(EstadoMatricula.PENDIENTE, EstadoMatricula.CONFIRMADA),
+                matricula.getId());
+
+        if (ocupacion >= nueva.getCapacidadMaxima()) {
+            throw new ReglaNegocioException(
+                    "La sección seleccionada ha alcanzado su capacidad máxima de estudiantes ("
+                            + nueva.getCapacidadMaxima() + ").");
+        }
+
+        matricula.setSeccion(nueva);
+        Matricula guardada;
+        try {
+            guardada = matriculaRepository.save(matricula);
+            matriculaRepository.flush();
+        } catch (DataIntegrityViolationException ex) {
+            throw new ConflictoException(
+                    "No se pudo cambiar la sección: ya existe otro registro de matrícula "
+                            + "del estudiante en la sección destino.");
+        }
+
+        auditoriaService.registrarAuditoria(new RegistrarAuditoriaRequestDTO(
+                null,
+                CategoriaAuditoria.MATRICULA,
+                TipoAccionAuditoria.ACTUALIZAR,
+                "Matricula",
+                guardada.getId(),
+                "Cambio de sección de matrícula",
+                List.of(
+                        new DetalleAuditoriaDTO(
+                                "seccionId",
+                                String.valueOf(anterior.getId()),
+                                String.valueOf(nueva.getId())),
+                        new DetalleAuditoriaDTO(
+                                "seccion",
+                                anterior.getNombre(),
+                                nueva.getNombre()),
+                        new DetalleAuditoriaDTO(
+                                "grado",
+                                anterior.getGrado().getNombre(),
+                                nueva.getGrado().getNombre())
+                )
+        ));
+
+        return enriquecer(List.of(guardada)).get(0);
+    }
+
+    @Override
+    @Transactional
+    public void eliminarMatricula(Long id) {
+        exigirAdministrador();
+
+        Matricula matricula = matriculaRepository.findByIdParaActualizar(id)
+                .orElseThrow(() -> RecursoNoEncontradoException.de("Matrícula", id));
+
+        if (matricula.getEstado() != EstadoMatricula.PENDIENTE) {
+            throw new ConflictoException("Solo se pueden eliminar matrículas PENDIENTE.");
+        }
+
+        AnioAcademico anio = matricula.getSeccion().getAnioAcademico();
+        exigirPeriodoVigente(anio);
+
+        List<CompromisoPago> compromisos = compromisoPagoRepository.findByMatriculaId(id);
+
+        if (compromisos.size() > 1) {
+            throw new ConflictoException(
+                    "La matrícula tiene varios compromisos asociados; no se puede eliminar automáticamente.");
+        }
+
+        CompromisoPago compromiso = compromisos.isEmpty() ? null : compromisos.get(0);
+
+        if (compromiso != null) {
+            if (compromiso.getTipoCompromiso() == TipoCompromiso.PENSION) {
+                throw new ConflictoException(
+                        "La matrícula tiene un compromiso de pensión asociado; no se puede eliminar.");
+            }
+            if (compromiso.getEstado() == EstadoCompromisoPago.PAGADO) {
+                throw new ConflictoException(
+                        "El compromiso de matrícula está marcado como pagado; no se puede eliminar.");
+            }
+            if (!pagoRepository.findByCompromisoPagoId(compromiso.getId()).isEmpty()) {
+                throw new ConflictoException(
+                        "La matrícula tiene pagos registrados; no se puede eliminar.");
+            }
+        }
+
+        List<DetalleAuditoriaDTO> detalles = new ArrayList<>();
+        detalles.add(new DetalleAuditoriaDTO(
+                "estudianteId", String.valueOf(matricula.getEstudiante().getId()), null));
+        detalles.add(new DetalleAuditoriaDTO(
+                "seccionId", String.valueOf(matricula.getSeccion().getId()), null));
+        detalles.add(new DetalleAuditoriaDTO(
+                "anioAcademicoId", String.valueOf(anio.getId()), null));
+        detalles.add(new DetalleAuditoriaDTO(
+                "estado", matricula.getEstado().name(), null));
+        if (compromiso != null) {
+            detalles.add(new DetalleAuditoriaDTO(
+                    "compromisoId", String.valueOf(compromiso.getId()), null));
+        }
+
+        auditoriaService.registrarAuditoria(new RegistrarAuditoriaRequestDTO(
+                null,
+                CategoriaAuditoria.MATRICULA,
+                TipoAccionAuditoria.ELIMINAR,
+                "Matricula",
+                matricula.getId(),
+                "Eliminación de matrícula PENDIENTE",
+                detalles
+        ));
+
+        try {
+            if (compromiso != null) {
+                compromisoPagoRepository.delete(compromiso);
+                compromisoPagoRepository.flush();
+            }
+            matriculaRepository.delete(matricula);
+            matriculaRepository.flush();
+        } catch (DataIntegrityViolationException ex) {
+            throw new ConflictoException(
+                    "No se pudo eliminar la matrícula porque tiene registros dependientes.");
+        }
+    }
+
+    private void exigirPeriodoVigente(AnioAcademico anio) {
+        PeriodoMatricula periodo = periodoMatriculaRepository
+                .findByAnioAcademicoId(anio.getId())
+                .orElseThrow(() -> new ReglaNegocioException(
+                        "El período de matrícula no está habilitado para el año académico "
+                                + anio.getAnio() + "."));
+
+        if (!periodo.estaVigente(LocalDate.now())) {
+            throw new ReglaNegocioException(
+                    "El período de matrícula ha finalizado o aún no se encuentra vigente.");
+        }
+    }
+
+    /**
+     * Agrega los permisos y motivos del listado consultando en lote los periodos,
+     * compromisos y pagos de la página. Evita una consulta por fila.
+     */
+    private List<MatriculaAdminListResponse> enriquecer(List<Matricula> matriculas) {
+        if (matriculas.isEmpty()) {
+            return List.of();
+        }
+
+        LocalDate hoy = LocalDate.now();
+
+        Map<Long, PeriodoMatricula> periodosPorAnio = periodoMatriculaRepository.findAll().stream()
+                .filter(p -> p.getAnioAcademico() != null)
+                .collect(Collectors.toMap(
+                        p -> p.getAnioAcademico().getId(),
+                        p -> p,
+                        (a, b) -> a));
+
+        List<Long> ids = matriculas.stream().map(Matricula::getId).toList();
+        List<CompromisoPago> compromisos = compromisoPagoRepository.findByMatriculaIdIn(ids);
+
+        Map<Long, List<CompromisoPago>> compromisosPorMatricula = compromisos.stream()
+                .collect(Collectors.groupingBy(c -> c.getMatricula().getId()));
+
+        Map<Long, Long> pagosPorCompromiso = new HashMap<>();
+        List<Long> compromisoIds = compromisos.stream().map(CompromisoPago::getId).toList();
+        if (!compromisoIds.isEmpty()) {
+            pagoRepository.findByCompromisoPagoIdIn(compromisoIds).forEach(p ->
+                    pagosPorCompromiso.merge(p.getCompromisoPago().getId(), 1L, Long::sum));
+        }
+
+        List<MatriculaAdminListResponse> resultado = new ArrayList<>(matriculas.size());
+        for (Matricula matricula : matriculas) {
+            resultado.add(construirAdminResponse(
+                    matricula, hoy, periodosPorAnio, compromisosPorMatricula, pagosPorCompromiso));
+        }
+        return resultado;
+    }
+
+    private MatriculaAdminListResponse construirAdminResponse(
+            Matricula matricula,
+            LocalDate hoy,
+            Map<Long, PeriodoMatricula> periodosPorAnio,
+            Map<Long, List<CompromisoPago>> compromisosPorMatricula,
+            Map<Long, Long> pagosPorCompromiso) {
+
+        boolean pendiente = matricula.getEstado() == EstadoMatricula.PENDIENTE;
+        Long anioId = matricula.getSeccion().getAnioAcademico().getId();
+        PeriodoMatricula periodo = periodosPorAnio.get(anioId);
+        boolean vigente = periodo != null && periodo.estaVigente(hoy);
+
+        String motivoNoEditar = null;
+        String motivoNoEliminar = null;
+        boolean puedeEditar = false;
+        boolean puedeEliminar = false;
+
+        if (!pendiente) {
+            motivoNoEditar = "Solo se pueden editar matrículas PENDIENTE.";
+            motivoNoEliminar = "Solo se pueden eliminar matrículas PENDIENTE.";
+        } else if (!vigente) {
+            motivoNoEditar = "El periodo de matrícula no está vigente.";
+            motivoNoEliminar = "El periodo de matrícula no está vigente.";
+        } else {
+            puedeEditar = true;
+
+            List<CompromisoPago> compromisos = compromisosPorMatricula
+                    .getOrDefault(matricula.getId(), List.of());
+
+            if (compromisos.size() > 1) {
+                motivoNoEliminar = "La matrícula tiene varios compromisos asociados.";
+            } else if (compromisos.size() == 1) {
+                CompromisoPago compromiso = compromisos.get(0);
+                if (compromiso.getTipoCompromiso() == TipoCompromiso.PENSION) {
+                    motivoNoEliminar = "La matrícula tiene un compromiso de pensión asociado.";
+                } else if (compromiso.getEstado() == EstadoCompromisoPago.PAGADO) {
+                    motivoNoEliminar = "El compromiso de matrícula está marcado como pagado.";
+                } else if (pagosPorCompromiso.getOrDefault(compromiso.getId(), 0L) > 0) {
+                    motivoNoEliminar = "La matrícula tiene pagos registrados.";
+                }
+            }
+
+            puedeEliminar = motivoNoEliminar == null;
+        }
+
+        return MatriculaAdminListResponse.fromEntity(
+                matricula, puedeEditar, puedeEliminar, motivoNoEditar, motivoNoEliminar);
     }
 
     private void exigirAdministrador() {
