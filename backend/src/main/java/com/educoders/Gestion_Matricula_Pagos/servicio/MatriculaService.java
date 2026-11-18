@@ -1,6 +1,7 @@
 package com.educoders.Gestion_Matricula_Pagos.servicio;
 
 import com.educoders.Gestion_Academica_Motor_Evaluacion.presentacion.dto.EstudianteAsignacionResponse;
+import com.educoders.Gestion_Matricula_Pagos.presentacion.dto.ActualizarSeccionMatriculaRequest;
 import com.educoders.Gestion_Matricula_Pagos.presentacion.dto.MatriculaAdminListResponse;
 import com.educoders.Gestion_Matricula_Pagos.presentacion.dto.MatriculasPorEstadoResponse;
 import com.educoders.Gestion_Matricula_Pagos.presentacion.dto.MatriculaResponse;
@@ -62,4 +63,16 @@ public interface MatriculaService {
      * Lista estudiantes activos con matrícula confirmada para una sección específica.
      */
     List<EstudianteAsignacionResponse> listarEstudiantesActivosPorSeccion(Long seccionId);
+
+    /**
+     * Cambia únicamente la sección de una matrícula PENDIENTE.
+     * Solo se permite durante el periodo de matrícula vigente.
+     */
+    MatriculaAdminListResponse actualizarSeccion(Long id, ActualizarSeccionMatriculaRequest request);
+
+    /**
+     * Elimina una matrícula PENDIENTE sin pagos asociados, junto con su
+     * compromiso de matrícula si todavía no tiene pagos.
+     */
+    void eliminarMatricula(Long id);
 }

@@ -11,6 +11,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -23,11 +24,33 @@ public interface CompromisoPagoRepository extends JpaRepository<CompromisoPago, 
     boolean existsByMatriculaIdAndTipoCompromiso(Long matriculaId, TipoCompromiso tipoCompromiso);
     Optional<CompromisoPago> findByMatriculaIdAndTipoCompromiso(Long matriculaId, TipoCompromiso tipoCompromiso);
 
+    /** Compromisos de una matrícula. Se usa en el borrado y en el listado administrativo. */
+    List<CompromisoPago> findByMatriculaId(Long matriculaId);
+
+    /** Compromisos de varias matrículas en una sola consulta. */
+    List<CompromisoPago> findByMatriculaIdIn(Collection<Long> matriculaIds);
+
     /**
      * HU-GEMAP-05: Verifica si ya existe una pensión emitida para una matrícula en un mes determinado.
      */
     boolean existsByMatriculaIdAndTipoCompromisoAndMes(Long matriculaId, TipoCompromiso tipoCompromiso, Mes mes);
     Optional<CompromisoPago> findByMatriculaIdAndTipoCompromisoAndMes(Long matriculaId, TipoCompromiso tipoCompromiso, Mes mes);
+
+    /**
+     * IDs de matrículas que ya tienen un compromiso del tipo y mes indicados.
+     * Se usa para validar en lote que exista el mes anterior antes de emitir
+     * las pensiones del mes objetivo. No filtra por estado.
+     */
+    @Query("""
+            SELECT c.matricula.id FROM CompromisoPago c
+            WHERE c.matricula.id IN :matriculaIds
+              AND c.tipoCompromiso = :tipoCompromiso
+              AND c.mes = :mes
+            """)
+    List<Long> findMatriculaIdsConCompromiso(
+            @Param("matriculaIds") Collection<Long> matriculaIds,
+            @Param("tipoCompromiso") TipoCompromiso tipoCompromiso,
+            @Param("mes") Mes mes);
 
     /*
         Añadir métodos de consulta filtrados por estudiante y año académico:

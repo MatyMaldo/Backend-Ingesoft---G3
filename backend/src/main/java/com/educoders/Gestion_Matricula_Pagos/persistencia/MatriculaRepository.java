@@ -4,9 +4,11 @@ import com.educoders.Gestion_Matricula_Pagos.dominio.Matricula;
 import com.educoders.Infraestructura_Servicios.enums.EstadoCompromisoPago;
 import com.educoders.Infraestructura_Servicios.enums.EstadoMatricula;
 import com.educoders.Infraestructura_Servicios.enums.TipoCompromiso;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -31,6 +33,95 @@ public interface MatriculaRepository extends JpaRepository<Matricula, Long> {
             Long estudianteId,
             Long anioAcademicoId,
             Collection<EstadoMatricula> estados
+    );
+
+    /**
+     * Igual que la anterior, pero excluye una matrícula concreta. Se usa al editar
+     * la sección para no contar la propia matrícula como duplicada.
+     */
+    boolean existsByEstudianteIdAndSeccionAnioAcademicoIdAndEstadoInAndIdNot(
+            Long estudianteId,
+            Long anioAcademicoId,
+            Collection<EstadoMatricula> estados,
+            Long id
+    );
+
+    /**
+     * Verifica si el estudiante ya tiene cualquier matrícula en la sección dada,
+     * sin importar el estado. Evita chocar con {@code uq_matricula_estudiante_seccion}
+     * cuando existe una matrícula CANCELADA en la sección destino.
+     */
+    boolean existsByEstudianteIdAndSeccionIdAndIdNot(
+            Long estudianteId,
+            Long seccionId,
+            Long id
+    );
+
+    /**
+     * Cuenta las matrículas que ocupan capacidad en una sección, excluyendo una
+     * matrícula concreta.
+     */
+    long countBySeccionIdAndEstadoInAndIdNot(
+            Long seccionId,
+            Collection<EstadoMatricula> estados,
+            Long id
+    );
+
+    /**
+     * Bloquea la matrícula para editarla o eliminarla sin carreras con otros
+     * procesos (por ejemplo, el job de cancelación automática).
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT m FROM Matricula m WHERE m.id = :id")
+    Optional<Matricula> findByIdParaActualizar(@Param("id") Long id);
+
+    /**
+     * Matrículas de un conjunto de estudiantes dentro de un año académico, en
+     * cualquier estado. Se usa para validar la carga masiva en una sola consulta.
+     */
+    @Query("""
+            SELECT m FROM Matricula m
+            JOIN FETCH m.seccion s
+            WHERE m.estudiante.id IN :estudianteIds
+              AND s.anioAcademico.id = :anioId
+            """)
+    List<Matricula> buscarPorEstudiantesYAnio(
+            @Param("estudianteIds") Collection<Long> estudianteIds,
+            @Param("anioId") Long anioId
+    );
+
+    /**
+     * Ocupación por sección para los estados indicados. Cada fila es
+     * {@code [Long seccionId, Long cantidad]}.
+     */
+    @Query("""
+            SELECT m.seccion.id, COUNT(m) FROM Matricula m
+            WHERE m.seccion.id IN :seccionIds
+              AND m.estado IN :estados
+            GROUP BY m.seccion.id
+            """)
+    List<Object[]> contarPorSecciones(
+            @Param("seccionIds") Collection<Long> seccionIds,
+            @Param("estados") Collection<EstadoMatricula> estados
+    );
+
+    /**
+     * Matrículas de un año en los estados indicados con todos los datos necesarios
+     * para exportarlas.
+     */
+    @Query("""
+            SELECT m FROM Matricula m
+            JOIN FETCH m.estudiante e
+            JOIN FETCH m.seccion s
+            JOIN FETCH s.grado g
+            JOIN FETCH s.anioAcademico a
+            WHERE a.id = :anioId
+              AND m.estado IN :estados
+            ORDER BY g.id, s.nombre, e.apellidoPaterno, e.apellidoMaterno, e.nombre
+            """)
+    List<Matricula> buscarPorAnioYEstadosConDetalle(
+            @Param("anioId") Long anioId,
+            @Param("estados") Collection<EstadoMatricula> estados
     );
 
     List<Matricula> findBySeccionId(Long seccionId);

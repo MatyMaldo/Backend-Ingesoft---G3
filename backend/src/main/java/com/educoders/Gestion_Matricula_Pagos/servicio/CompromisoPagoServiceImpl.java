@@ -36,21 +36,30 @@ import com.educoders.Seguridad_Auditoria.persistencia.EstudianteRepository;
 import com.educoders.Seguridad_Auditoria.presentacion.dto.DetalleAuditoriaDTO;
 import com.educoders.Seguridad_Auditoria.presentacion.dto.RegistrarAuditoriaRequestDTO;
 import com.educoders.Seguridad_Auditoria.servicio.AuditoriaService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 @Service
 public class CompromisoPagoServiceImpl implements CompromisoPagoService {
+
+    private static final Logger log = LoggerFactory.getLogger(CompromisoPagoServiceImpl.class);
 
     @Value("${app.pagos.monto-matricula:350.00}")
     private BigDecimal montoMatriculaPredeterminado = new BigDecimal("350.00");
@@ -65,6 +74,7 @@ public class CompromisoPagoServiceImpl implements CompromisoPagoService {
     private final ServicioNotificacionEmail servicioNotificacionEmail;
     private final EstudianteRepository estudianteRepository;
     private final AuditoriaService auditoriaService;
+    private final TransactionTemplate transaccionItem;
 
     public CompromisoPagoServiceImpl(CompromisoPagoRepository compromisoPagoRepository,
                                      MatriculaRepository matriculaRepository,
@@ -72,7 +82,8 @@ public class CompromisoPagoServiceImpl implements CompromisoPagoService {
                                      AnioAcademicoRepository anioAcademicoRepository,
                                      ServicioNotificacionEmail servicioNotificacionEmail,
                                      EstudianteRepository estudianteRepository,
-                                     AuditoriaService auditoriaService) {
+                                     AuditoriaService auditoriaService,
+                                     PlatformTransactionManager transactionManager) {
         this.compromisoPagoRepository = compromisoPagoRepository;
         this.matriculaRepository = matriculaRepository;
         this.periodoMatriculaRepository = periodoMatriculaRepository;
@@ -80,6 +91,8 @@ public class CompromisoPagoServiceImpl implements CompromisoPagoService {
         this.servicioNotificacionEmail = servicioNotificacionEmail;
         this.estudianteRepository = estudianteRepository;
         this.auditoriaService = auditoriaService;
+        this.transaccionItem = new TransactionTemplate(transactionManager);
+        this.transaccionItem.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
     }
 
     @Override
@@ -192,32 +205,24 @@ public class CompromisoPagoServiceImpl implements CompromisoPagoService {
                     continue;
                 }
 
-                CompromisoPago compromiso = CompromisoPago.builder()
-                        .tipoCompromiso(TipoCompromiso.MATRICULA)
-                        .mes(null)
-                        .fechaEmision(hoy)
-                        .montoOriginal(montoMatriculaPredeterminado)
-                        .montoMora(BigDecimal.ZERO)
-                        .estado(EstadoCompromisoPago.PENDIENTE)
-                        .matricula(matricula)
-                        .build();
+                CompromisoPago guardado = transaccionItem.execute(status -> {
+                    CompromisoPago compromiso = CompromisoPago.builder()
+                            .tipoCompromiso(TipoCompromiso.MATRICULA)
+                            .mes(null)
+                            .fechaEmision(hoy)
+                            .montoOriginal(montoMatriculaPredeterminado)
+                            .montoMora(BigDecimal.ZERO)
+                            .estado(EstadoCompromisoPago.PENDIENTE)
+                            .matricula(matricula)
+                            .build();
 
-                CompromisoPago guardado = compromisoPagoRepository.save(compromiso);
+                    CompromisoPago creado = compromisoPagoRepository.save(compromiso);
+                    auditarCompromiso(creado,
+                            "Emisión masiva de compromiso de matrícula", usuarioId);
+                    return creado;
+                });
 
-                Estudiante estudiante = matricula.getEstudiante();
-                Apoderado apoderado = estudiante.getApoderado();
-                if (apoderado != null) {
-                    servicioNotificacionEmail.enviarCorreoCompromisoPago(
-                            apoderado.getEmail(),
-                            apoderado.getNombre() + " " + apoderado.getApellidoPaterno(),
-                            estudiante.getNombre() + " " + estudiante.getApellidoPaterno(),
-                            "Matrícula Escolar",
-                            guardado.calcularMontoTotal()
-                    );
-                }
-
-                auditarCompromiso(guardado,
-                        "Emisión masiva de compromiso de matrícula", usuarioId);
+                notificarCompromiso(guardado, "Matrícula Escolar");
                 emitidos++;
             } catch (Exception e) {
                 String mensaje = e.getMessage() != null
@@ -263,13 +268,11 @@ public class CompromisoPagoServiceImpl implements CompromisoPagoService {
                 .orElseThrow(() -> RecursoNoEncontradoException.de(
                         "Año académico", request.anioId()));
 
-        if (!anio.estaVigente()) {
-            throw new ReglaNegocioException(
-                    "No hay un año académico vigente para emitir compromisos de pensión.");
-        }
+        LocalDate hoy = LocalDate.now();
+        exigirVentanaPension(anio, hoy);
 
         int numeroMes = request.mes().ordinal() + 3;
-        if (numeroMes > LocalDate.now().getMonthValue()) {
+        if (numeroMes > hoy.getMonthValue()) {
             throw new ReglaNegocioException(
                     "No se pueden emitir compromisos de pensión de meses futuros.");
         }
@@ -281,11 +284,12 @@ public class CompromisoPagoServiceImpl implements CompromisoPagoService {
                 request.seccionId()
         );
 
+        exigirMesAnteriorEnLote(request.mes(), matriculas);
+
         int emitidos = 0;
         int omitidos = 0;
         int procesados = 0;
         List<EmisionCompromisoLoteError> errores = new ArrayList<>();
-        LocalDate hoy = LocalDate.now();
 
         if (progreso != null) {
             progreso.iniciar(matriculas.size());
@@ -301,32 +305,24 @@ public class CompromisoPagoServiceImpl implements CompromisoPagoService {
                     continue;
                 }
 
-                CompromisoPago compromiso = CompromisoPago.builder()
-                        .tipoCompromiso(TipoCompromiso.PENSION)
-                        .mes(request.mes())
-                        .fechaEmision(hoy)
-                        .montoOriginal(montoPensionPredeterminado)
-                        .montoMora(BigDecimal.ZERO)
-                        .estado(EstadoCompromisoPago.PENDIENTE)
-                        .matricula(matricula)
-                        .build();
+                CompromisoPago guardado = transaccionItem.execute(status -> {
+                    CompromisoPago compromiso = CompromisoPago.builder()
+                            .tipoCompromiso(TipoCompromiso.PENSION)
+                            .mes(request.mes())
+                            .fechaEmision(hoy)
+                            .montoOriginal(montoPensionPredeterminado)
+                            .montoMora(BigDecimal.ZERO)
+                            .estado(EstadoCompromisoPago.PENDIENTE)
+                            .matricula(matricula)
+                            .build();
 
-                CompromisoPago guardado = compromisoPagoRepository.save(compromiso);
+                    CompromisoPago creado = compromisoPagoRepository.save(compromiso);
+                    auditarCompromiso(creado,
+                            "Emisión masiva de compromiso de pensión", usuarioId);
+                    return creado;
+                });
 
-                Estudiante estudiante = matricula.getEstudiante();
-                Apoderado apoderado = estudiante.getApoderado();
-                if (apoderado != null) {
-                    servicioNotificacionEmail.enviarCorreoCompromisoPago(
-                            apoderado.getEmail(),
-                            apoderado.getNombre() + " " + apoderado.getApellidoPaterno(),
-                            estudiante.getNombre() + " " + estudiante.getApellidoPaterno(),
-                            "Pensión Mensual - " + request.mes(),
-                            guardado.calcularMontoTotal()
-                    );
-                }
-
-                auditarCompromiso(guardado,
-                        "Emisión masiva de compromiso de pensión", usuarioId);
+                notificarCompromiso(guardado, "Pensión Mensual - " + request.mes());
                 emitidos++;
             } catch (Exception e) {
                 String mensaje = e.getMessage() != null
@@ -362,9 +358,7 @@ public class CompromisoPagoServiceImpl implements CompromisoPagoService {
         );
 
         AnioAcademico anio = matricula.getSeccion().getAnioAcademico();
-        if (!anioVigente(anio, hoy)) {
-            throw new ReglaNegocioException("No hay un año académico vigente para emitir compromisos de pensión.");
-        }
+        exigirVentanaPension(anio, hoy);
 
         if (request.mes() == null) {
             throw new ReglaNegocioException("El mes es obligatorio.");
@@ -372,6 +366,16 @@ public class CompromisoPagoServiceImpl implements CompromisoPagoService {
         int numeroMes = request.mes().ordinal() + 3; // MARZO = 3
         if (numeroMes > hoy.getMonthValue()) {
             throw new ReglaNegocioException("No se pueden emitir compromisos de pensión de meses futuros.");
+        }
+
+        Mes anterior = mesAnterior(request.mes());
+        if (anterior != null
+                && !compromisoPagoRepository.existsByMatriculaIdAndTipoCompromisoAndMes(
+                        matricula.getId(), TipoCompromiso.PENSION, anterior)) {
+            throw new ReglaNegocioException(
+                    "No se puede emitir el compromiso de " + request.mes()
+                            + " porque falta el compromiso de " + anterior
+                            + " para esta matrícula.");
         }
 
         boolean yaEmitido = compromisoPagoRepository.existsByMatriculaIdAndTipoCompromisoAndMes(
@@ -477,6 +481,36 @@ public class CompromisoPagoServiceImpl implements CompromisoPagoService {
 
     // --- Auditoría y seguridad ---
 
+    /**
+     * Envía la notificación después del commit de la matrícula. El servicio de
+     * correo ya captura sus propios errores, así que un fallo de notificación
+     * no revierte ni marca como fallida una emisión que sí quedó guardada.
+     */
+    private void notificarCompromiso(CompromisoPago compromiso, String concepto) {
+        if (compromiso == null) {
+            return;
+        }
+
+        try {
+            Estudiante estudiante = compromiso.getMatricula().getEstudiante();
+            Apoderado apoderado = estudiante.getApoderado();
+            if (apoderado == null) {
+                return;
+            }
+
+            servicioNotificacionEmail.enviarCorreoCompromisoPago(
+                    apoderado.getEmail(),
+                    apoderado.getNombre() + " " + apoderado.getApellidoPaterno(),
+                    estudiante.getNombre() + " " + estudiante.getApellidoPaterno(),
+                    concepto,
+                    compromiso.calcularMontoTotal()
+            );
+        } catch (Exception e) {
+            log.warn("No se pudo notificar el compromiso {}: {}",
+                    compromiso.getId(), e.getMessage());
+        }
+    }
+
     private void auditarCompromiso(CompromisoPago c, String descripcion) {
         auditarCompromiso(c, descripcion, null);
     }
@@ -525,11 +559,76 @@ public class CompromisoPagoServiceImpl implements CompromisoPagoService {
         return usuario;
     }
 
-    private boolean anioVigente(AnioAcademico anio, LocalDate hoy) {
-        if (anio.getFechaInicio() == null || hoy.isBefore(anio.getFechaInicio())) {
-            return false;
+    /**
+     * Ventana de emisión de pensiones: empieza el día siguiente al fin del
+     * periodo de matrícula y termina con el año académico.
+     */
+    private void exigirVentanaPension(AnioAcademico anio, LocalDate hoy) {
+        PeriodoMatricula periodo = periodoMatriculaRepository
+                .findByAnioAcademicoId(anio.getId())
+                .orElseThrow(() -> new ReglaNegocioException(
+                        "No existe un periodo de matrícula para el año académico "
+                                + anio.getAnio() + "."));
+
+        if (periodo.getFechaFin() == null || !hoy.isAfter(periodo.getFechaFin())) {
+            throw new ReglaNegocioException(
+                    "No se pueden emitir compromisos de pensión mientras el periodo "
+                            + "de matrícula esté vigente. Debe esperar a que finalice el "
+                            + (periodo.getFechaFin() != null ? periodo.getFechaFin() : "periodo") + ".");
         }
-        return anio.getFechaFin() == null || !hoy.isAfter(anio.getFechaFin());
+
+        if (anio.getFechaFin() == null) {
+            throw new ReglaNegocioException(
+                    "El año académico no tiene fecha de fin configurada; "
+                            + "no se pueden emitir compromisos de pensión.");
+        }
+        if (hoy.isAfter(anio.getFechaFin())) {
+            throw new ReglaNegocioException(
+                    "El año académico ya finalizó; no se pueden emitir compromisos de pensión.");
+        }
+    }
+
+    private Mes mesAnterior(Mes mes) {
+        return mes == Mes.MARZO ? null : Mes.values()[mes.ordinal() - 1];
+    }
+
+    /**
+     * En la emisión masiva se exige que todas las matrículas objetivo tengan el
+     * compromiso del mes anterior antes de crear cualquier compromiso nuevo.
+     */
+    private void exigirMesAnteriorEnLote(Mes mes, List<Matricula> matriculas) {
+        Mes anterior = mesAnterior(mes);
+        if (anterior == null || matriculas.isEmpty()) {
+            return;
+        }
+
+        List<Long> ids = matriculas.stream().map(Matricula::getId).toList();
+        Set<Long> conAnterior = new HashSet<>(compromisoPagoRepository
+                .findMatriculaIdsConCompromiso(ids, TipoCompromiso.PENSION, anterior));
+
+        List<Long> faltantes = ids.stream()
+                .filter(id -> !conAnterior.contains(id))
+                .toList();
+
+        if (faltantes.isEmpty()) {
+            return;
+        }
+
+        StringBuilder detalle = new StringBuilder();
+        for (int i = 0; i < Math.min(faltantes.size(), 10); i++) {
+            if (i > 0) {
+                detalle.append(", ");
+            }
+            detalle.append(faltantes.get(i));
+        }
+        if (faltantes.size() > 10) {
+            detalle.append(", ...");
+        }
+
+        throw new ReglaNegocioException(
+                "No se puede emitir " + mes + " porque " + faltantes.size()
+                        + " matrícula(s) no tienen el compromiso de " + anterior
+                        + ": " + detalle + ".");
     }
 
     // --- Mapeos ---

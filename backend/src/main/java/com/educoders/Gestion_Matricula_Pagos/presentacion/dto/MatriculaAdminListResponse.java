@@ -20,10 +20,26 @@ public record MatriculaAdminListResponse(
         Long seccionId,
         String seccionNombre,
         Long anioAcademicoId,
-        Integer anioAcademico
+        Integer anioAcademico,
+        boolean puedeEditar,
+        boolean puedeEliminar,
+        String motivoNoEditar,
+        String motivoNoEliminar
 ) {
 
     public static MatriculaAdminListResponse fromEntity(Matricula matricula) {
+        return fromEntity(matricula, false, false,
+                "Solo se pueden editar matrículas PENDIENTE.",
+                "Solo se pueden eliminar matrículas PENDIENTE.");
+    }
+
+    public static MatriculaAdminListResponse fromEntity(
+            Matricula matricula,
+            boolean puedeEditar,
+            boolean puedeEliminar,
+            String motivoNoEditar,
+            String motivoNoEliminar) {
+
         var estudiante = matricula.getEstudiante();
         var seccion = matricula.getSeccion();
         var grado = seccion.getGrado();
@@ -46,7 +62,11 @@ public record MatriculaAdminListResponse(
                 seccion.getId(),
                 seccion.getNombre(),
                 anio.getId(),
-                anio.getAnio()
+                anio.getAnio(),
+                puedeEditar,
+                puedeEliminar,
+                motivoNoEditar,
+                motivoNoEliminar
         );
     }
 }
