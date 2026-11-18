@@ -2,6 +2,7 @@ package com.educoders.Gestion_Matriz_Horarios.persistencia;
 
 import com.educoders.Gestion_Matriz_Horarios.dominio.BloqueHorario;
 import com.educoders.Infraestructura_Servicios.enums.DiaSemana;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -12,7 +13,16 @@ import java.util.List;
 public interface BloqueHorarioRepository
         extends JpaRepository<BloqueHorario, Long>, BloqueHorarioRepositoryCustom {
 
+    // Los listados arman la respuesta con aula, curso, docente, sección, grado y año de cada bloque. El grafo trae todo
+    // en una sola consulta: sin él, cada bloque dispara varias consultas perezosas.
+    @EntityGraph(attributePaths = {"aula", "asignacionCurso", "asignacionCurso.curso", "asignacionCurso.docente",
+            "asignacionCurso.seccion", "asignacionCurso.seccion.grado", "asignacionCurso.seccion.anioAcademico"})
     List<BloqueHorario> findByAsignacionCursoSeccionId(Long seccionId);
+
+    @Override
+    @EntityGraph(attributePaths = {"aula", "asignacionCurso", "asignacionCurso.curso", "asignacionCurso.docente",
+            "asignacionCurso.seccion", "asignacionCurso.seccion.grado", "asignacionCurso.seccion.anioAcademico"})
+    List<BloqueHorario> findAll();
 
     /**
      * Bloques de una sección con aula, curso y docente ya cargados: la vista previa de sesiones los recorre por
@@ -27,7 +37,12 @@ public interface BloqueHorarioRepository
         WHERE a.seccion.id = :seccionId
         """)
     List<BloqueHorario> findDeSeccionConDetalle(@Param("seccionId") Long seccionId);
+    @EntityGraph(attributePaths = {"aula", "asignacionCurso", "asignacionCurso.curso", "asignacionCurso.docente",
+            "asignacionCurso.seccion", "asignacionCurso.seccion.grado", "asignacionCurso.seccion.anioAcademico"})
     List<BloqueHorario> findByAsignacionCursoSeccionGradoIdAndAsignacionCursoSeccionAnioAcademicoId(Long gradoId, Long anioId);
+
+    @EntityGraph(attributePaths = {"aula", "asignacionCurso", "asignacionCurso.curso", "asignacionCurso.docente",
+            "asignacionCurso.seccion", "asignacionCurso.seccion.grado", "asignacionCurso.seccion.anioAcademico"})
     List<BloqueHorario> findByAsignacionCursoDocenteIdAndAsignacionCursoSeccionAnioAcademicoId(Long docenteId, Long anioId);
 
     @Query("""

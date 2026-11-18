@@ -31,6 +31,8 @@ import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyCollection;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -707,10 +709,10 @@ class GradoSeccionServiceImplTest {
         when(seccionRepository.findByGradoIdAndAnioAcademicoId(1L, 2L))
                 .thenReturn(List.of(seccion));
 
-        when(matriculaRepository.countBySeccionIdAndEstadoIn(
-                3L,
+        when(matriculaRepository.contarPorSeccionYEstado(
+                List.of(3L),
                 List.of(EstadoMatricula.CONFIRMADA)
-        )).thenReturn(25L);
+        )).thenReturn(List.<Object[]>of(new Object[]{3L, 25L}));
 
         List<SeccionResponse> resultado =
                 gradoSeccionService.listarSeccionesPorGradoYAnio(1L, 2L);
@@ -720,8 +722,8 @@ class GradoSeccionServiceImplTest {
         assertEquals(5L, resultado.get(0).getVacantesDisponibles());
         assertEquals(30, resultado.get(0).getCapacidadMaxima());
 
-        verify(matriculaRepository).countBySeccionIdAndEstadoIn(
-                3L,
+        verify(matriculaRepository).contarPorSeccionYEstado(
+                List.of(3L),
                 List.of(EstadoMatricula.CONFIRMADA)
         );
     }
@@ -750,10 +752,10 @@ class GradoSeccionServiceImplTest {
         when(seccionRepository.findByGradoIdAndAnioAcademicoId(1L, 2L))
                 .thenReturn(List.of(seccion));
 
-        when(matriculaRepository.countBySeccionIdAndEstadoIn(
-                3L,
+        when(matriculaRepository.contarPorSeccionYEstado(
+                List.of(3L),
                 List.of(EstadoMatricula.CONFIRMADA)
-        )).thenReturn(30L);
+        )).thenReturn(List.<Object[]>of(new Object[]{3L, 30L}));
 
         List<SeccionResponse> resultado =
                 gradoSeccionService.listarSeccionesPorGradoYAnio(1L, 2L);
@@ -761,6 +763,35 @@ class GradoSeccionServiceImplTest {
         assertEquals(1, resultado.size());
         assertEquals(30L, resultado.get(0).getMatriculadosConfirmados());
         assertEquals(0L, resultado.get(0).getVacantesDisponibles());
+    }
+
+    @Test
+    void listarSeccionesPorAnioCuentaTodasEnUnaSolaConsultaYUsaCeroSiNoHayMatriculas() {
+        Grado grado = Grado.builder().nombre("Primero").build();
+        grado.setId(1L);
+        AnioAcademico anio = AnioAcademico.builder().anio(2027).build();
+        anio.setId(2L);
+        Seccion conMatriculas = Seccion.builder()
+                .nombre("A").capacidadMaxima(30).grado(grado).anioAcademico(anio).build();
+        conMatriculas.setId(3L);
+        Seccion sinMatriculas = Seccion.builder()
+                .nombre("B").capacidadMaxima(20).grado(grado).anioAcademico(anio).build();
+        sinMatriculas.setId(4L);
+
+        when(seccionRepository.findByAnioAcademicoId(2L)).thenReturn(List.of(conMatriculas, sinMatriculas));
+        when(matriculaRepository.contarPorSeccionYEstado(
+                List.of(3L, 4L),
+                List.of(EstadoMatricula.CONFIRMADA)
+        )).thenReturn(List.<Object[]>of(new Object[]{3L, 10L}));
+
+        List<SeccionResponse> resultado = gradoSeccionService.listarSeccionesPorAnio(2L);
+
+        assertEquals(2, resultado.size());
+        assertEquals(10L, resultado.get(0).getMatriculadosConfirmados());
+        assertEquals(20L, resultado.get(0).getVacantesDisponibles());
+        assertEquals(0L, resultado.get(1).getMatriculadosConfirmados());
+        assertEquals(20L, resultado.get(1).getVacantesDisponibles());
+        verify(matriculaRepository, never()).countBySeccionIdAndEstadoIn(anyLong(), anyCollection());
     }
 
 
