@@ -43,6 +43,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Clock;
@@ -392,6 +393,28 @@ class AsistenciaServiceImplTest {
         Estudiante estudiante = estudiante();
         SesionClase sesion = sesion(
                 LocalDateTime.now().minusMinutes(20),
+                LocalDateTime.now().plusMinutes(30),
+                EstadoSesion.PROGRAMADA, docente, estudiante);
+
+        autenticar(docente);
+        when(sesionRepository.findById(1L)).thenReturn(Optional.of(sesion));
+        when(asistenciaDocenteRepository.findBySesionClaseId(1L)).thenReturn(Optional.empty());
+        when(asistenciaDocenteRepository.save(any(AsistenciaDocente.class)))
+                .thenAnswer(inv -> inv.getArgument(0));
+
+        var r = service.registrarAsistenciaDocente(1L);
+
+        assertEquals(EstadoAsistencia.TARDANZA, r.estado());
+    }
+
+    @Test
+    void laToleranciaDelDocenteSeTomaDeLaConfiguracion() {
+        ReflectionTestUtils.setField(service, "minutosTardanzaDocente", 5L);
+
+        Docente docente = docente();
+        Estudiante estudiante = estudiante();
+        SesionClase sesion = sesion(
+                LocalDateTime.now().minusMinutes(7),
                 LocalDateTime.now().plusMinutes(30),
                 EstadoSesion.PROGRAMADA, docente, estudiante);
 

@@ -30,6 +30,7 @@ import com.educoders.Seguridad_Auditoria.persistencia.EstudianteRepository;
 import com.educoders.Seguridad_Auditoria.presentacion.dto.DetalleAuditoriaDTO;
 import com.educoders.Seguridad_Auditoria.presentacion.dto.RegistrarAuditoriaRequestDTO;
 import com.educoders.Seguridad_Auditoria.servicio.AuditoriaService;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
@@ -52,7 +53,9 @@ import java.util.Set;
 @Service
 public class AsistenciaServiceImpl implements AsistenciaService {
 
-    private static final long MINUTOS_TARDANZA_DOCENTE = 10;
+    @Value("${app.asistencia.tolerancia-docente-minutos:10}")
+    private long minutosTardanzaDocente = 10;
+
     private static final String SIN_REGISTRO = "Sin registro";
     private static final String SIN_OBSERVACIONES = "Sin observaciones";
 
@@ -215,7 +218,7 @@ public class AsistenciaServiceImpl implements AsistenciaService {
         }
 
         EstadoAsistencia estado = ahora.isAfter(
-                sesion.getHoraInicio().plusMinutes(MINUTOS_TARDANZA_DOCENTE))
+                sesion.getHoraInicio().plusMinutes(minutosTardanzaDocente))
                 ? EstadoAsistencia.TARDANZA
                 : EstadoAsistencia.PRESENTE;
 
