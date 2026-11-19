@@ -13,6 +13,7 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.Locale;
 import java.util.concurrent.Executor;
 import java.util.concurrent.RejectedExecutionException;
 
@@ -26,6 +27,10 @@ public class ServicioNotificacionEmailImpl implements ServicioNotificacionEmail 
 
     @Value("${MAIL_FROM}")
     private String remitente;
+
+    @Value("${app.mail.dominios-simulados:test.local,test.dev,educoders.test,example.test,example.invalid}")
+    private String dominiosSimulados =
+            "test.local,test.dev,educoders.test,example.test,example.invalid";
 
     public ServicioNotificacionEmailImpl(JavaMailSender mailSender,
                                          @Qualifier("correosExecutor") Executor ejecutorCorreos) {
@@ -69,6 +74,41 @@ public class ServicioNotificacionEmailImpl implements ServicioNotificacionEmail 
         }
     }
 
+    /**
+     * Omite el envío cuando el destinatario pertenece a un dominio de prueba.
+     * Se registra el intento para que quede claro que no fue un fallo del SMTP.
+     */
+    private boolean omitirEnvioSimulado(String emailDestino, String descripcion) {
+        if (!esCorreoSimulado(emailDestino)) {
+            return false;
+        }
+        log.info("Correo simulado para {}: {}", emailDestino, descripcion);
+        return true;
+    }
+
+    private boolean esCorreoSimulado(String emailDestino) {
+        if (emailDestino == null) {
+            return false;
+        }
+
+        int arroba = emailDestino.lastIndexOf('@');
+        if (arroba < 0 || arroba == emailDestino.length() - 1) {
+            return false;
+        }
+
+        String dominio = emailDestino.substring(arroba + 1).trim().toLowerCase(Locale.ROOT);
+        if (dominiosSimulados == null || dominiosSimulados.isBlank()) {
+            return false;
+        }
+
+        for (String simulado : dominiosSimulados.split(",")) {
+            if (dominio.equals(simulado.trim().toLowerCase(Locale.ROOT))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     @Override
     public void enviarCorreoCompromisoPago(
             String emailDestino,
@@ -79,6 +119,10 @@ public class ServicioNotificacionEmailImpl implements ServicioNotificacionEmail 
 
         if (emailDestino == null || emailDestino.isBlank()) {
             log.warn("No se pudo enviar correo: El apoderado no tiene un email registrado.");
+            return;
+        }
+
+        if (omitirEnvioSimulado(emailDestino, "compromiso de pago")) {
             return;
         }
 
@@ -119,6 +163,10 @@ public class ServicioNotificacionEmailImpl implements ServicioNotificacionEmail 
             return;
         }
 
+        if (omitirEnvioSimulado(emailDestino, "validación de pago")) {
+            return;
+        }
+
         try {
             SimpleMailMessage mensaje = new SimpleMailMessage();
             mensaje.setFrom(remitente);
@@ -153,6 +201,10 @@ public class ServicioNotificacionEmailImpl implements ServicioNotificacionEmail 
             return;
         }
 
+        if (omitirEnvioSimulado(emailDestino, "rechazo de pago")) {
+            return;
+        }
+
         try {
             SimpleMailMessage mensaje = new SimpleMailMessage();
             mensaje.setFrom(remitente);
@@ -184,6 +236,10 @@ public class ServicioNotificacionEmailImpl implements ServicioNotificacionEmail 
 
         if (emailDestino == null || emailDestino.isBlank()) {
             log.warn("No se pudo enviar correo de restablecimiento: correo vacío.");
+            return;
+        }
+
+        if (omitirEnvioSimulado(emailDestino, "restablecimiento de contraseña")) {
             return;
         }
 

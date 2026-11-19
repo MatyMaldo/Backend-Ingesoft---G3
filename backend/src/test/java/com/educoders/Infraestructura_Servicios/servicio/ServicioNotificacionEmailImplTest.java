@@ -9,6 +9,7 @@ import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.RejectedExecutionException;
@@ -109,5 +110,23 @@ class ServicioNotificacionEmailImplTest {
         servicio.enviarCorreoCompromisoPago(" ", "Ana", "Luis", "Pensión", BigDecimal.TEN);
 
         assertTrue(tareas.isEmpty());
+    }
+
+    @Test
+    void unCorreoDeDominioSimuladoNoProgramaNingunEnvio() {
+        servicio.enviarCorreoCompromisoPago(
+                "apoderado@test.local", "Ana Perez", "Luis Perez", "Pensión", BigDecimal.TEN);
+
+        assertTrue(tareas.isEmpty());
+        verify(mailSender, never()).send(org.mockito.ArgumentMatchers.any(SimpleMailMessage.class));
+    }
+
+    @Test
+    void elRestablecimientoACorreoSimuladoNoLlamaAlSmtp() {
+        servicio.enviarCorreoRestablecimientoPassword(
+                "alumno@educoders.test", "Luis Perez", "123456",
+                LocalDateTime.now().plusMinutes(15));
+
+        verify(mailSender, never()).send(org.mockito.ArgumentMatchers.any(SimpleMailMessage.class));
     }
 }

@@ -21,6 +21,9 @@ app.horarios.receso-fin=11:30
 app.pagos.monto-matricula=350.00
 app.pagos.monto-pension=450.00
 
+# Tolerancia de tardanza del docente (minutos)
+app.asistencia.tolerancia-docente-minutos=10
+
 # Cloudinary Credentials
 cloudinary.cloud-name=tu_cloud_name
 cloudinary.api-key=tu_api_key
@@ -34,6 +37,9 @@ spring.mail.password=${MAIL_PASSWORD:tu_password_mailtrap}
 spring.mail.properties.mail.smtp.auth=true
 spring.mail.properties.mail.smtp.starttls.enable=true
 spring.mail.properties.mail.smtp.from=${MAIL_FROM:noreply@educoders.com}
+
+# Dominios de correo simulados: no se envía nada a estos destinatarios.
+app.mail.dominios-simulados=test.local,test.dev,educoders.test,example.test,example.invalid
 
 # Permitir archivos de hasta 10MB en la capa HTTP
 spring.servlet.multipart.max-file-size=10MB
