@@ -3,10 +3,12 @@ package com.educoders.Gestion_Academica_Motor_Evaluacion.servicio;
 import com.educoders.Gestion_Academica_Motor_Evaluacion.dominio.Evaluacion;
 import com.educoders.Gestion_Academica_Motor_Evaluacion.dominio.Nota;
 import com.educoders.Gestion_Academica_Motor_Evaluacion.persistencia.EvaluacionRepository;
+import com.educoders.Gestion_Academica_Motor_Evaluacion.persistencia.LibretaNotasRepository;
 import com.educoders.Gestion_Academica_Motor_Evaluacion.persistencia.NotaRepository;
 import com.educoders.Gestion_Academica_Motor_Evaluacion.presentacion.dto.NotaResponse;
 import com.educoders.Gestion_Academica_Motor_Evaluacion.presentacion.dto.RegistrarNotaRequest;
 import com.educoders.Infraestructura_Servicios.enums.CategoriaAuditoria;
+import com.educoders.Infraestructura_Servicios.enums.EstadoLibreta;
 import com.educoders.Infraestructura_Servicios.enums.EstadoMatricula;
 import com.educoders.Infraestructura_Servicios.enums.TipoAccionAuditoria;
 import com.educoders.Infraestructura_Servicios.exception.ReglaNegocioException;
@@ -31,17 +33,20 @@ public class NotaServiceImpl implements NotaService {
     private final EvaluacionRepository evaluacionRepository;
     private final EstudianteRepository estudianteRepository;
     private final MatriculaRepository matriculaRepository;
+    private final LibretaNotasRepository libretaNotasRepository;
     private final AuditoriaService auditoriaService;
 
     public NotaServiceImpl(NotaRepository notaRepository,
                            EvaluacionRepository evaluacionRepository,
                            EstudianteRepository estudianteRepository,
                            MatriculaRepository matriculaRepository,
+                           LibretaNotasRepository libretaNotasRepository,
                            AuditoriaService auditoriaService) {
         this.notaRepository = notaRepository;
         this.evaluacionRepository = evaluacionRepository;
         this.estudianteRepository = estudianteRepository;
         this.matriculaRepository = matriculaRepository;
+        this.libretaNotasRepository = libretaNotasRepository;
         this.auditoriaService = auditoriaService;
     }
 
@@ -84,7 +89,21 @@ public class NotaServiceImpl implements NotaService {
             throw new ReglaNegocioException("El estudiante no tiene una matrícula confirmada.");
         }
 
-        // 5. Buscar si ya existe la nota (Modificación vs Registro Nuevo)
+        // 5. Validar que la libreta del bimestre no esté generada
+        Long idBimestre = evaluacion.getBimestre().getId();
+        boolean libretaGenerada = libretaNotasRepository.existsByEstudianteIdAndBimestreIdAndEstado(
+                estudiante.getId(),
+                idBimestre,
+                EstadoLibreta.GENERADA
+        );
+
+        if (libretaGenerada) {
+            throw new ReglaNegocioException(
+                    "Las notas están bloqueadas porque la libreta ya fue generada para este bimestre."
+            );
+        }
+
+        // 6. Buscar si ya existe la nota (Modificación vs Registro Nuevo)
         Nota nota = notaRepository.findByEstudianteIdAndEvaluacionId(estudiante.getId(), idEvaluacion)
                 .orElseGet(() -> {
                     Nota nuevaNota = new Nota();
@@ -93,7 +112,7 @@ public class NotaServiceImpl implements NotaService {
                     return nuevaNota;
                 });
 
-        // 6. Validar que no sea la misma nota si es una modificación (para auditar)
+        // 7. Validar que no sea la misma nota si es una modificación (para auditar)
         boolean esModificacion = nota.getId() != null;
         if (esModificacion && nota.getValor() == request.valorNota()) {
             throw new ReglaNegocioException("El estudiante ya tiene registrada esta nota en la evaluación.");
@@ -104,7 +123,7 @@ public class NotaServiceImpl implements NotaService {
 
         Nota notaGuardada = notaRepository.save(nota);
 
-        // 7. Registrar en Auditoría (HU-SAT-04)
+        // 8. Registrar en Auditoría (HU-SAT-04)
         TipoAccionAuditoria tipoAccion = esModificacion ? TipoAccionAuditoria.ACTUALIZAR : TipoAccionAuditoria.CREAR;
         String descripcion = esModificacion ? "Modificación de nota de evaluación" : "Registro de nota de evaluación";
         RegistrarAuditoriaRequestDTO auditoriaDTO = new RegistrarAuditoriaRequestDTO(
@@ -118,7 +137,7 @@ public class NotaServiceImpl implements NotaService {
         );
         auditoriaService.registrarAuditoria(auditoriaDTO);
 
-        // 8. Retornar DTO
+        // 9. Retornar DTO
         return new NotaResponse(
                 notaGuardada.getId(),
                 evaluacion.getId(),
