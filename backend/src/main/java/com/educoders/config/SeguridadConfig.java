@@ -239,6 +239,13 @@ public class SeguridadConfig {
                                 "/api/v1/estudiantes/*/libretas"
                         ).hasRole("DOCENTE")
 
+                        // HU-EVAL-06:
+                        // Contexto del tutor para generación de libretas.
+                        .requestMatchers(
+                                HttpMethod.GET,
+                                "/api/v1/libretas/contexto-tutor"
+                        ).hasRole("DOCENTE")
+
 
 
                                 // HU-EVAL-04/05/06:

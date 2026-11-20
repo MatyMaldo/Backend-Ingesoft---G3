@@ -4,6 +4,7 @@ package com.educoders.Gestion_Academica_Motor_Evaluacion.servicio;
 import com.educoders.Gestion_Academica_Motor_Evaluacion.persistencia.LibretaNotasRepository;
 import com.educoders.Gestion_Academica_Motor_Evaluacion.presentacion.dto.LibretaNotasResumenResponse;
 import com.educoders.Gestion_Academica_Motor_Evaluacion.presentacion.dto.LibretaNotasDetalleResponse;
+import com.educoders.Gestion_Matricula_Pagos.dominio.Matricula;
 import com.educoders.Gestion_Matricula_Pagos.persistencia.MatriculaRepository;
 import com.educoders.Infraestructura_Servicios.enums.EstadoLibreta;
 import com.educoders.Infraestructura_Servicios.enums.EstadoMatricula;
@@ -15,12 +16,11 @@ import com.educoders.Seguridad_Auditoria.persistencia.EstudianteRepository;
 import com.educoders.Gestion_Academica_Motor_Evaluacion.dominio.LibretaNotas;
 import com.educoders.Gestion_Academica_Motor_Evaluacion.presentacion.dto.GenerarLibretaNotasRequest;
 import com.educoders.Gestion_Academica_Motor_Evaluacion.presentacion.dto.VistaPreviaLibretaNotasResponse;
+import com.educoders.Gestion_Academica_Motor_Evaluacion.presentacion.dto.ContextoTutorLibretasResponse;
 import com.educoders.Gestion_Asistencia.persistencia.AsistenciaEstudianteRepository;
 import com.educoders.Infraestructura_Servicios.enums.EstadoAsistencia;
 import com.educoders.Seguridad_Auditoria.dominio.Docente;
 import org.springframework.beans.factory.annotation.Value;
-import com.educoders.Infraestructura_Servicios.enums.EstadoAsistencia;
-import com.educoders.Seguridad_Auditoria.dominio.Docente;
 
 import java.time.LocalDate;
 
@@ -34,6 +34,8 @@ import com.educoders.Gestion_Academica_Motor_Evaluacion.dominio.Competencia;
 import com.educoders.Gestion_Academica_Motor_Evaluacion.presentacion.dto.ProgresoCompetenciaAcumuladoResponse;
 import com.educoders.Infraestructura_Servicios.enums.EscalaNota;
 import com.educoders.Infraestructura_Servicios.enums.NombreBimestre;
+import com.educoders.Gestion_Academica_Motor_Evaluacion.persistencia.BimestreRepository;
+import com.educoders.Gestion_Academica_Motor_Evaluacion.persistencia.SeccionRepository;
 
 import java.util.EnumMap;
 import java.util.LinkedHashMap;
@@ -51,10 +53,10 @@ public class LibretaNotasServiceImpl implements LibretaNotasService {
     private final MatriculaRepository matriculaRepository;
     private final NotaCompetenciaRepository notaCompetenciaRepository;
     private final LibretaNotasPdfGenerator libretaNotasPdfGenerator;
-
-
     private final ValidadorGeneracionLibreta validadorGeneracionLibreta;
     private final AsistenciaEstudianteRepository asistenciaEstudianteRepository;
+    private final BimestreRepository bimestreRepository;
+    private final SeccionRepository seccionRepository;
 
     @Value("${app.institucion.nombre:Institución educativa}")
     private String nombreInstitucion;
@@ -67,7 +69,9 @@ public class LibretaNotasServiceImpl implements LibretaNotasService {
             NotaCompetenciaRepository notaCompetenciaRepository,
             LibretaNotasPdfGenerator libretaNotasPdfGenerator,
             ValidadorGeneracionLibreta validadorGeneracionLibreta,
-            AsistenciaEstudianteRepository asistenciaEstudianteRepository) {
+            AsistenciaEstudianteRepository asistenciaEstudianteRepository,
+            BimestreRepository bimestreRepository,
+            SeccionRepository seccionRepository) {
 
         this.libretaNotasRepository = libretaNotasRepository;
         this.estudianteRepository = estudianteRepository;
@@ -76,6 +80,8 @@ public class LibretaNotasServiceImpl implements LibretaNotasService {
         this.libretaNotasPdfGenerator = libretaNotasPdfGenerator;
         this.validadorGeneracionLibreta = validadorGeneracionLibreta;
         this.asistenciaEstudianteRepository = asistenciaEstudianteRepository;
+        this.bimestreRepository = bimestreRepository;
+        this.seccionRepository = seccionRepository;
     }
 
 
@@ -589,6 +595,152 @@ public class LibretaNotasServiceImpl implements LibretaNotasService {
                     );
                 })
                 .toList();
+    }
+
+
+
+    /**
+     * HU-EVAL-06: Obtiene el contexto del tutor para generación de libretas.
+     * Incluye estudiantes de sus secciones, bimestres finalizados
+     * y estado de las libretas por estudiante y bimestre.
+     */
+    @Override
+    @Transactional(readOnly = true)
+    public ContextoTutorLibretasResponse obtenerContextoTutor(
+            Usuario usuarioAutenticado) {
+
+        Docente tutor = exigirTutor(usuarioAutenticado);
+
+        LocalDate hoy = LocalDate.now();
+
+        // 1. Obtener secciones donde el docente es tutor
+        List<com.educoders.Gestion_Academica_Motor_Evaluacion.dominio.Seccion> seccionesTutor =
+                seccionRepository.findByTutorId(tutor.getId());
+
+        if (seccionesTutor.isEmpty()) {
+            throw new ResponseStatusException(
+                    HttpStatus.NOT_FOUND,
+                    "No tienes secciones asignadas como tutor."
+            );
+        }
+
+        // 2. Filtrar secciones por año académico vigente
+        List<com.educoders.Gestion_Academica_Motor_Evaluacion.dominio.Seccion> seccionesVigentes =
+                seccionesTutor.stream()
+                        .filter(seccion -> seccion.getAnioAcademico().estaVigente())
+                        .toList();
+
+        if (seccionesVigentes.isEmpty()) {
+            throw new ResponseStatusException(
+                    HttpStatus.NOT_FOUND,
+                    "No tienes secciones asignadas en el año académico vigente."
+            );
+        }
+
+        // 3. Obtener el año académico de las secciones vigentes (asumimos mismo año)
+        com.educoders.Gestion_Academica_Motor_Evaluacion.dominio.AnioAcademico anioAcademico =
+                seccionesVigentes.get(0).getAnioAcademico();
+
+        // 4. Obtener estudiantes con matrícula confirmada en esas secciones vigentes
+        List<Matricula> matriculas = matriculaRepository
+                .buscarPorSeccionesYEstadoConEstudiante(
+                        seccionesVigentes.stream()
+                                .map(com.educoders.Gestion_Academica_Motor_Evaluacion.dominio.Seccion::getId)
+                                .toList(),
+                        EstadoMatricula.CONFIRMADA
+                );
+
+        // 5. Obtener bimestres del año académico
+        List<com.educoders.Gestion_Academica_Motor_Evaluacion.dominio.Bimestre> bimestres =
+                bimestreRepository.findByAnioAcademicoIdOrderByFechaInicioAsc(
+                        anioAcademico.getId()
+                );
+
+        // 6. Obtener libretas existentes de los estudiantes
+        List<Long> idsEstudiantes = matriculas.stream()
+                .map(m -> m.getEstudiante().getId())
+                .toList();
+
+        List<LibretaNotas> libretasExistentes = libretaNotasRepository
+                .findByEstudiante_IdInAndBimestre_AnioAcademico_Id(
+                        idsEstudiantes,
+                        anioAcademico.getId()
+                );
+
+        // 7. Map para búsqueda rápida de libretas
+        Map<String, LibretaNotas> libretasPorEstudianteBimestre = new java.util.HashMap<>();
+        for (LibretaNotas libreta : libretasExistentes) {
+            String key = libreta.getEstudiante().getId() + "-" + libreta.getBimestre().getId();
+            libretasPorEstudianteBimestre.put(key, libreta);
+        }
+
+        // 8. Construir respuesta de estudiantes con estado de libretas
+        List<ContextoTutorLibretasResponse.EstudianteInfo> estudiantesInfo = matriculas.stream()
+                .map(matricula -> {
+                    Estudiante estudiante = matricula.getEstudiante();
+                    com.educoders.Gestion_Academica_Motor_Evaluacion.dominio.Seccion seccion = matricula.getSeccion();
+
+                    List<ContextoTutorLibretasResponse.EstadoLibretaInfo> estadosLibretas =
+                            bimestres.stream()
+                                    .map(bimestre -> {
+                                        String key = estudiante.getId() + "-" + bimestre.getId();
+                                        LibretaNotas libreta = libretasPorEstudianteBimestre.get(key);
+
+                                        boolean generada = libreta != null
+                                                && libreta.getEstado() == EstadoLibreta.GENERADA;
+
+                                        return new ContextoTutorLibretasResponse.EstadoLibretaInfo(
+                                                bimestre.getId(),
+                                                bimestre.getNombre().name(),
+                                                generada,
+                                                generada ? libreta.getFechaGeneracion() : null
+                                        );
+                                    })
+                                    .toList();
+
+                    String nombreCompleto = estudiante.getNombre()
+                            + " " + estudiante.getApellidoPaterno()
+                            + (estudiante.getApellidoMaterno() == null
+                            ? ""
+                            : " " + estudiante.getApellidoMaterno());
+
+                    return new ContextoTutorLibretasResponse.EstudianteInfo(
+                            estudiante.getId(),
+                            estudiante.getCodigo(),
+                            nombreCompleto,
+                            seccion.getId(),
+                            seccion.getNombre(),
+                            estadosLibretas
+                    );
+                })
+                .toList();
+
+        // 9. Construir respuesta de bimestres (solo finalizados del año vigente)
+        List<ContextoTutorLibretasResponse.BimestreInfo> bimestresInfo = bimestres.stream()
+                .filter(bimestre -> hoy.isAfter(bimestre.getFechaFin()))
+                .map(bimestre -> new ContextoTutorLibretasResponse.BimestreInfo(
+                        bimestre.getId(),
+                        bimestre.getNombre(),
+                        bimestre.getFechaInicio().toString(),
+                        bimestre.getFechaFin().toString(),
+                        true
+                ))
+                .toList();
+
+        // 10. Construir respuesta final
+        ContextoTutorLibretasResponse.AnioAcademicoInfo anioInfo =
+                new ContextoTutorLibretasResponse.AnioAcademicoInfo(
+                        anioAcademico.getId(),
+                        anioAcademico.getAnio(),
+                        anioAcademico.getFechaInicio().toString(),
+                        anioAcademico.getFechaFin().toString()
+                );
+
+        return new ContextoTutorLibretasResponse(
+                anioInfo,
+                estudiantesInfo,
+                bimestresInfo
+        );
     }
 
 

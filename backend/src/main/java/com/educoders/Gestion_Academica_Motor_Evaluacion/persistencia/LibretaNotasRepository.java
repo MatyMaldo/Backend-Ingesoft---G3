@@ -4,8 +4,11 @@ package com.educoders.Gestion_Academica_Motor_Evaluacion.persistencia;
 import com.educoders.Gestion_Academica_Motor_Evaluacion.dominio.LibretaNotas;
 import com.educoders.Infraestructura_Servicios.enums.EstadoLibreta;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -53,5 +56,21 @@ public interface LibretaNotasRepository extends JpaRepository<LibretaNotas, Long
     Optional<LibretaNotas> findByEstudianteIdAndBimestreId(
             Long idEstudiante,
             Long idBimestre
+    );
+
+    /**
+     * HU-EVAL-06: Obtiene libretas de múltiples estudiantes
+     * para un año académico específico.
+     */
+    @Query("""
+            SELECT l FROM LibretaNotas l
+            JOIN FETCH l.estudiante e
+            JOIN FETCH l.bimestre b
+            WHERE l.estudiante.id IN :estudianteIds
+              AND l.bimestre.anioAcademico.id = :anioAcademicoId
+            """)
+    List<LibretaNotas> findByEstudiante_IdInAndBimestre_AnioAcademico_Id(
+            @Param("estudianteIds") Collection<Long> estudianteIds,
+            @Param("anioAcademicoId") Long anioAcademicoId
     );
 }

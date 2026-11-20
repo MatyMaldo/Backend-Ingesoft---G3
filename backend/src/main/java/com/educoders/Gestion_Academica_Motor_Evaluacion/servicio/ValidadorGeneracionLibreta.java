@@ -106,7 +106,13 @@ public class ValidadorGeneracionLibreta {
                     "La libreta solo puede generarse al finalizar un bimestre.");
         }
 
-        // 3.1 Verificar límite temporal para generar la libreta
+        // 3.1 Verificar que el bimestre pertenezca al año académico vigente.
+        if (!bimestre.getAnioAcademico().estaVigente()) {
+            throw new ReglaNegocioException(
+                    "La libreta solo puede generarse para bimestres del año académico vigente.");
+        }
+
+        // 3.2 Verificar límite temporal para generar la libreta
         LocalDate hoy = LocalDate.now();
         List<Bimestre> bimestresAnio = bimestreRepository.findByAnioAcademicoIdOrderByFechaInicioAsc(bimestre.getAnioAcademico().getId());
         
@@ -207,23 +213,22 @@ public class ValidadorGeneracionLibreta {
                                 + " no tiene competencias registradas.");
             }
 
+            // Verificar que al menos una competencia del curso tenga nota registrada
+            boolean tieneAlgunaNota = false;
             for (Competencia competencia : competencias) {
-
-                NotaCompetencia nota = notasPorCompetencia.get(
-                        competencia.getId());
-
-                if (nota == null || nota.getValor() == null
-                        || nota.getConclusionDescriptiva() == null
-                        || nota.getConclusionDescriptiva().isBlank()) {
-
-                    throw new ReglaNegocioException(
-                            "Todavía no se han registrado todas las notas "
-                                    + "de competencias del curso del estudiante "
-                                    + "en este bimestre. Curso: "
-                                    + asignacion.getCurso().getNombre()
-                                    + ". Competencia: "
-                                    + competencia.getNombre());
+                NotaCompetencia nota = notasPorCompetencia.get(competencia.getId());
+                if (nota != null && nota.getValor() != null
+                        && nota.getConclusionDescriptiva() != null
+                        && !nota.getConclusionDescriptiva().isBlank()) {
+                    tieneAlgunaNota = true;
+                    break;
                 }
+            }
+
+            if (!tieneAlgunaNota) {
+                throw new ReglaNegocioException(
+                        "El curso " + asignacion.getCurso().getNombre()
+                                + " no tiene ninguna nota de competencia registrada en este bimestre.");
             }
         }
 

@@ -150,6 +150,19 @@ public interface MatriculaRepository extends JpaRepository<Matricula, Long>, Mat
             @Param("seccionId") Long seccionId,
             @Param("estado") EstadoMatricula estado);
 
+    @Query("""
+            SELECT m FROM Matricula m
+            JOIN FETCH m.estudiante e
+            JOIN FETCH m.seccion s
+            WHERE m.seccion.id IN :seccionIds
+              AND m.estado = :estado
+              AND e.activo = true
+            ORDER BY s.id, e.apellidoPaterno, e.apellidoMaterno, e.nombre
+            """)
+    List<Matricula> buscarPorSeccionesYEstadoConEstudiante(
+            @Param("seccionIds") Collection<Long> seccionIds,
+            @Param("estado") EstadoMatricula estado);
+
     Optional<Matricula> findByEstudianteIdAndSeccionId(Long estudianteId, Long seccionId);
 
     List<Matricula> findByEstudianteIdOrderBySeccionAnioAcademicoAnioDesc(Long estudianteId);

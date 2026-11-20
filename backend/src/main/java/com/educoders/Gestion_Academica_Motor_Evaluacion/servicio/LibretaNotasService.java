@@ -6,6 +6,7 @@ import com.educoders.Gestion_Academica_Motor_Evaluacion.presentacion.dto.Libreta
 import com.educoders.Seguridad_Auditoria.dominio.Usuario;
 import com.educoders.Gestion_Academica_Motor_Evaluacion.presentacion.dto.GenerarLibretaNotasRequest;
 import com.educoders.Gestion_Academica_Motor_Evaluacion.presentacion.dto.VistaPreviaLibretaNotasResponse;
+import com.educoders.Gestion_Academica_Motor_Evaluacion.presentacion.dto.ContextoTutorLibretasResponse;
 
 import java.util.List;
 
@@ -51,6 +52,15 @@ public interface LibretaNotasService {
     LibretaNotasResumenResponse generarLibreta(
             Long idEstudiante,
             GenerarLibretaNotasRequest request,
+            Usuario usuarioAutenticado
+    );
+
+    /**
+     * HU-EVAL-06: Obtiene el contexto del tutor para generación de libretas.
+     * Incluye estudiantes de sus secciones, bimestres finalizados
+     * y estado de las libretas por estudiante y bimestre.
+     */
+    ContextoTutorLibretasResponse obtenerContextoTutor(
             Usuario usuarioAutenticado
     );
 
