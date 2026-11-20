@@ -106,6 +106,35 @@ public class ValidadorGeneracionLibreta {
                     "La libreta solo puede generarse al finalizar un bimestre.");
         }
 
+        // 3.1 Verificar límite temporal para generar la libreta
+        LocalDate hoy = LocalDate.now();
+        List<Bimestre> bimestresAnio = bimestreRepository.findByAnioAcademicoIdOrderByFechaInicioAsc(bimestre.getAnioAcademico().getId());
+        
+        int indiceBimestreActual = -1;
+        for (int i = 0; i < bimestresAnio.size(); i++) {
+            if (bimestresAnio.get(i).getId().equals(bimestre.getId())) {
+                indiceBimestreActual = i;
+                break;
+            }
+        }
+        
+        if (indiceBimestreActual < bimestresAnio.size() - 1) {
+            // Hay un siguiente bimestre: validar que no haya terminado
+            Bimestre siguienteBimestre = bimestresAnio.get(indiceBimestreActual + 1);
+            if (hoy.isAfter(siguienteBimestre.getFechaFin())) {
+                throw new ReglaNegocioException(
+                        "La libreta del bimestre " + bimestre.getNombre().name() + 
+                        " solo puede generarse hasta el final del siguiente bimestre (" + 
+                        siguienteBimestre.getNombre().name() + ").");
+            }
+        } else {
+            // Es el último bimestre: validar que el año académico no haya cerrado
+            if (hoy.isAfter(bimestre.getAnioAcademico().getFechaFin())) {
+                throw new ReglaNegocioException(
+                        "La libreta del último bimestre solo puede generarse hasta el cierre del año académico.");
+            }
+        }
+
         // 4. Buscar la matrícula confirmada del año académico.
         List<Matricula> matriculas = matriculaRepository
                 .buscarPorEstudianteYAnioId(

@@ -66,12 +66,18 @@ public class EvaluacionServiceImpl implements EvaluacionService {
             throw new ReglaNegocioException("No tiene permiso para crear evaluaciones en este curso.");
         }
 
-        // 2. Validar que el Año Académico esté vigente
+        // 2. Validar que el curso tenga competencias establecidas
+        List<Competencia> competencias = competenciaRepository.findByCursoId(asignacion.getCurso().getId());
+        if (competencias.isEmpty()) {
+            throw new ReglaNegocioException("El curso no tiene competencias establecidas. Primero deben establecerse las competencias del curso.");
+        }
+
+        // 3. Validar que el Año Académico esté vigente
         if (!asignacion.getSeccion().getAnioAcademico().estaVigente()) {
             throw new ReglaNegocioException("La creación de evaluaciones solo está disponible con el año académico vigente.");
         }
 
-        // 3. Buscar el bimestre vigente SOLO EN EL AÑO ACADÉMICO DE LA SECCIÓN
+        // 4. Buscar el bimestre vigente SOLO EN EL AÑO ACADÉMICO DE LA SECCIÓN
         Long idAnioAcademico = asignacion.getSeccion().getAnioAcademico().getId();
         Optional<Bimestre> bimestreOpt = bimestreRepository
                 .findByAnioAcademicoIdAndFechaInicioLessThanEqualAndFechaFinGreaterThanEqual(
@@ -81,7 +87,7 @@ public class EvaluacionServiceImpl implements EvaluacionService {
             throw new ReglaNegocioException("La fecha debe estar dentro de un bimestre del año académico.");
         }
 
-        // 4. Crear la evaluación
+        // 5. Crear la evaluación
         Evaluacion evaluacion = new Evaluacion();
         evaluacion.setNombre(request.nombre());
         evaluacion.setDescripcion(request.descripcion());
@@ -91,7 +97,7 @@ public class EvaluacionServiceImpl implements EvaluacionService {
 
         Evaluacion evaluacionGuardada = evaluacionRepository.save(evaluacion);
 
-        // 5. Construir la respuesta
+        // 6. Construir la respuesta
         return new EvaluacionResponse(
                 evaluacionGuardada.getId(),
                 evaluacionGuardada.getNombre(),
